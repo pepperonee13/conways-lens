@@ -56,8 +56,6 @@
       </div>
     </main>
 
-    <!-- Floating panels -->
-    <FilterPanel v-if="dataLoaded" />
     <MappingEditor />
   </div>
 </template>
@@ -67,7 +65,6 @@ import { ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useLensStore } from '../stores/useLensStore';
 import NetworkGraph from '../components/NetworkGraph.vue';
-import FilterPanel from '../components/FilterPanel.vue';
 import MappingEditor from '../components/MappingEditor.vue';
 
 const store = useLensStore();
