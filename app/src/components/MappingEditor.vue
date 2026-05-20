@@ -56,7 +56,7 @@
                 <div v-if="isExpanded(team.id)" class="team-body">
                   <div class="section-label">Authors ({{ team.authors.length }})</div>
                   <div class="assigned-chips">
-                    <span v-for="a in team.authors" :key="a" class="assigned-chip author-chip">
+                    <span v-for="a in [...team.authors].sort()" :key="a" class="assigned-chip author-chip">
                       {{ a }}<button class="chip-remove" @click="removeFrom(team, 'authors', a)">×</button>
                     </span>
                     <span v-if="!team.authors.length" class="empty-hint">No authors assigned</span>
@@ -82,7 +82,7 @@
 
                   <div class="section-label">Repositories ({{ team.repos.length }})</div>
                   <div class="assigned-chips">
-                    <span v-for="r in team.repos" :key="r" class="assigned-chip repo-chip">
+                    <span v-for="r in [...team.repos].sort()" :key="r" class="assigned-chip repo-chip">
                       {{ r }}<button class="chip-remove" @click="removeFrom(team, 'repos', r)">×</button>
                     </span>
                     <span v-if="!team.repos.length" class="empty-hint">No repositories assigned</span>

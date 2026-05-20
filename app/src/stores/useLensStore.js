@@ -105,7 +105,7 @@ export const useLensStore = defineStore('lens', () => {
   });
 
   function getNodeColor(id, type) {
-    return nodeColors.value[`${type}:${id}`] ?? (type === 'author' ? '#225EA9' : '#088F9B');
+    return nodeColors.value[`${type}:${id}`] ?? '#9CA3AF';
   }
 
   // Team CRUD
