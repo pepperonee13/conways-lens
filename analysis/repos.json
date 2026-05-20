@@ -1,0 +1,11 @@
+[
+  {
+    "name": "example-service",
+    "url": "https://github.com/your-org/example-service"
+  },
+  {
+    "name": "another-repo",
+    "url": "https://dev.azure.com/your-org/project/_git/another-repo",
+    "branch": "develop"
+  }
+]
