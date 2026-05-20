@@ -15,6 +15,24 @@
           Cross-team only
         </button>
       </div>
+      <div v-if="dateBounds" class="date-filter-row">
+        <span class="date-filter-label">Period</span>
+        <input type="date" class="date-input"
+               :min="dateBounds.since" :max="activeRange.until || dateBounds.until"
+               :value="activeRange.since || dateBounds.since"
+               @change="e => store.activeRange = { ...store.activeRange, since: e.target.value || null }" />
+        <span class="date-sep">→</span>
+        <input type="date" class="date-input"
+               :min="activeRange.since || dateBounds.since" :max="dateBounds.until"
+               :value="activeRange.until || dateBounds.until"
+               @change="e => store.activeRange = { ...store.activeRange, until: e.target.value || null }" />
+        <button v-if="activeRange.since || activeRange.until"
+                class="date-reset-btn"
+                @click="store.activeRange = { since: null, until: null }">
+          Reset
+        </button>
+        <span v-else class="date-bounds-hint">{{ dateBounds.since }} – {{ dateBounds.until }}</span>
+      </div>
     </div>
 
     <div v-if="!hasData" class="empty-state">No contribution data to display.</div>
@@ -52,7 +70,7 @@ import * as d3 from 'd3';
 import { useLensStore } from '../stores/useLensStore';
 
 const store = useLensStore();
-const { graphData, nodeColors, crossTeamOnly } = storeToRefs(store);
+const { graphData, nodeColors, crossTeamOnly, dateBounds, activeRange } = storeToRefs(store);
 
 const svgRef       = ref(null);
 const containerRef = ref(null);
@@ -372,6 +390,25 @@ onMounted(() => {
 .legend       { @apply flex items-center gap-1.5 font-medium; }
 .legend-circle { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: #225EA9; }
 .legend-square { display: inline-block; width: 12px; height: 12px; border-radius: 2px; background: #088F9B; }
+.date-filter-row {
+  @apply flex items-center justify-center gap-2 mt-3 flex-wrap;
+}
+.date-filter-label {
+  @apply text-xs font-semibold text-gray-400 uppercase tracking-wide mr-1;
+}
+.date-input {
+  @apply text-xs border border-gray-200 rounded-lg px-2 py-1 text-gray-600 bg-white
+         focus:outline-none focus:ring-2 focus:border-brand-blue transition-all;
+  font-family: 'JetBrains Mono', monospace;
+  --tw-ring-color: #225EA933;
+}
+.date-sep { @apply text-gray-400 text-sm font-medium; }
+.date-reset-btn {
+  @apply text-xs px-2.5 py-1 rounded-lg border border-brand-orange text-brand-orange
+         hover:bg-brand-orange hover:text-white transition-all duration-150 cursor-pointer;
+  background: transparent;
+}
+.date-bounds-hint { @apply text-xs text-gray-300 font-mono ml-1; }
 .hint         { @apply text-xs text-gray-400 italic text-center mb-2; }
 .svg-wrap     { overflow: auto; border-radius: 8px; scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
 .graph-svg    { display: block; }

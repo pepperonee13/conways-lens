@@ -28,6 +28,8 @@ export const useLensStore = defineStore('lens', () => {
   watch(authorNormalizations, v => localStorage.setItem(STORAGE.normalizations, JSON.stringify(v)), { deep: true });
   watch(ignoredAuthors,       v => localStorage.setItem(STORAGE.ignoredAuthors,  JSON.stringify(v)), { deep: true });
 
+  const activeRange = ref({ since: null, until: null });
+
   async function loadTimelineData(file) {
     dataError.value = null;
     try {
@@ -42,6 +44,7 @@ export const useLensStore = defineStore('lens', () => {
       timelineData.value = data;
       dateInfo.value     = parsedDateInfo;
       dataLoaded.value   = true;
+      activeRange.value  = { since: null, until: null };
     } catch (err) {
       dataError.value  = err.message;
       dataLoaded.value = false;
@@ -62,12 +65,26 @@ export const useLensStore = defineStore('lens', () => {
 
   const ignoredSet = computed(() => new Set(ignoredAuthors.value));
 
+  const dateBounds = computed(() => {
+    let min = null, max = null;
+    for (const row of timelineData.value) {
+      if (!row.Date) continue;
+      if (!min || row.Date < min) min = row.Date;
+      if (!max || row.Date > max) max = row.Date;
+    }
+    return min ? { since: min, until: max } : null;
+  });
+
   const crossTeamOnly = ref(false);
 
   const graphData = computed(() => {
+    const since = activeRange.value.since;
+    const until = activeRange.value.until;
     const edgeMap = {};
     for (const row of timelineData.value) {
       if (!row.Author || !row.Product || !row.ChangesetId) continue;
+      if (since && row.Date < since) continue;
+      if (until && row.Date > until) continue;
       const author = normalizeAuthor(row.Author);
       if (ignoredSet.value.has(author)) continue;
       const key = `${author}|||${row.Product}`;
@@ -174,6 +191,7 @@ export const useLensStore = defineStore('lens', () => {
   return {
     timelineData, dataLoaded, dataError, dateInfo,
     teams, authorNormalizations, ignoredAuthors,
+    dateBounds, activeRange,
     crossTeamOnly,
     allRawAuthors, allAuthors, allRepos,
     graphData, nodeColors, getNodeColor,
