@@ -1,6 +1,18 @@
 import { defineStore } from 'pinia';
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import Papa from 'papaparse';
+
+const STORAGE = {
+  teams:        'conwaylens:teams',
+  normalizations: 'conwaylens:normalizations',
+  ignoredAuthors: 'conwaylens:ignoredAuthors',
+};
+
+const DEFAULT_COLORS = ['#225EA9', '#088F9B', '#F08223', '#5A4A80', '#C45E0F', '#006B75', '#3A75BA', '#1A9FA9'];
+
+function load(key, fallback) {
+  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
+}
 
 export const useLensStore = defineStore('lens', () => {
   const timelineData = ref([]);
@@ -8,18 +20,24 @@ export const useLensStore = defineStore('lens', () => {
   const dataError    = ref(null);
   const dateInfo     = ref(null);
 
+  const teams                = ref(load(STORAGE.teams, []));
+  const authorNormalizations = ref(load(STORAGE.normalizations, {}));
+  const ignoredAuthors       = ref(load(STORAGE.ignoredAuthors, []));
+
+  watch(teams,                v => localStorage.setItem(STORAGE.teams,         JSON.stringify(v)), { deep: true });
+  watch(authorNormalizations, v => localStorage.setItem(STORAGE.normalizations, JSON.stringify(v)), { deep: true });
+  watch(ignoredAuthors,       v => localStorage.setItem(STORAGE.ignoredAuthors,  JSON.stringify(v)), { deep: true });
+
   async function loadTimelineData(file) {
     dataError.value = null;
     try {
-      const text = new TextDecoder('utf-8').decode(await file.arrayBuffer());
+      const text  = new TextDecoder('utf-8').decode(await file.arrayBuffer());
       const lines = text.split(/\r?\n/).filter(Boolean);
-
       let parsedDateInfo = null;
       if (lines.at(-1)?.startsWith('Since=')) {
         const m = lines.pop().match(/Since=([\d-]+)?(?:,Until=([\d-]+))?/);
         if (m) parsedDateInfo = { since: m[1] ?? null, until: m[2] ?? null };
       }
-
       const { data } = Papa.parse(lines.join('\n'), { header: true, skipEmptyLines: true });
       timelineData.value = data;
       dateInfo.value     = parsedDateInfo;
@@ -30,14 +48,27 @@ export const useLensStore = defineStore('lens', () => {
     }
   }
 
-  // Aggregate raw rows into { nodes, links } for the graph.
-  // One row per file per commit → deduplicate by ChangesetId per author×repo pair.
-  const graphData = computed(() => {
-    const edgeMap = {}; // `${author}|||${repo}` → Set<sha>
+  function normalizeAuthor(name) { return authorNormalizations.value[name] ?? name; }
 
+  const allRawAuthors = computed(() =>
+    [...new Set(timelineData.value.map(r => r.Author))].filter(Boolean).sort()
+  );
+  const allAuthors = computed(() =>
+    [...new Set(allRawAuthors.value.map(normalizeAuthor))].sort()
+  );
+  const allRepos = computed(() =>
+    [...new Set(timelineData.value.map(r => r.Product))].filter(Boolean).sort()
+  );
+
+  const ignoredSet = computed(() => new Set(ignoredAuthors.value));
+
+  const graphData = computed(() => {
+    const edgeMap = {};
     for (const row of timelineData.value) {
       if (!row.Author || !row.Product || !row.ChangesetId) continue;
-      const key = `${row.Author}|||${row.Product}`;
+      const author = normalizeAuthor(row.Author);
+      if (ignoredSet.value.has(author)) continue;
+      const key = `${author}|||${row.Product}`;
       (edgeMap[key] ??= new Set()).add(row.ChangesetId);
     }
 
@@ -53,13 +84,69 @@ export const useLensStore = defineStore('lens', () => {
       repoCommits[l.target]   = (repoCommits[l.target]   ?? 0) + l.commits;
     }
 
-    const nodes = [
-      ...Object.entries(authorCommits).map(([id, commits]) => ({ id, type: 'author', commits })),
-      ...Object.entries(repoCommits)  .map(([id, commits]) => ({ id, type: 'repo',   commits })),
-    ];
-
-    return { nodes, links };
+    return {
+      nodes: [
+        ...Object.entries(authorCommits).map(([id, commits]) => ({ id, type: 'author', commits })),
+        ...Object.entries(repoCommits)  .map(([id, commits]) => ({ id, type: 'repo',   commits })),
+      ],
+      links,
+    };
   });
 
-  return { timelineData, dataLoaded, dataError, dateInfo, graphData, loadTimelineData };
+  // Lookup map: `${type}:${id}` → team color
+  const nodeColors = computed(() => {
+    const map = {};
+    teams.value.forEach((t, i) => {
+      const color = t.color || DEFAULT_COLORS[i % DEFAULT_COLORS.length];
+      for (const a of (t.authors ?? [])) map[`author:${a}`] = color;
+      for (const r of (t.repos   ?? [])) map[`repo:${r}`]   = color;
+    });
+    return map;
+  });
+
+  function getNodeColor(id, type) {
+    return nodeColors.value[`${type}:${id}`] ?? (type === 'author' ? '#225EA9' : '#088F9B');
+  }
+
+  // Team CRUD
+  function addTeam() {
+    teams.value.push({
+      id: Date.now().toString(),
+      name: `Team ${teams.value.length + 1}`,
+      color: DEFAULT_COLORS[teams.value.length % DEFAULT_COLORS.length],
+      authors: [],
+      repos: [],
+    });
+  }
+  function removeTeam(id) { teams.value = teams.value.filter(t => t.id !== id); }
+
+  // Author normalization CRUD
+  function setNormalization(raw, canonical) {
+    authorNormalizations.value = { ...authorNormalizations.value, [raw]: canonical };
+  }
+  function removeNormalization(raw) {
+    const next = { ...authorNormalizations.value };
+    delete next[raw];
+    authorNormalizations.value = next;
+  }
+
+  // Ignored authors CRUD
+  function ignoreAuthor(name) {
+    if (!ignoredAuthors.value.includes(name))
+      ignoredAuthors.value = [...ignoredAuthors.value, name];
+  }
+  function unignoreAuthor(name) {
+    ignoredAuthors.value = ignoredAuthors.value.filter(a => a !== name);
+  }
+
+  return {
+    timelineData, dataLoaded, dataError, dateInfo,
+    teams, authorNormalizations, ignoredAuthors,
+    allRawAuthors, allAuthors, allRepos,
+    graphData, nodeColors, getNodeColor,
+    loadTimelineData,
+    addTeam, removeTeam,
+    setNormalization, removeNormalization,
+    ignoreAuthor, unignoreAuthor,
+  };
 });

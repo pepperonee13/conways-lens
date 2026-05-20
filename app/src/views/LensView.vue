@@ -56,6 +56,7 @@
       </div>
     </main>
 
+    <MappingEditor />
   </div>
 </template>
 
@@ -64,6 +65,7 @@ import { ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useLensStore } from '../stores/useLensStore';
 import NetworkGraph from '../components/NetworkGraph.vue';
+import MappingEditor from '../components/MappingEditor.vue';
 
 const store = useLensStore();
 const { dataLoaded, dataError, dateInfo } = storeToRefs(store);
