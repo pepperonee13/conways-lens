@@ -62,6 +62,8 @@ export const useLensStore = defineStore('lens', () => {
 
   const ignoredSet = computed(() => new Set(ignoredAuthors.value));
 
+  const crossTeamOnly = ref(false);
+
   const graphData = computed(() => {
     const edgeMap = {};
     for (const row of timelineData.value) {
@@ -72,10 +74,19 @@ export const useLensStore = defineStore('lens', () => {
       (edgeMap[key] ??= new Set()).add(row.ChangesetId);
     }
 
-    const links = Object.entries(edgeMap).map(([key, shas]) => {
+    let links = Object.entries(edgeMap).map(([key, shas]) => {
       const sep = key.indexOf('|||');
       return { source: key.slice(0, sep), target: key.slice(sep + 3), commits: shas.size };
     });
+
+    if (crossTeamOnly.value && teams.value.length > 0) {
+      const aTeam = {}, rTeam = {};
+      for (const t of teams.value) {
+        for (const a of (t.authors ?? [])) aTeam[a] = t.id;
+        for (const r of (t.repos   ?? [])) rTeam[r] = t.id;
+      }
+      links = links.filter(l => aTeam[l.source] && rTeam[l.target] && aTeam[l.source] !== rTeam[l.target]);
+    }
 
     const authorCommits = {};
     const repoCommits   = {};
@@ -163,6 +174,7 @@ export const useLensStore = defineStore('lens', () => {
   return {
     timelineData, dataLoaded, dataError, dateInfo,
     teams, authorNormalizations, ignoredAuthors,
+    crossTeamOnly,
     allRawAuthors, allAuthors, allRepos,
     graphData, nodeColors, getNodeColor,
     loadTimelineData,
