@@ -173,13 +173,16 @@ function drawGraph() {
   // Hull group rendered first so it sits behind nodes
   const hullGroup = root.append('g').attr('class', 'team-hulls');
 
-  // Team gravity: nudge nodes toward their team centroid
+  // Team gravity: nudge author nodes toward their team's author centroid.
+  // Repo nodes are intentionally excluded so they settle between all contributing
+  // teams via the link force — cross-team repos naturally land in the overlap zone.
   function teamGravity(alpha) {
     if (!hasTeams) return;
     const cx = {}, cy = {}, cnt = {};
     for (const n of nodes) {
-      const t = nodeTeamMap[`${n.type}:${n.id}`];
-      if (!t || n.x == null) continue;
+      if (n.type !== 'author' || n.x == null) continue;
+      const t = nodeTeamMap[`author:${n.id}`];
+      if (!t) continue;
       cx[t.id]  = (cx[t.id]  ?? 0) + n.x;
       cy[t.id]  = (cy[t.id]  ?? 0) + n.y;
       cnt[t.id] = (cnt[t.id] ?? 0) + 1;
@@ -187,7 +190,8 @@ function drawGraph() {
     for (const id in cnt) { cx[id] /= cnt[id]; cy[id] /= cnt[id]; }
     const k = 0.08 * alpha;
     for (const n of nodes) {
-      const t = nodeTeamMap[`${n.type}:${n.id}`];
+      if (n.type !== 'author') continue;
+      const t = nodeTeamMap[`author:${n.id}`];
       if (!t || cx[t.id] == null) continue;
       n.vx = (n.vx ?? 0) + (cx[t.id] - (n.x ?? 0)) * k;
       n.vy = (n.vy ?? 0) + (cy[t.id] - (n.y ?? 0)) * k;
@@ -255,15 +259,39 @@ function drawGraph() {
   sim.on('tick', () => {
     nodes.forEach(n => { if (n.x != null) savedPositions[n.id] = { x: n.x, y: n.y }; });
 
-    // Update team hulls
+    // Update team hulls based on contribution footprint, not just node ownership.
+    // Each team's hull wraps:
+    //   • the team's own author nodes
+    //   • every repo those authors have edges to (their contribution reach)
+    //   • repos assigned to the team (their ownership territory)
+    // A repo contributed to by Team A but owned by Team B therefore appears in
+    // both hulls — the intersection is the visible cross-team violation.
     if (hasTeams) {
       const teamPtsMap = {};
+      const nodeById   = Object.fromEntries(nodes.map(n => [n.id, n]));
+
       for (const n of nodes) {
-        if (n.x == null) continue;
-        const t = nodeTeamMap[`${n.type}:${n.id}`];
+        if (n.x == null || n.type !== 'author') continue;
+        const t = nodeTeamMap[`author:${n.id}`];
+        if (!t) continue;
+        const entry = (teamPtsMap[t.id] ??= { team: t, pts: [] });
+        entry.pts.push([n.x, n.y, n.r]);
+        // Pull in every repo this author touches
+        for (const link of links) {
+          const repo = link.source === n || link.source.id === n.id ? link.target : null;
+          if (!repo || repo.x == null) continue;
+          entry.pts.push([repo.x, repo.y, repo.r ?? 20]);
+        }
+      }
+
+      // Also anchor each repo inside its owning team's hull (ownership territory)
+      for (const n of nodes) {
+        if (n.x == null || n.type !== 'repo') continue;
+        const t = nodeTeamMap[`repo:${n.id}`];
         if (!t) continue;
         (teamPtsMap[t.id] ??= { team: t, pts: [] }).pts.push([n.x, n.y, n.r]);
       }
+
       hullGroup.selectAll('path')
         .data(Object.values(teamPtsMap), d => d.team.id)
         .join('path')
