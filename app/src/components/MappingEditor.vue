@@ -36,49 +36,57 @@
             Assign authors and repositories to teams. Team color is applied to their nodes in the graph.
           </p>
 
-          <button class="add-team-btn" @click="store.addTeam()">+ Add Team</button>
+          <button class="add-team-btn" @click="addTeam()">+ Add Team</button>
 
           <div class="teams-list">
             <div v-for="(team, idx) in teams" :key="team.id" class="team-card">
               <div class="team-card-header">
-                <div class="team-name-row">
-                  <input v-model="team.name" class="team-name-input" :placeholder="'Team ' + (idx + 1)" />
-                  <input type="color" v-model="team.color" class="color-picker" :title="team.color" />
-                </div>
+                <button class="team-toggle" @click="toggleTeam(team.id)" :title="isExpanded(team.id) ? 'Collapse' : 'Expand'">
+                  <span class="chevron" :class="{ rotated: isExpanded(team.id) }">›</span>
+                </button>
+                <input type="color" v-model="team.color" class="color-picker" :title="team.color" />
+                <input v-model="team.name" class="team-name-input" :placeholder="'Team ' + (idx + 1)" />
+                <span v-if="!isExpanded(team.id)" class="team-summary">
+                  {{ team.authors.length }} authors · {{ team.repos.length }} repos
+                </span>
                 <button class="remove-team-btn" @click="store.removeTeam(team.id)" title="Delete team">✕</button>
               </div>
 
-              <div class="section-label">Authors ({{ team.authors.length }})</div>
-              <div class="assigned-chips">
-                <span v-for="a in team.authors" :key="a" class="assigned-chip author-chip">
-                  {{ a }}<button class="chip-remove" @click="removeFrom(team, 'authors', a)">×</button>
-                </span>
-                <span v-if="!team.authors.length" class="empty-hint">No authors assigned</span>
-              </div>
-              <div class="available-list" v-if="availableAuthors(team).length">
-                <div class="available-label">Add author:</div>
-                <div class="available-pills">
-                  <button v-for="a in availableAuthors(team)" :key="a" class="available-pill" @click="addTo(team, 'authors', a)">
-                    + {{ a }}
-                  </button>
-                </div>
-              </div>
+              <transition name="team-body">
+                <div v-if="isExpanded(team.id)" class="team-body">
+                  <div class="section-label">Authors ({{ team.authors.length }})</div>
+                  <div class="assigned-chips">
+                    <span v-for="a in team.authors" :key="a" class="assigned-chip author-chip">
+                      {{ a }}<button class="chip-remove" @click="removeFrom(team, 'authors', a)">×</button>
+                    </span>
+                    <span v-if="!team.authors.length" class="empty-hint">No authors assigned</span>
+                  </div>
+                  <div class="available-list" v-if="availableAuthors(team).length">
+                    <div class="available-label">Add author:</div>
+                    <div class="available-pills">
+                      <button v-for="a in availableAuthors(team)" :key="a" class="available-pill" @click="addTo(team, 'authors', a)">
+                        + {{ a }}
+                      </button>
+                    </div>
+                  </div>
 
-              <div class="section-label">Repositories ({{ team.repos.length }})</div>
-              <div class="assigned-chips">
-                <span v-for="r in team.repos" :key="r" class="assigned-chip repo-chip">
-                  {{ r }}<button class="chip-remove" @click="removeFrom(team, 'repos', r)">×</button>
-                </span>
-                <span v-if="!team.repos.length" class="empty-hint">No repositories assigned</span>
-              </div>
-              <div class="available-list" v-if="availableRepos(team).length">
-                <div class="available-label">Add repository:</div>
-                <div class="available-pills">
-                  <button v-for="r in availableRepos(team)" :key="r" class="available-pill repo-pill" @click="addTo(team, 'repos', r)">
-                    + {{ r }}
-                  </button>
+                  <div class="section-label">Repositories ({{ team.repos.length }})</div>
+                  <div class="assigned-chips">
+                    <span v-for="r in team.repos" :key="r" class="assigned-chip repo-chip">
+                      {{ r }}<button class="chip-remove" @click="removeFrom(team, 'repos', r)">×</button>
+                    </span>
+                    <span v-if="!team.repos.length" class="empty-hint">No repositories assigned</span>
+                  </div>
+                  <div class="available-list" v-if="availableRepos(team).length">
+                    <div class="available-label">Add repository:</div>
+                    <div class="available-pills">
+                      <button v-for="r in availableRepos(team)" :key="r" class="available-pill repo-pill" @click="addTo(team, 'repos', r)">
+                        + {{ r }}
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              </transition>
             </div>
           </div>
 
@@ -184,8 +192,22 @@ const open = ref(false);
 const tab  = ref('teams');
 
 // ── Teams ──
+const expandedTeams = ref(new Set());
+function isExpanded(id) { return expandedTeams.value.has(id); }
+function toggleTeam(id) {
+  const s = new Set(expandedTeams.value);
+  s.has(id) ? s.delete(id) : s.add(id);
+  expandedTeams.value = s;
+}
+function addTeam() {
+  store.addTeam();
+  const newTeam = teams.value[teams.value.length - 1];
+  if (newTeam) expandedTeams.value = new Set([...expandedTeams.value, newTeam.id]);
+}
+
+const ignoredSet = computed(() => new Set(ignoredAuthors.value));
 function availableAuthors(team) {
-  return allAuthors.value.filter(a => !team.authors.includes(a));
+  return allAuthors.value.filter(a => !team.authors.includes(a) && !ignoredSet.value.has(a));
 }
 function availableRepos(team) {
   return allRepos.value.filter(r => !team.repos.includes(r));
@@ -290,7 +312,18 @@ function isIgnored(name) { return ignoredAuthors.value.includes(name); }
 }
 .teams-list { @apply flex flex-col gap-4; }
 .team-card { @apply bg-gray-50 border border-gray-200 rounded-xl p-4; }
-.team-card-header { @apply flex items-start justify-between gap-3 mb-3; }
+.team-card-header { @apply flex items-center gap-2 mb-1; }
+.team-toggle {
+  @apply flex items-center justify-center w-6 h-6 rounded text-gray-400
+         hover:text-brand-orange hover:bg-orange-50 transition-all flex-shrink-0 cursor-pointer;
+}
+.chevron {
+  display: inline-block; font-size: 14px; font-weight: 700; line-height: 1;
+  transition: transform 0.2s ease;
+}
+.chevron.rotated { transform: rotate(90deg); }
+.team-summary { @apply text-xs text-gray-400 italic flex-1 min-w-0 truncate; }
+.team-body { @apply mt-3; }
 .team-name-row { @apply flex items-center gap-2 flex-1; }
 .team-name-input {
   @apply flex-1 px-3 py-1.5 text-sm font-semibold border-2 border-gray-300 rounded-lg
@@ -331,6 +364,12 @@ function isIgnored(name) { return ignoredAuthors.value.includes(name); }
 .unassigned-group { @apply mb-2 flex flex-wrap items-center gap-2; }
 .unassigned-label { @apply text-xs text-amber-600 font-medium; }
 .unassigned-chip { @apply px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-800 border border-amber-300; }
+
+/* ── Team body transition ── */
+.team-body-enter-active { transition: max-height 0.25s ease, opacity 0.2s ease; }
+.team-body-leave-active { transition: max-height 0.2s ease, opacity 0.15s ease; }
+.team-body-enter-from, .team-body-leave-to { max-height: 0; opacity: 0; overflow: hidden; }
+.team-body-enter-to, .team-body-leave-from { max-height: 800px; overflow: hidden; }
 
 /* ── Author Aliases ── */
 .author-pills-grid { @apply flex flex-wrap gap-2; }
