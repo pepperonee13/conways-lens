@@ -57,7 +57,7 @@
                   <div class="section-label">Authors ({{ team.authors.length }})</div>
                   <div class="assigned-chips">
                     <span v-for="a in [...team.authors].sort()" :key="a" class="assigned-chip author-chip">
-                      {{ a }}<button class="chip-remove" @click="removeFrom(team, 'authors', a)">×</button>
+                      {{ anonymize(a) }}<button class="chip-remove" @click="removeFrom(team, 'authors', a)">×</button>
                     </span>
                     <span v-if="!team.authors.length" class="empty-hint">No authors assigned</span>
                   </div>
@@ -66,7 +66,7 @@
                       <div class="available-label">Add author:</div>
                       <div class="available-pills">
                         <button v-for="a in availableAuthorGroups(team).free" :key="a" class="available-pill" @click="addTo(team, 'authors', a)">
-                          + {{ a }}
+                          + {{ anonymize(a) }}
                         </button>
                       </div>
                     </template>
@@ -74,7 +74,7 @@
                       <div class="available-label available-label--shared">Also in another team:</div>
                       <div class="available-pills">
                         <button v-for="a in availableAuthorGroups(team).shared" :key="a" class="available-pill available-pill--shared" @click="addTo(team, 'authors', a)">
-                          + {{ a }}
+                          + {{ anonymize(a) }}
                         </button>
                       </div>
                     </template>
@@ -110,7 +110,7 @@
             <div class="unassigned-title">⚠ Unassigned</div>
             <div v-if="unassignedAuthors.length" class="unassigned-group">
               <span class="unassigned-label">Authors not in any team:</span>
-              <span v-for="a in unassignedAuthors" :key="a" class="unassigned-chip">{{ a }}</span>
+              <span v-for="a in unassignedAuthors" :key="a" class="unassigned-chip">{{ anonymize(a) }}</span>
             </div>
             <div v-if="unassignedRepos.length" class="unassigned-group">
               <span class="unassigned-label">Repositories not in any team:</span>
@@ -142,8 +142,8 @@
               @dragleave.self="onDragLeave(author)"
               @drop.prevent="onDrop(author)"
             >
-              <span class="pill-name">{{ author }}</span>
-              <span v-if="isMapped(author)" class="pill-alias-badge">→ {{ authorNormalizations[author] }}</span>
+              <span class="pill-name">{{ anonymize(author) }}</span>
+              <span v-if="isMapped(author)" class="pill-alias-badge">→ {{ anonymize(authorNormalizations[author]) }}</span>
             </div>
           </div>
 
@@ -151,9 +151,9 @@
             <div class="section-label" style="margin-top:1.25rem">Active aliases ({{ normalizationCount }})</div>
             <div class="alias-list">
               <div v-for="[raw, canonical] in sortedNormalizations" :key="raw" class="alias-row">
-                <span class="alias-raw">{{ raw }}</span>
+                <span class="alias-raw">{{ anonymize(raw) }}</span>
                 <span class="alias-arrow-sm">→</span>
-                <span class="alias-canonical">{{ canonical }}</span>
+                <span class="alias-canonical">{{ anonymize(canonical) }}</span>
                 <button class="alias-remove" @click="store.removeNormalization(raw)" title="Remove alias">✕</button>
               </div>
             </div>
@@ -171,7 +171,7 @@
 
           <div class="author-toggle-list">
             <div v-for="a in allAuthors" :key="a" :class="['author-toggle-row', { 'row-ignored': isIgnored(a) }]">
-              <span :class="['toggle-name', { 'name-ignored': isIgnored(a) }]">{{ a }}</span>
+              <span :class="['toggle-name', { 'name-ignored': isIgnored(a) }]">{{ anonymize(a) }}</span>
               <button
                 :class="['toggle-btn', { 'toggle-btn--active': isIgnored(a) }]"
                 @click="isIgnored(a) ? store.unignoreAuthor(a) : store.ignoreAuthor(a)"
@@ -202,9 +202,11 @@
 import { ref, computed } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useLensStore } from '../stores/useLensStore';
+import { useAnonymize } from '../composables/useAnonymize.js';
 
 const store = useLensStore();
 const { teams, authorNormalizations, ignoredAuthors, allRawAuthors, allAuthors, allRepos } = storeToRefs(store);
+const { anonymize } = useAnonymize();
 
 const open = ref(false);
 const tab  = ref('teams');
