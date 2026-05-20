@@ -1,6 +1,6 @@
 # ConwaysLens — Development Progress
 
-> Working branch: `claude/add-drill-down-zoom-0Ne49`
+> Working branch: `claude/visualize-conways-law-65nB4`
 > Last updated: 2026-05-20
 
 ---
@@ -119,6 +119,38 @@ A second graph mode where positions are fully data-driven (not force-directed):
 
 ---
 
+### Design session — node-level violation encoding (2026-05-20, not yet implemented)
+
+Discussed how to make nodes and edges carry the Conway signal directly, rather than relying only on hull/territory backgrounds. Three candidate approaches were evaluated:
+
+| Option | Approach | Decision |
+|---|---|---|
+| A — Edge encoding | Color cross-team edges with the author's team color; muted gray for within-team; thickness = commit count | **Ship this** |
+| B — Violation rings | Thin outer arc on each node showing % of cross-team involvement | **Ship this, as a toggle** |
+| C — Repo color blending | Repo fill blends proportionally between contributing teams' colors | **Rejected** — loses authoritative ownership color, gets muddy with 3+ teams |
+
+**Key decisions:**
+
+- **Node ownership color is authoritative.** Repo and author node colors are set by team mapping and never overridden by cross-team contributions. The team mapping reflects organizational intent; that must remain visually clear.
+- **Edge encoding is the primary Conway signal.** Cross-team edges colored by the author's team color make boundary crossings immediately visible. Within-team edges are muted/gray background noise.
+- **Violation rings are an opt-in overlay.** A thin arc on each node encodes % cross-team involvement (author: % of commits to outside-team repos; repo: % of commits from outside-team authors). Must be toggleable — at scale they become noise if always on.
+- **All indicators must be individually toggleable.** Scale target is ~100 contributors and ~200 repos. At that density every always-on overlay becomes a liability.
+
+**Progressive disclosure model — four levels:**
+
+| Level | What's shown | Control |
+|---|---|---|
+| 0 | Nodes with team colors, uniform edges | Base — always on |
+| 1 | Cross-team edges only; nodes with only within-team contributions hidden | Existing "Cross-team only" toggle |
+| 2 | Edge color (author's team) + edge thickness (commit count) | New "Edge weight" toggle |
+| 3 | Violation rings on nodes (with minimum threshold, e.g. hide ring if < 10% cross-team) | New "Violation rings" toggle |
+
+**Controls UI:** A "Visualization" dropdown/panel in the graph header (so the header stays clean). Toggles inside it control levels 2 and 3. Toggle states are ephemeral (not persisted — they are display preferences, not data).
+
+**Scale note:** At 100+ contributors, structured layout (team bands) becomes *more* valuable than force-directed, because cross-band edges are unambiguous Conway signals regardless of node density. The layout toggle is itself a noise-reduction tool.
+
+---
+
 ## Open Questions
 
 **1. Semantics of hull boundaries**
@@ -130,11 +162,11 @@ User liked options ③ (blur layers) and ④ (density field) in the prototype. N
 **3. What to call the hull feature in the UI?**
 The user rejected "hull" as a label. "Cross-team boundaries" and "Team territories" were discussed. "Team boundaries" seems to be the leading candidate but hasn't been finalized.
 
-**4. Structured layout in the main app**
-The prototype shows that structured layout gives the most honest Conway's Law reading. Should this become a mode in the main app alongside force-directed? The user said they don't want to give up force-directed (the colored zone map is "more telling at the high level"), so both modes would need to coexist.
+**4. Structured layout in the main app** *(decision: ship both)*
+Both modes should coexist. Force-directed is better at the high level (spatial zone map); structured layout is the honest Conway view at scale. The layout toggle serves as a noise-reduction tool when the graph gets dense.
 
-**5. Weight threshold control**
-The prototype hardcodes thresholds (3.5/8/18% for shells, 7% for blur mid-layer). Should these be user-configurable in the main app, or are fixed defaults good enough? A single "sensitivity" slider could control all of them.
+**5. Weight threshold for violation rings** *(partially decided)*
+Violation rings should have a minimum threshold (tentatively 10%) so weak signals don't clutter the graph at scale. Whether this threshold is user-configurable or a fixed default is still open — a single "sensitivity" slider could eventually control this and the hull thresholds together.
 
 **6. Folder drill-down requires FilePath in CSV**
 Only repos that have `FilePath` data can be drilled into. The PowerShell script already produces this column, but existing CSVs without it silently disable the feature. This is correct behavior — but worth documenting for users.
@@ -154,45 +186,58 @@ The MappingEditor currently lets authors be assigned to multiple teams, but ther
 
 ## Next Steps (Rough Priority)
 
-### High — integrate prototype findings into main app
+### High — node-level violation encoding (designed 2026-05-20, ready to implement)
 
-1. **Add team boundary toggle to `NetworkGraph.vue`**
-   - Name: "Team boundaries" or "Cross-team boundaries" (not "hull")
-   - Default off; toggle in the graph header next to "Cross-team only"
-   - Start with option ③ (blur layers) or ④ (density field) based on final decision
-   - The toggle state does not need to persist (it's a visual preference, not data)
+1. **Edge encoding toggle in `NetworkGraph.vue`**
+   - New "Visualization" dropdown in graph header (keeps header clean)
+   - Toggle: "Edge weight" (default off)
+   - When on: cross-team edges colored with the author's team color; within-team edges muted gray; stroke-width scales with commit count (e.g. `1 + log(commitCount)` to tame outliers)
+   - Edge color should use the *author's* team color (not the repo's) — shows which team is "reaching out"
 
-2. **Choose and integrate one boundary style**
-   - Recommendation: start with ③ (blur layers) — it gives clear spatial zones (useful at a glance) while the blurred outer halo communicates uncertainty about peripheral contributions
-   - ④ (density field) could be a follow-on or an alternative toggle
+2. **Violation rings toggle in `NetworkGraph.vue`**
+   - Toggle: "Violation rings" inside the same "Visualization" dropdown (default off)
+   - When on: thin outer arc drawn on each visible node, arc length = % cross-team involvement
+   - Author node: arc = % of that author's commits that went to outside-team repos
+   - Repo node: arc = % of commits to that repo that came from outside-team authors
+   - Arc color: a fixed warning color (e.g. the brand orange `#F08223`), independent of team
+   - Minimum threshold: hide arc entirely if cross-team % < 10% (reduces noise at scale)
+   - Both toggles are ephemeral — not persisted to localStorage
+
+### High — integrate prototype boundary styles into main app
+
+3. **Add team boundary toggle to `NetworkGraph.vue`**
+   - Name: "Team boundaries" (not "hull")
+   - Default off; inside the "Visualization" dropdown
+   - Start with option ③ (blur layers) — clear spatial zones + blurred halo for peripheral contributions
+   - Auto-disable in structured layout mode
 
 ### Medium — structured layout mode in main app
 
-3. **Add structured layout as a second graph mode**
-   - Toggle: "Force-directed" / "Structured" in graph header or top controls
+4. **Add structured layout as a second graph mode**
+   - Toggle: "Force-directed" / "Structured" in graph header (separate from the Visualization dropdown)
    - In structured mode: team bands with colored backgrounds, fixed bipartite positions, no dragging
-   - Boundaries section (hull rendering) should auto-disable in structured mode
-   - This is the most honest view for Conway's Law analysis
+   - Team boundaries toggle auto-disables in this mode (bands replace hulls)
+   - This is the most legible Conway view at scale (100+ contributors)
 
-4. **Weight threshold sensitivity control**
-   - Single slider: "Boundary sensitivity" (low = only show strong signals, high = show weak ones)
-   - Maps to the `minW` thresholds in the concentric shell / blur layer renderers
+5. **Weight threshold / sensitivity control**
+   - Single slider: "Sensitivity" (low = only show strong signals, high = show all)
+   - Controls the 10% ring minimum and the hull layer thresholds together
 
 ### Lower — polish and UX
 
-5. **Multi-team author indicator in MappingEditor**
+6. **Multi-team author indicator in MappingEditor**
    - When an author is assigned to >1 team, show a small badge or warning in the editor
    - Help text: "This author will appear in both team nodes and their cross-team contributions will be counted for each team"
 
-6. **Hull semantics tooltip**
-   - When team boundaries are enabled, show a small info icon that explains what the shading means
-   - "Shading represents influence, not ownership. Stronger color = more contribution."
+7. **Visualization tooltip / legend**
+   - When any "Visualization" overlay is on, show a small info icon explaining what each indicator means
+   - "Ring arc = % of contributions crossing team boundaries. Edge color = contributing team."
 
-7. **Folder drill-down depth indicator**
+8. **Folder drill-down depth indicator**
    - The +/− badge already shows expand/collapse state
    - Consider showing the current depth level (e.g., `+2` for depth 2) as a tiny label
 
-8. **Analysis script documentation**
+9. **Analysis script documentation**
    - Add a `repos.json.example` with comments explaining each field
    - Document that `FilePath` is required for folder drill-down
 
