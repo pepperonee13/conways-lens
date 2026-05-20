@@ -24,6 +24,8 @@ There are no test or lint commands — no testing framework or linter is configu
 The analysis script (Windows/PowerShell only):
 ```powershell
 .\analysis\Analyse-Repositories.ps1 -Since 2024-01-01 -Until 2024-12-31
+.\analysis\Analyse-Repositories.ps1 -ReposFile C:\projects\my-repos.json  # custom repos config path
+.\analysis\Analyse-Repositories.ps1 -WorkDir C:\my-repos                  # custom clone directory
 ```
 
 ## Architecture

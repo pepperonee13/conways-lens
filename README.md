@@ -24,6 +24,8 @@ Edit `analysis/repos.json`:
 
 `name` becomes the repository label in the graph. `branch` is optional and defaults to `main`.
 
+By default the script reads `repos.json` from its own directory. Use `-ReposFile` to point it at a different file (useful when managing multiple environment configs).
+
 ### 2. Run the analysis
 
 ```powershell
@@ -31,6 +33,7 @@ Edit `analysis/repos.json`:
 # Optional parameters:
 .\analysis\Analyse-Repositories.ps1 -Since 2024-01-01 -Until 2024-12-31
 .\analysis\Analyse-Repositories.ps1 -WorkDir C:\my-repos
+.\analysis\Analyse-Repositories.ps1 -ReposFile C:\projects\my-repos.json
 ```
 
 This clones or updates each repository and writes `app/public/TimelineData.csv`.
