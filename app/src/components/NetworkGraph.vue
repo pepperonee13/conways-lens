@@ -6,7 +6,9 @@
         <p class="graph-desc">
           <span class="legend"><span class="legend-circle"></span>Author</span>
           <span class="legend"><span class="legend-square"></span>Repository</span>
-          &nbsp;·&nbsp; Node size = total commits &nbsp;·&nbsp; Nodes are draggable
+          <span class="legend"><span class="legend-team"></span>Team</span>
+          <span class="legend"><span class="legend-folder"></span>Folder</span>
+          &nbsp;·&nbsp; Node size = total commits &nbsp;·&nbsp; Drag nodes · Click to expand/collapse
         </p>
         <button v-if="store.teams.length > 0"
                 @click="store.crossTeamOnly = !store.crossTeamOnly"
@@ -38,7 +40,7 @@
     <div v-if="!hasData" class="empty-state">No contribution data to display.</div>
 
     <template v-else>
-      <p class="hint">Drag nodes · Scroll to zoom · Hover to highlight connections</p>
+      <p class="hint">Scroll to zoom · Drag nodes · Click team/repo/folder nodes to expand or collapse</p>
       <div class="svg-wrap">
         <svg ref="svgRef" class="graph-svg"></svg>
       </div>
@@ -52,11 +54,9 @@
           <div class="tt-detail">{{ tooltip.commits.toLocaleString() }} commits</div>
         </template>
         <template v-else>
-          <div class="tt-name">{{ tooltip.type === 'author' ? anonymize(tooltip.name) : tooltip.name }}</div>
-          <div class="tt-detail">
-            {{ tooltip.type === 'author' ? 'Author' : 'Repository' }}
-            · {{ tooltip.commits.toLocaleString() }} commits
-          </div>
+          <div class="tt-name">{{ tooltipName }}</div>
+          <div class="tt-detail">{{ tooltipDetail }}</div>
+          <div v-if="tooltip.action" class="tt-action">{{ tooltip.action }}</div>
         </template>
       </div>
     </teleport>
@@ -71,25 +71,45 @@ import { useLensStore } from '../stores/useLensStore';
 import { useAnonymize } from '../composables/useAnonymize.js';
 
 const store = useLensStore();
-const { graphData, nodeColors, crossTeamOnly, dateBounds, activeRange } = storeToRefs(store);
+const { graphData, nodeColors, crossTeamOnly, dateBounds, activeRange, expandedTeams, expandedNodes, reposWithFilePaths } = storeToRefs(store);
 const { anonymize } = useAnonymize();
 
 const svgRef       = ref(null);
 const containerRef = ref(null);
 const dims         = reactive({ w: 900, h: 600 });
-const tooltip      = reactive({ show: false, x: 0, y: 0, isLink: false, name: '', type: '', commits: 0, source: '', target: '' });
+const tooltip      = reactive({
+  show: false, x: 0, y: 0,
+  isLink: false,
+  name: '', type: '', commits: 0,
+  teamName: '', folderPath: '', repoId: '', depth: 0,
+  repoCount: 0, authorCount: 0,
+  source: '', target: '', action: '',
+});
 
 const hasData = computed(() => graphData.value.nodes.length > 0);
+
+const tooltipName = computed(() => {
+  if (tooltip.type === 'author') return anonymize(tooltip.name);
+  if (tooltip.type === 'team')   return tooltip.teamName;
+  if (tooltip.type === 'folder') return tooltip.folderPath;
+  return tooltip.name;
+});
+
+const tooltipDetail = computed(() => {
+  const c = tooltip.commits.toLocaleString();
+  if (tooltip.type === 'author') return `Author · ${c} commits`;
+  if (tooltip.type === 'team')   return `Team · ${tooltip.repoCount} repos · ${tooltip.authorCount} devs · ${c} commits`;
+  if (tooltip.type === 'folder') return `Folder (depth ${tooltip.depth}) · ${c} commits`;
+  return `Repository · ${c} commits`;
+});
 
 const EDGE_COLOR    = '#94a3b8';
 const EDGE_OPACITY  = 0.5;
 const EDGE_HL_COLOR = '#225EA9';
 const DIM_OPACITY   = 0.08;
 
-// Persist node positions across redraws so layout stays stable
 const savedPositions = {};
 
-// D3 selections kept alive for lightweight color-only updates
 let nodeEls = null;
 let linkEls = null;
 let sim     = null;
@@ -98,6 +118,12 @@ function squareEdgeDist(ux, uy, r) {
   const tx = Math.abs(ux) > 1e-9 ? r / Math.abs(ux) : Infinity;
   const ty = Math.abs(uy) > 1e-9 ? r / Math.abs(uy) : Infinity;
   return Math.min(tx, ty);
+}
+
+// Diamond edge termination for folder nodes
+function diamondEdgeDist(ux, uy, r) {
+  const d = Math.abs(ux) + Math.abs(uy);
+  return d > 1e-9 ? r / d : r;
 }
 
 function highlightNode(d) {
@@ -146,13 +172,26 @@ function teamHullPath(pts, padding = 38) {
   return hull ? `M${hull.join('L')}Z` : null;
 }
 
-function buildNodeTeamMap() {
-  const map = {};
-  for (const team of store.teams) {
-    for (const a of (team.authors ?? [])) map[`author:${a}`] = team;
-    for (const r of (team.repos   ?? [])) map[`repo:${r}`]   = team;
+function isNodeExpandable(d) {
+  if (d.type === 'team')   return true;
+  if (d.type === 'repo')   return reposWithFilePaths.value.has(d.id);
+  if (d.type === 'folder') return d.depth < 4;
+  return false;
+}
+
+function isNodeExpanded(d) {
+  if (d.type === 'team')   return expandedTeams.value.has(d.teamId);
+  return expandedNodes.value.has(d.id);
+}
+
+function handleNodeClick(d) {
+  if (d.type === 'team') {
+    store.toggleTeamExpansion(d.teamId);
+  } else if (d.type === 'repo' && reposWithFilePaths.value.has(d.id)) {
+    store.toggleNodeExpansion(d.id);
+  } else if (d.type === 'folder' && d.depth < 4) {
+    store.toggleNodeExpansion(d.id);
   }
-  return map;
 }
 
 function drawGraph() {
@@ -162,18 +201,24 @@ function drawGraph() {
   const { nodes: rawNodes, links: rawLinks } = graphData.value;
   const { w, h } = dims;
 
-  const authMax = d3.max(rawNodes.filter(n => n.type === 'author'), n => n.commits) || 1;
-  const repoMax = d3.max(rawNodes.filter(n => n.type === 'repo'),   n => n.commits) || 1;
-  const aScale  = d3.scaleSqrt().domain([0, authMax]).range([13, 40]);
-  const rScale  = d3.scaleSqrt().domain([0, repoMax]).range([12, 36]);
+  const authMax   = d3.max(rawNodes.filter(n => n.type === 'author'), n => n.commits) || 1;
+  const nonAuthMax = d3.max(rawNodes.filter(n => n.type !== 'author'), n => n.commits) || 1;
+
+  const aScale    = d3.scaleSqrt().domain([0, authMax]).range([13, 40]);
+  const otherScale = d3.scaleSqrt().domain([0, nonAuthMax]).range([14, 40]);
+  // Team nodes are larger
+  const teamScale = d3.scaleSqrt().domain([0, nonAuthMax]).range([28, 55]);
 
   const nodes = rawNodes.map(n => {
     const saved = savedPositions[n.id];
-    return { ...n, r: n.type === 'author' ? aScale(n.commits) : rScale(n.commits), x: saved?.x, y: saved?.y };
+    let r;
+    if (n.type === 'author') r = aScale(n.commits);
+    else if (n.type === 'team') r = teamScale(n.commits);
+    else r = otherScale(n.commits);
+    return { ...n, r, x: saved?.x, y: saved?.y };
   });
   const links = rawLinks.map(l => ({ ...l }));
 
-  const nodeTeamMap = buildNodeTeamMap();
   const hasTeams = store.teams.length > 0;
 
   const svg = d3.select(svgRef.value);
@@ -190,19 +235,26 @@ function drawGraph() {
   const root = svg.append('g');
   svg.call(d3.zoom().scaleExtent([0.2, 4]).on('zoom', e => root.attr('transform', e.transform)));
 
-  // Hull group rendered first so it sits behind nodes
   const hullGroup = root.append('g').attr('class', 'team-hulls');
 
-  // Team gravity: nudge author nodes toward their team's author centroid.
-  // Repo nodes are intentionally excluded so they settle between all contributing
-  // teams via the link force — cross-team repos naturally land in the overlap zone.
+  // Build lookup: author → their teams (for gravity and hull rendering)
+  const authorToTeamsMap = {};
+  for (const t of store.teams) {
+    for (const a of (t.authors ?? [])) {
+      if (!authorToTeamsMap[a]) authorToTeamsMap[a] = [];
+      authorToTeamsMap[a].push(t);
+    }
+  }
+
+  // Team gravity: cluster author nodes toward their team centroid, only for expanded teams
   function teamGravity(alpha) {
     if (!hasTeams) return;
     const cx = {}, cy = {}, cnt = {};
     for (const n of nodes) {
       if (n.type !== 'author' || n.x == null) continue;
-      const t = nodeTeamMap[`author:${n.id}`];
-      if (!t) continue;
+      const myTeams = (authorToTeamsMap[n.id] ?? []).filter(t => expandedTeams.value.has(t.id));
+      if (myTeams.length === 0) continue;
+      const t = myTeams[0];
       cx[t.id]  = (cx[t.id]  ?? 0) + n.x;
       cy[t.id]  = (cy[t.id]  ?? 0) + n.y;
       cnt[t.id] = (cnt[t.id] ?? 0) + 1;
@@ -211,19 +263,29 @@ function drawGraph() {
     const k = 0.08 * alpha;
     for (const n of nodes) {
       if (n.type !== 'author') continue;
-      const t = nodeTeamMap[`author:${n.id}`];
-      if (!t || cx[t.id] == null) continue;
+      const myTeams = (authorToTeamsMap[n.id] ?? []).filter(t => expandedTeams.value.has(t.id));
+      if (myTeams.length === 0) continue;
+      const t = myTeams[0];
+      if (cx[t.id] == null) continue;
       n.vx = (n.vx ?? 0) + (cx[t.id] - (n.x ?? 0)) * k;
       n.vy = (n.vy ?? 0) + (cy[t.id] - (n.y ?? 0)) * k;
     }
   }
 
   sim = d3.forceSimulation(nodes)
-    .force('link',        d3.forceLink(links).id(d => d.id).distance(200).strength(0.45))
-    .force('charge',      d3.forceManyBody().strength(-700))
+    .force('link',        d3.forceLink(links).id(d => d.id).distance(d => {
+      // Longer distance for team-to-team edges so team nodes spread apart
+      if (d.source.type === 'team' || d.target.type === 'team') return 280;
+      return 200;
+    }).strength(0.45))
+    .force('charge',      d3.forceManyBody().strength(d => d.type === 'team' ? -1200 : -700))
     .force('center',      d3.forceCenter(w / 2, h / 2).strength(0.05))
-    .force('x',           d3.forceX(d => d.type === 'author' ? w * 0.27 : w * 0.73).strength(0.09))
-    .force('collide',     d3.forceCollide(d => d.r + 20))
+    .force('x',           d3.forceX(d => {
+      if (d.type === 'author') return w * 0.27;
+      if (d.type === 'team')   return w * 0.65; // weak center-right pull, link forces position them
+      return w * 0.73;
+    }).strength(d => d.type === 'team' ? 0.03 : 0.09))
+    .force('collide',     d3.forceCollide(d => d.r + (d.type === 'team' ? 30 : 20)))
     .force('teamGravity', teamGravity);
 
   linkEls = root.append('g')
@@ -235,32 +297,67 @@ function drawGraph() {
     .style('cursor', 'default')
     .on('mouseenter', (e, d) => {
       highlightLink(d);
-      Object.assign(tooltip, { show: true, x: e.clientX + 14, y: e.clientY - 10, isLink: true, source: d.source.id, target: d.target.id, commits: d.commits });
+      Object.assign(tooltip, {
+        show: true, x: e.clientX + 14, y: e.clientY - 10,
+        isLink: true,
+        source: d.source.id, target: d.target.id, commits: d.commits,
+      });
     })
     .on('mousemove',  e => { tooltip.x = e.clientX + 14; tooltip.y = e.clientY - 10; })
     .on('mouseleave', () => { resetHighlight(); tooltip.show = false; });
 
   nodeEls = root.append('g')
     .selectAll('g').data(nodes).join('g')
-    .style('cursor', 'grab')
+    .style('cursor', d => isNodeExpandable(d) ? 'pointer' : 'grab')
     .call(d3.drag()
-      .on('start', (e, d) => { if (!e.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
-      .on('drag',  (e, d) => { d.fx = e.x; d.fy = e.y; })
-      .on('end',   (e, d) => { if (!e.active) sim.alphaTarget(0); d.fx = null; d.fy = null; })
+      .on('start', (e, d) => {
+        d._moved = false;
+        if (!e.active) sim.alphaTarget(0.3).restart();
+        d.fx = d.x; d.fy = d.y;
+      })
+      .on('drag', (e, d) => {
+        d._moved = true;
+        d.fx = e.x; d.fy = e.y;
+      })
+      .on('end', (e, d) => {
+        if (!e.active) sim.alphaTarget(0);
+        d.fx = null; d.fy = null;
+      })
     )
+    .on('click', (e, d) => {
+      if (d._moved) { d._moved = false; return; }
+      handleNodeClick(d);
+    })
     .on('mouseenter', (e, d) => {
       highlightNode(d);
-      Object.assign(tooltip, { show: true, x: e.clientX + 14, y: e.clientY - 10, isLink: false, name: d.id, type: d.type, commits: d.commits });
+      let action = '';
+      if (d.type === 'team') {
+        action = expandedTeams.value.has(d.teamId) ? 'Click to collapse' : 'Click to expand repos';
+      } else if (d.type === 'repo' && reposWithFilePaths.value.has(d.id)) {
+        action = expandedNodes.value.has(d.id) ? 'Click to collapse' : 'Click to expand folders';
+      } else if (d.type === 'folder' && d.depth < 4) {
+        action = expandedNodes.value.has(d.id) ? 'Click to collapse' : 'Click to expand subfolders';
+      }
+      Object.assign(tooltip, {
+        show: true, x: e.clientX + 14, y: e.clientY - 10,
+        isLink: false,
+        name: d.id, type: d.type, commits: d.commits,
+        teamName: d.name ?? '', folderPath: d.folderPath ?? '', repoId: d.repoId ?? '',
+        depth: d.depth ?? 0, repoCount: d.repoCount ?? 0, authorCount: d.authorCount ?? 0,
+        action,
+      });
     })
     .on('mousemove',  e => { tooltip.x = e.clientX + 14; tooltip.y = e.clientY - 10; })
     .on('mouseleave', () => { resetHighlight(); tooltip.show = false; });
 
+  // Author nodes — circles
   nodeEls.filter(d => d.type === 'author')
     .append('circle')
     .attr('r', d => d.r)
     .attr('fill', d => store.getNodeColor(d.id, 'author'))
     .attr('stroke', '#fff').attr('stroke-width', 2.5).attr('opacity', 0.92);
 
+  // Repo nodes — squares
   nodeEls.filter(d => d.type === 'repo')
     .append('rect')
     .attr('x', d => -d.r).attr('y', d => -d.r)
@@ -269,47 +366,113 @@ function drawGraph() {
     .attr('fill', d => store.getNodeColor(d.id, 'repo'))
     .attr('stroke', '#fff').attr('stroke-width', 2.5).attr('opacity', 0.92);
 
-  nodeEls.append('text')
+  // Team nodes — wide pill / rounded rectangle
+  nodeEls.filter(d => d.type === 'team')
+    .append('rect')
+    .attr('x', d => -(d.r + 14)).attr('y', d => -d.r)
+    .attr('width', d => (d.r + 14) * 2).attr('height', d => d.r * 2)
+    .attr('rx', d => d.r)
+    .attr('fill', d => d.color)
+    .attr('stroke', '#fff').attr('stroke-width', 3).attr('opacity', 0.95);
+
+  // Team node label (centered, white)
+  nodeEls.filter(d => d.type === 'team')
+    .append('text')
+    .attr('text-anchor', 'middle')
+    .attr('dy', '-0.15em')
+    .attr('fill', '#fff').attr('font-size', '13px').attr('font-weight', '700')
+    .attr('pointer-events', 'none')
+    .text(d => d.name);
+
+  // Team node sub-label
+  nodeEls.filter(d => d.type === 'team')
+    .append('text')
+    .attr('text-anchor', 'middle')
+    .attr('dy', '1.1em')
+    .attr('fill', 'rgba(255,255,255,0.75)').attr('font-size', '9px')
+    .attr('pointer-events', 'none')
+    .text(d => `${d.repoCount} repos · ${d.authorCount} devs`);
+
+  // Folder nodes — diamond
+  nodeEls.filter(d => d.type === 'folder')
+    .append('path')
+    .attr('d', d => `M0,${-d.r} L${d.r},0 L0,${d.r} L${-d.r},0 Z`)
+    .attr('fill', d => store.getNodeColor(d.repoId, 'repo'))
+    .attr('stroke', '#fff').attr('stroke-width', 2.5).attr('opacity', 0.88);
+
+  // Expand/collapse badge on clickable non-author nodes (+ or −)
+  nodeEls.filter(d => isNodeExpandable(d))
+    .append('circle')
+    .attr('cx', d => d.type === 'team' ? d.r + 10 : d.r * 0.65)
+    .attr('cy', d => d.type === 'team' ? -d.r      : -d.r * 0.65)
+    .attr('r', 8)
+    .attr('fill', d => isNodeExpanded(d) ? '#F08223' : '#22c55e')
+    .attr('stroke', '#fff').attr('stroke-width', 1.5)
+    .attr('pointer-events', 'none');
+
+  nodeEls.filter(d => isNodeExpandable(d))
+    .append('text')
+    .attr('x', d => d.type === 'team' ? d.r + 10 : d.r * 0.65)
+    .attr('y', d => d.type === 'team' ? -d.r      : -d.r * 0.65)
+    .attr('text-anchor', 'middle').attr('dy', '0.38em')
+    .attr('fill', '#fff').attr('font-size', '11px').attr('font-weight', '700')
+    .attr('pointer-events', 'none')
+    .text(d => isNodeExpanded(d) ? '−' : '+');
+
+  // Text labels below nodes (all types except team, which has inline labels)
+  nodeEls.filter(d => d.type !== 'team')
+    .append('text')
     .attr('text-anchor', 'middle')
     .attr('dy', d => d.r + 13)
     .attr('fill', '#374151').attr('font-size', '11px').attr('font-weight', '600')
     .attr('pointer-events', 'none')
-    .text(d => d.type === 'author' ? anonymize(d.id) : d.id);
+    .text(d => {
+      if (d.type === 'author') return anonymize(d.id);
+      if (d.type === 'folder') return d.label || d.folderPath;
+      return d.id;
+    });
 
   sim.on('tick', () => {
     nodes.forEach(n => { if (n.x != null) savedPositions[n.id] = { x: n.x, y: n.y }; });
 
-    // Update team hulls based on contribution footprint, not just node ownership.
-    // Each team's hull wraps:
-    //   • the team's own author nodes
-    //   • every repo those authors have edges to (their contribution reach)
-    //   • repos assigned to the team (their ownership territory)
-    // A repo contributed to by Team A but owned by Team B therefore appears in
-    // both hulls — the intersection is the visible cross-team violation.
+    // Draw hulls around EXPANDED teams (covering their repo and folder nodes)
     if (hasTeams) {
       const teamPtsMap = {};
       const nodeById   = Object.fromEntries(nodes.map(n => [n.id, n]));
 
-      for (const n of nodes) {
-        if (n.x == null || n.type !== 'author') continue;
-        const t = nodeTeamMap[`author:${n.id}`];
-        if (!t) continue;
-        const entry = (teamPtsMap[t.id] ??= { team: t, pts: [] });
-        entry.pts.push([n.x, n.y, n.r]);
-        // Pull in every repo this author touches
-        for (const link of links) {
-          const repo = link.source === n || link.source.id === n.id ? link.target : null;
-          if (!repo || repo.x == null) continue;
-          entry.pts.push([repo.x, repo.y, repo.r ?? 20]);
-        }
-      }
+      for (const t of store.teams) {
+        if (!expandedTeams.value.has(t.id)) continue; // only hull expanded teams
 
-      // Also anchor each repo inside its owning team's hull (ownership territory)
-      for (const n of nodes) {
-        if (n.x == null || n.type !== 'repo') continue;
-        const t = nodeTeamMap[`repo:${n.id}`];
-        if (!t) continue;
-        (teamPtsMap[t.id] ??= { team: t, pts: [] }).pts.push([n.x, n.y, n.r]);
+        const teamRepos = new Set(t.repos ?? []);
+
+        for (const n of nodes) {
+          if (n.x == null) continue;
+
+          // Include repo nodes and folder nodes belonging to this team
+          if (n.type === 'repo' && teamRepos.has(n.id)) {
+            (teamPtsMap[t.id] ??= { team: t, pts: [] }).pts.push([n.x, n.y, n.r]);
+            // Pull in every author that touches this repo
+            for (const link of links) {
+              const authorNode = link.source === n || link.source.id === n.id ? null
+                : link.target === n || link.target.id === n.id ? nodeById[link.source.id ?? link.source] : null;
+              if (!authorNode || authorNode.x == null) continue;
+              (teamPtsMap[t.id] ??= { team: t, pts: [] }).pts.push([authorNode.x, authorNode.y, authorNode.r ?? 20]);
+            }
+          }
+          if (n.type === 'folder' && teamRepos.has(n.repoId)) {
+            (teamPtsMap[t.id] ??= { team: t, pts: [] }).pts.push([n.x, n.y, n.r]);
+          }
+          // Include this team's own author nodes
+          if (n.type === 'author' && (authorToTeamsMap[n.id] ?? []).some(tm => tm.id === t.id)) {
+            (teamPtsMap[t.id] ??= { team: t, pts: [] }).pts.push([n.x, n.y, n.r]);
+            // Also pull in all repos this author has edges to
+            for (const link of links) {
+              const repo = link.source === n || link.source.id === n.id ? link.target : null;
+              if (!repo || repo.x == null) continue;
+              (teamPtsMap[t.id] ??= { team: t, pts: [] }).pts.push([repo.x, repo.y, repo.r ?? 20]);
+            }
+          }
+        }
       }
 
       hullGroup.selectAll('path')
@@ -325,14 +488,32 @@ function drawGraph() {
     }
 
     linkEls.each(function(d) {
-      const dx = d.target.x - d.source.x, dy = d.target.y - d.source.y;
+      const dx  = d.target.x - d.source.x;
+      const dy  = d.target.y - d.source.y;
       const len = Math.sqrt(dx * dx + dy * dy) || 1;
-      const ux = dx / len, uy = dy / len;
+      const ux  = dx / len, uy = dy / len;
+
+      const srcOffset = d.source.type === 'author'
+        ? d.source.r + 3
+        : d.source.type === 'team'
+          ? squareEdgeDist(ux, uy, d.source.r + 14)
+          : d.source.type === 'folder'
+            ? diamondEdgeDist(ux, uy, d.source.r) + 2
+            : squareEdgeDist(ux, uy, d.source.r) + 2;
+
+      const tgtOffset = d.target.type === 'author'
+        ? d.target.r + 3
+        : d.target.type === 'team'
+          ? squareEdgeDist(ux, uy, d.target.r + 14)
+          : d.target.type === 'folder'
+            ? diamondEdgeDist(ux, uy, d.target.r) + 2
+            : squareEdgeDist(ux, uy, d.target.r) + 2;
+
       d3.select(this)
-        .attr('x1', d.source.x + ux * (d.source.r + 3))
-        .attr('y1', d.source.y + uy * (d.source.r + 3))
-        .attr('x2', d.target.x - ux * squareEdgeDist(ux, uy, d.target.r))
-        .attr('y2', d.target.y - uy * squareEdgeDist(ux, uy, d.target.r));
+        .attr('x1', d.source.x + ux * srcOffset)
+        .attr('y1', d.source.y + uy * srcOffset)
+        .attr('x2', d.target.x - ux * tgtOffset)
+        .attr('y2', d.target.y - uy * tgtOffset);
     });
 
     nodeEls.attr('transform', d => `translate(${d.x ?? 0},${d.y ?? 0})`);
@@ -389,9 +570,16 @@ onMounted(() => {
   display: inline-block; width: 7px; height: 7px; border-radius: 50%;
   background: currentColor; flex-shrink: 0;
 }
-.legend       { @apply flex items-center gap-1.5 font-medium; }
+.legend        { @apply flex items-center gap-1.5 font-medium; }
 .legend-circle { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: #225EA9; }
 .legend-square { display: inline-block; width: 12px; height: 12px; border-radius: 2px; background: #088F9B; }
+.legend-team   {
+  display: inline-block; width: 22px; height: 12px; border-radius: 6px; background: #F08223;
+}
+.legend-folder {
+  display: inline-block; width: 12px; height: 12px; background: #5A4A80;
+  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+}
 .date-filter-row {
   @apply flex items-center justify-center gap-2 mt-3 flex-wrap;
 }
@@ -426,4 +614,5 @@ onMounted(() => {
 }
 .tt-name   { @apply font-bold text-brand-gray text-base; }
 .tt-detail { @apply text-gray-500 text-xs mt-0.5; }
+.tt-action { @apply text-brand-blue text-xs mt-1 font-medium; }
 </style>
