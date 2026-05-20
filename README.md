@@ -59,9 +59,11 @@ Click **Mapping** (bottom right) to open the mapping panel:
 
 ### 5. Explore the graph
 
-The network graph shows arrows between teams wherever contributors commit to repositories they don't own. Arrow width indicates commit volume; badge numbers show contributor count.
+The network graph is a force-directed bipartite layout — authors on the left, repositories on the right. Node size scales with commit volume. Hover any node or edge to highlight its connections.
 
-Use the **Filters** panel (bottom left) to narrow by date range, repository, author, or team. Click a team node to drill down into the individual repositories receiving cross-team contributions.
+When teams are configured, each team's nodes are enclosed in a colour-coded hull so boundaries are immediately visible, and nodes cluster toward their team's centre of gravity.
+
+Toggle **Cross-team only** (in the graph header) to filter the graph down to just the edges where the author's team differs from the repository's team — the exact signal Conway's Law predicts.
 
 ## Output
 
