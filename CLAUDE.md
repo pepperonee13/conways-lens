@@ -38,41 +38,40 @@ repos.json → Analyse-Repositories.ps1 → TimelineData.csv
                                     (user uploads via drag-drop)
                                                 ↓
                                     useLensStore (Pinia)
-                                      ├─ timelineData (raw)
-                                      ├─ effectiveData (author-normalized)
-                                      └─ filteredData (date/repo/author filtered)
+                                      ├─ timelineData (raw CSV rows)
+                                      ├─ graphData (deduped edges + nodes)
+                                      └─ crossTeamOnly (filter flag)
                                                 ↓
                                     NetworkGraph.vue (D3 force simulation)
 ```
 
 ### Key Files
 
-- **`app/src/stores/useLensStore.js`** — Central Pinia store. Parses CSV with PapaParse (including metadata footer `Since=...,Until=...`), manages teams, author normalizations, and filters. Everything persists to localStorage automatically.
-- **`app/src/components/NetworkGraph.vue`** — D3 force-directed graph (~635 lines). Two modes: *Auto* (bipartite author↔repo when no teams defined) and *Team* (cross-team contribution flows). Supports node drag, drill-down clicks, and tooltips.
-- **`app/src/components/FilterPanel.vue`** — Floating panel for date ranges, repo/author/team filtering, and summary stats.
+- **`app/src/stores/useLensStore.js`** — Central Pinia store. Parses CSV with PapaParse (including metadata footer `Since=...,Until=...`), manages teams, author normalizations, ignored authors, and the `crossTeamOnly` filter flag. Teams, normalizations, and ignored authors persist to localStorage automatically.
+- **`app/src/components/NetworkGraph.vue`** — D3 force-directed bipartite graph. Authors on the left, repos on the right. When teams are configured: draws colour-coded convex hull backgrounds per team, applies a team-gravity force to cluster team members, and shows a "Cross-team only" toggle that filters edges to only cross-boundary contributions. Supports node drag, zoom/pan, and hover tooltips.
 - **`app/src/components/MappingEditor.vue`** — Floating panel for team CRUD, author assignment, and author alias normalization (multiple git identities → one canonical name). Supports JSON import/export.
 - **`app/src/views/LensView.vue`** — Root layout; handles CSV file upload/drag-drop.
 
-### Graph Modes
+### Graph Behaviour
 
-- **Auto mode** (no teams configured): Bipartite graph with author nodes on one side and repo nodes on the other.
-- **Team mode**: Nodes represent teams; edges show cross-team contributions; edge width ∝ commit volume.
-- **Drill-down**: Clicking a team node zooms into repos that received cross-team contributions for that team.
+- **No teams configured**: Bipartite graph with author circles on the left and repo squares on the right. All contributions shown.
+- **Teams configured**: Same bipartite layout, but each team's nodes are enclosed in a semi-transparent hull and cluster together via a gravity force. The "Cross-team only" toggle (graph header) filters `graphData` to edges where the author's team ≠ the repo's team — authors/repos with only within-team contributions are removed automatically.
 
 ### State Shape (useLensStore)
 
 ```js
-timelineData       // Raw parsed CSV rows
-teams              // { id, name, color, authors[], repos[] }
+timelineData         // Raw parsed CSV rows
+teams                // { id, name, color, authors[], repos[] }
 authorNormalizations // { "raw git name" → "canonical name" }
-filters            // { since, until, repos[], authors[], teams[] }
+ignoredAuthors       // string[] — excluded from graphData entirely
+crossTeamOnly        // boolean — when true, graphData only contains cross-team edges
 ```
 
-`effectiveData` and `filteredData` are computed from the above. `multiTeamProducts` is the computed list of repos with contributions from more than one team.
+`graphData` is computed from all of the above. `nodeColors` maps `"type:id"` keys to team hex colors.
 
 ### CSV Format
 
-The analysis script outputs a CSV with columns: `Repository`, `Author`, `Date`, `Files`. A metadata footer line `Since=YYYY-MM-DD,Until=YYYY-MM-DD` is appended after the data rows; the store parses and strips it.
+The analysis script outputs a CSV. Key columns the store reads: `Author`, `Product` (repo name), `ChangesetId` (commit SHA, used for deduplication). A metadata footer line `Since=YYYY-MM-DD,Until=YYYY-MM-DD` is appended after the data rows; the store parses and strips it.
 
 ## Styling
 
