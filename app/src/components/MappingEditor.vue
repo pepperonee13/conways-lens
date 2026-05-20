@@ -1,118 +1,169 @@
 <template>
-  <!-- Toggle button -->
-  <button class="mapping-toggle" @click="open = !open">
-    {{ open ? '✕ Close' : '⚙ Mapping' }}
+  <button class="floating-mapping-btn" v-if="!open" @click="open = true" title="Edit mappings">
+    <span>🗺</span>
+    <span>Mapping</span>
+    <span v-if="teams.length" class="badge">{{ teams.length }}</span>
   </button>
 
-  <!-- Backdrop -->
-  <transition name="backdrop">
-    <div v-if="open" class="panel-backdrop" @click="open = false"></div>
+  <transition name="backdrop-fade">
+    <div v-if="open" class="backdrop" @click="open = false"></div>
   </transition>
 
-  <!-- Panel -->
-  <transition name="panel">
-    <div v-if="open" class="mapping-panel">
+  <transition name="slide-panel">
+    <div v-if="open" class="panel">
       <div class="panel-header">
-        <h2 class="panel-title">Mapping Editor</h2>
-        <button class="panel-close" @click="open = false">✕</button>
+        <h2 class="panel-title">🗺 Team Mapping</h2>
+        <button class="close-btn" @click="open = false">✕</button>
       </div>
 
-      <!-- Tabs -->
-      <div class="tab-bar">
-        <button v-for="t in TABS" :key="t.id" :class="['tab-btn', { active: tab === t.id }]" @click="tab = t.id">
-          {{ t.label }}
+      <div class="panel-tabs">
+        <button :class="['tab-btn', { active: tab === 'teams' }]"   @click="tab = 'teams'">Teams</button>
+        <button :class="['tab-btn', { active: tab === 'aliases' }]" @click="tab = 'aliases'">
+          Author Aliases
+          <span v-if="normalizationCount" class="tab-badge">{{ normalizationCount }}</span>
+        </button>
+        <button :class="['tab-btn', { active: tab === 'ignored' }]" @click="tab = 'ignored'">
+          Ignored
+          <span v-if="ignoredAuthors.length" class="tab-badge tab-badge--red">{{ ignoredAuthors.length }}</span>
         </button>
       </div>
 
       <div class="panel-body">
 
-        <!-- ── Author Aliases ── -->
-        <template v-if="tab === 'aliases'">
-          <p class="tab-desc">Map raw git author names to canonical display names. The canonical name is used throughout the graph.</p>
+        <!-- ── Teams ── -->
+        <template v-if="tab === 'teams'">
+          <p class="panel-hint">
+            Assign authors and repositories to teams. Team color is applied to their nodes in the graph.
+          </p>
 
-          <div class="add-row">
-            <select v-model="aliasRaw" class="form-select">
-              <option value="">— select raw author —</option>
-              <option v-for="a in unmappedRawAuthors" :key="a" :value="a">{{ a }}</option>
-            </select>
-            <span class="arrow">→</span>
-            <input v-model="aliasCanonical" class="form-input" placeholder="canonical name" @keyup.enter="submitAlias" />
-            <button class="btn-add" :disabled="!aliasRaw || !aliasCanonical.trim()" @click="submitAlias">Add</button>
+          <button class="add-team-btn" @click="store.addTeam()">+ Add Team</button>
+
+          <div class="teams-list">
+            <div v-for="(team, idx) in teams" :key="team.id" class="team-card">
+              <div class="team-card-header">
+                <div class="team-name-row">
+                  <input v-model="team.name" class="team-name-input" :placeholder="'Team ' + (idx + 1)" />
+                  <input type="color" v-model="team.color" class="color-picker" :title="team.color" />
+                </div>
+                <button class="remove-team-btn" @click="store.removeTeam(team.id)" title="Delete team">✕</button>
+              </div>
+
+              <div class="section-label">Authors ({{ team.authors.length }})</div>
+              <div class="assigned-chips">
+                <span v-for="a in team.authors" :key="a" class="assigned-chip author-chip">
+                  {{ a }}<button class="chip-remove" @click="removeFrom(team, 'authors', a)">×</button>
+                </span>
+                <span v-if="!team.authors.length" class="empty-hint">No authors assigned</span>
+              </div>
+              <div class="available-list" v-if="availableAuthors(team).length">
+                <div class="available-label">Add author:</div>
+                <div class="available-pills">
+                  <button v-for="a in availableAuthors(team)" :key="a" class="available-pill" @click="addTo(team, 'authors', a)">
+                    + {{ a }}
+                  </button>
+                </div>
+              </div>
+
+              <div class="section-label">Repositories ({{ team.repos.length }})</div>
+              <div class="assigned-chips">
+                <span v-for="r in team.repos" :key="r" class="assigned-chip repo-chip">
+                  {{ r }}<button class="chip-remove" @click="removeFrom(team, 'repos', r)">×</button>
+                </span>
+                <span v-if="!team.repos.length" class="empty-hint">No repositories assigned</span>
+              </div>
+              <div class="available-list" v-if="availableRepos(team).length">
+                <div class="available-label">Add repository:</div>
+                <div class="available-pills">
+                  <button v-for="r in availableRepos(team)" :key="r" class="available-pill repo-pill" @click="addTo(team, 'repos', r)">
+                    + {{ r }}
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div class="mapping-list">
-            <div v-for="[raw, canonical] in sortedNormalizations" :key="raw" class="mapping-row">
-              <span class="raw-name" :title="raw">{{ raw }}</span>
-              <span class="arrow">→</span>
-              <span class="canonical-name">{{ canonical }}</span>
-              <button class="btn-remove" @click="store.removeNormalization(raw)" title="Remove">✕</button>
+          <div v-if="!teams.length" class="no-teams">
+            <p>No teams defined yet.</p>
+            <p>Click <strong>+ Add Team</strong> to create your first team, then assign authors and repositories to it.</p>
+            <p class="hint-text">Authors and repositories are discovered automatically from the loaded data.</p>
+          </div>
+
+          <div v-if="teams.length && (unassignedAuthors.length || unassignedRepos.length)" class="unassigned-section">
+            <div class="unassigned-title">⚠ Unassigned</div>
+            <div v-if="unassignedAuthors.length" class="unassigned-group">
+              <span class="unassigned-label">Authors not in any team:</span>
+              <span v-for="a in unassignedAuthors" :key="a" class="unassigned-chip">{{ a }}</span>
             </div>
-            <p v-if="!sortedNormalizations.length" class="empty-hint">No aliases yet.</p>
+            <div v-if="unassignedRepos.length" class="unassigned-group">
+              <span class="unassigned-label">Repositories not in any team:</span>
+              <span v-for="r in unassignedRepos" :key="r" class="unassigned-chip">{{ r }}</span>
+            </div>
           </div>
         </template>
 
-        <!-- ── Teams ── -->
-        <template v-if="tab === 'teams'">
-          <p class="tab-desc">Team color is applied to all assigned author and repository nodes in the graph.</p>
+        <!-- ── Author Aliases ── -->
+        <template v-if="tab === 'aliases'">
+          <p class="panel-hint">
+            Drag an author pill onto another to alias it. The pill you drop onto becomes the canonical name.
+            Useful when the same person appears under multiple git identities.
+          </p>
 
-          <button class="btn-add-team" @click="store.addTeam()">+ Add Team</button>
+          <div class="author-pills-grid">
+            <div
+              v-for="author in allRawAuthors"
+              :key="author"
+              :class="['author-pill', {
+                'pill-mapped':       isMapped(author),
+                'pill-dragging':     dragSource === author,
+                'pill-drop-target':  dragTarget === author,
+              }]"
+              draggable="true"
+              @dragstart="dragSource = author"
+              @dragend="dragSource = null; dragTarget = null"
+              @dragover.prevent="onDragOver(author)"
+              @dragleave.self="onDragLeave(author)"
+              @drop.prevent="onDrop(author)"
+            >
+              <span class="pill-name">{{ author }}</span>
+              <span v-if="isMapped(author)" class="pill-alias-badge">→ {{ authorNormalizations[author] }}</span>
+            </div>
+          </div>
 
-          <div class="teams-list">
-            <div v-for="team in teams" :key="team.id" class="team-card">
-              <div class="team-header-row">
-                <input type="color" v-model="team.color" class="color-picker" :title="team.color" />
-                <input v-model="team.name" class="team-name-input" placeholder="Team name" />
-                <button class="btn-remove" @click="store.removeTeam(team.id)" title="Delete team">✕</button>
-              </div>
-
-              <div class="team-section">
-                <span class="section-label">Authors</span>
-                <div class="chips">
-                  <span v-for="a in team.authors" :key="a" class="chip" :style="{ borderColor: team.color }">
-                    {{ a }}<button class="chip-remove" @click="removeFromTeam(team, 'authors', a)">✕</button>
-                  </span>
-                  <span v-if="!team.authors.length" class="empty-hint-inline">none assigned</span>
-                </div>
-                <select class="add-select" @change="e => addToTeam(team, 'authors', e)">
-                  <option value="">+ add author</option>
-                  <option v-for="a in availableAuthors(team)" :key="a" :value="a">{{ a }}</option>
-                </select>
-              </div>
-
-              <div class="team-section">
-                <span class="section-label">Repositories</span>
-                <div class="chips">
-                  <span v-for="r in team.repos" :key="r" class="chip" :style="{ borderColor: team.color }">
-                    {{ r }}<button class="chip-remove" @click="removeFromTeam(team, 'repos', r)">✕</button>
-                  </span>
-                  <span v-if="!team.repos.length" class="empty-hint-inline">none assigned</span>
-                </div>
-                <select class="add-select" @change="e => addToTeam(team, 'repos', e)">
-                  <option value="">+ add repository</option>
-                  <option v-for="r in availableRepos(team)" :key="r" :value="r">{{ r }}</option>
-                </select>
+          <template v-if="normalizationCount">
+            <div class="section-label" style="margin-top:1.25rem">Active aliases ({{ normalizationCount }})</div>
+            <div class="alias-list">
+              <div v-for="[raw, canonical] in sortedNormalizations" :key="raw" class="alias-row">
+                <span class="alias-raw">{{ raw }}</span>
+                <span class="alias-arrow-sm">→</span>
+                <span class="alias-canonical">{{ canonical }}</span>
+                <button class="alias-remove" @click="store.removeNormalization(raw)" title="Remove alias">✕</button>
               </div>
             </div>
-
-            <p v-if="!teams.length" class="empty-hint">No teams yet. Click "+ Add Team" to start.</p>
-          </div>
+          </template>
+          <p v-else class="hint-text" style="margin-top:0.75rem;text-align:center">
+            No aliases yet — drag one pill onto another to create one.
+          </p>
         </template>
 
         <!-- ── Ignored Authors ── -->
         <template v-if="tab === 'ignored'">
-          <p class="tab-desc">Ignored authors are removed from the graph entirely. Uses canonical names (after alias mappings).</p>
+          <p class="panel-hint">
+            Ignored authors are removed from the graph entirely. Uses canonical names (after alias mappings are applied).
+          </p>
 
-          <div class="author-list">
-            <div v-for="a in allAuthors" :key="a" :class="['author-row', { ignored: isIgnored(a) }]">
-              <span class="author-name">{{ a }}</span>
+          <div class="author-toggle-list">
+            <div v-for="a in allAuthors" :key="a" :class="['author-toggle-row', { 'row-ignored': isIgnored(a) }]">
+              <span :class="['toggle-name', { 'name-ignored': isIgnored(a) }]">{{ a }}</span>
               <button
-                :class="['btn-toggle', { active: isIgnored(a) }]"
+                :class="['toggle-btn', { 'toggle-btn--active': isIgnored(a) }]"
                 @click="isIgnored(a) ? store.unignoreAuthor(a) : store.ignoreAuthor(a)"
               >
                 {{ isIgnored(a) ? 'Unignore' : 'Ignore' }}
               </button>
             </div>
-            <p v-if="!allAuthors.length" class="empty-hint">No authors found. Upload a CSV first.</p>
+            <p v-if="!allAuthors.length" class="hint-text" style="text-align:center;margin-top:2rem">
+              No authors found. Upload a CSV first.
+            </p>
           </div>
         </template>
 
@@ -130,182 +181,196 @@ const store = useLensStore();
 const { teams, authorNormalizations, ignoredAuthors, allRawAuthors, allAuthors, allRepos } = storeToRefs(store);
 
 const open = ref(false);
-const tab  = ref('aliases');
-
-const TABS = [
-  { id: 'aliases', label: 'Author Aliases' },
-  { id: 'teams',   label: 'Teams' },
-  { id: 'ignored', label: 'Ignored Authors' },
-];
-
-// ── Author Aliases ──
-const aliasRaw       = ref('');
-const aliasCanonical = ref('');
-
-const unmappedRawAuthors = computed(() =>
-  allRawAuthors.value.filter(a => !authorNormalizations.value[a])
-);
-
-const sortedNormalizations = computed(() =>
-  Object.entries(authorNormalizations.value).sort(([a], [b]) => a.localeCompare(b))
-);
-
-function submitAlias() {
-  const raw = aliasRaw.value, canonical = aliasCanonical.value.trim();
-  if (!raw || !canonical) return;
-  store.setNormalization(raw, canonical);
-  aliasRaw.value = '';
-  aliasCanonical.value = '';
-}
+const tab  = ref('teams');
 
 // ── Teams ──
 function availableAuthors(team) {
   return allAuthors.value.filter(a => !team.authors.includes(a));
 }
-
 function availableRepos(team) {
   return allRepos.value.filter(r => !team.repos.includes(r));
 }
-
-function addToTeam(team, field, e) {
-  const val = e.target.value;
-  e.target.value = '';
-  if (!val || team[field].includes(val)) return;
-  team[field].push(val);
+function addTo(team, field, value) {
+  if (!team[field].includes(value)) team[field].push(value);
+}
+function removeFrom(team, field, value) {
+  team[field] = team[field].filter(v => v !== value);
 }
 
-function removeFromTeam(team, field, item) {
-  team[field] = team[field].filter(v => v !== item);
+const unassignedAuthors = computed(() => {
+  const assigned = new Set(teams.value.flatMap(t => t.authors));
+  return allAuthors.value.filter(a => !assigned.has(a));
+});
+const unassignedRepos = computed(() => {
+  const assigned = new Set(teams.value.flatMap(t => t.repos));
+  return allRepos.value.filter(r => !assigned.has(r));
+});
+
+// ── Author Aliases ──
+const dragSource = ref(null);
+const dragTarget = ref(null);
+
+const normalizationCount = computed(() => Object.keys(authorNormalizations.value).length);
+const sortedNormalizations = computed(() =>
+  Object.entries(authorNormalizations.value).sort(([a], [b]) => a.localeCompare(b))
+);
+
+function isMapped(author) { return author in authorNormalizations.value; }
+
+function onDragOver(author) { if (author !== dragSource.value) dragTarget.value = author; }
+function onDragLeave(author) { if (dragTarget.value === author) dragTarget.value = null; }
+
+function onDrop(canonical) {
+  if (dragSource.value && dragSource.value !== canonical)
+    store.setNormalization(dragSource.value, canonical);
+  dragSource.value = null;
+  dragTarget.value = null;
 }
 
 // ── Ignored Authors ──
-function isIgnored(name) {
-  return ignoredAuthors.value.includes(name);
-}
+function isIgnored(name) { return ignoredAuthors.value.includes(name); }
 </script>
 
 <style scoped>
-.mapping-toggle {
-  @apply fixed bottom-5 right-5 z-40 px-4 py-2 rounded-xl text-sm font-semibold
-         bg-brand-blue text-white shadow-lg hover:bg-brand-blue-dark
-         transition-all duration-150 border-2 border-white/20;
+.floating-mapping-btn {
+  @apply fixed right-6 bottom-6 z-40 bg-gradient-to-r from-brand-orange-dark to-brand-orange
+         text-white rounded-full shadow-2xl px-6 py-4 font-bold text-base cursor-pointer
+         transition-all duration-300 hover:scale-110 flex items-center gap-3;
+}
+.badge {
+  @apply bg-white text-brand-orange text-xs font-bold px-2.5 py-1 rounded-full ml-1;
 }
 
-.panel-backdrop {
-  @apply fixed inset-0 z-40 bg-black/20 backdrop-blur-[2px];
+.backdrop {
+  @apply fixed inset-0 bg-black/50 backdrop-blur-sm z-40;
 }
+.backdrop-fade-enter-active, .backdrop-fade-leave-active { transition: opacity 0.3s ease; }
+.backdrop-fade-enter-from, .backdrop-fade-leave-to { opacity: 0; }
 
-.mapping-panel {
-  @apply fixed top-0 right-0 bottom-0 z-50 bg-white shadow-2xl
-         flex flex-col border-l border-gray-200;
-  width: 420px;
+.panel {
+  @apply fixed right-0 top-0 bottom-0 z-50 bg-white shadow-2xl flex flex-col;
+  width: 520px; max-width: 95vw;
 }
+.slide-panel-enter-active, .slide-panel-leave-active {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.slide-panel-enter-from, .slide-panel-leave-to { transform: translateX(100%); }
 
 .panel-header {
-  @apply flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0;
+  @apply bg-gradient-to-r from-brand-orange-dark to-brand-orange text-white
+         px-6 py-5 flex items-center justify-between shadow-lg flex-shrink-0;
 }
-.panel-title { @apply text-lg font-bold text-brand-gray; }
-.panel-close { @apply text-gray-400 hover:text-gray-700 text-lg leading-none transition-colors; }
+.panel-title { @apply text-2xl font-bold m-0; }
+.close-btn {
+  @apply text-white hover:bg-white/20 rounded-full w-10 h-10 flex items-center
+         justify-center text-2xl font-bold transition-all duration-200 cursor-pointer;
+}
 
-.tab-bar {
-  @apply flex border-b border-gray-100 flex-shrink-0;
-}
+.panel-tabs { @apply flex border-b border-gray-200 flex-shrink-0 bg-white; }
 .tab-btn {
-  @apply flex-1 py-2.5 text-xs font-semibold text-gray-500 hover:text-brand-blue transition-colors
-         border-b-2 border-transparent -mb-px;
+  @apply flex-1 py-3 text-sm font-semibold text-gray-500 hover:text-brand-orange
+         transition-colors duration-150 relative flex items-center justify-center gap-1.5 cursor-pointer;
 }
-.tab-btn.active { @apply text-brand-blue border-brand-blue; }
+.tab-btn.active { @apply text-brand-orange border-b-2 border-brand-orange -mb-px; }
+.tab-badge {
+  @apply bg-brand-orange text-white text-xs font-bold px-2 py-0.5 rounded-full;
+}
+.tab-badge--red { @apply bg-red-500; }
 
 .panel-body {
-  @apply flex-1 overflow-y-auto px-5 py-4;
-  scrollbar-width: thin; scrollbar-color: #e2e8f0 transparent;
+  @apply flex-1 overflow-y-auto p-5;
+  scrollbar-width: thin; scrollbar-color: rgba(240,130,35,0.3) transparent;
 }
-
-.tab-desc { @apply text-xs text-gray-400 mb-4 leading-relaxed; }
-
-/* ── Aliases ── */
-.add-row {
-  @apply flex items-center gap-2 mb-4;
-}
-.form-select, .form-input {
-  @apply flex-1 text-xs border border-gray-200 rounded-lg px-2.5 py-2
-         focus:outline-none focus:border-brand-blue bg-gray-50;
-  min-width: 0;
-}
-.arrow { @apply text-gray-400 text-sm flex-shrink-0; }
-.btn-add {
-  @apply px-3 py-2 rounded-lg text-xs font-semibold bg-brand-blue text-white
-         hover:bg-brand-blue-dark disabled:opacity-40 disabled:cursor-not-allowed
-         transition-colors flex-shrink-0;
-}
-.mapping-list { @apply space-y-1.5; }
-.mapping-row {
-  @apply flex items-center gap-2 text-xs bg-gray-50 rounded-lg px-3 py-2;
-}
-.raw-name { @apply text-gray-500 font-mono truncate flex-1 min-w-0; }
-.canonical-name { @apply text-brand-gray font-semibold flex-1 min-w-0; }
-.btn-remove {
-  @apply text-gray-400 hover:text-red-500 transition-colors flex-shrink-0 text-xs leading-none;
-}
+.panel-hint { @apply text-sm text-gray-500 mb-4 leading-relaxed; }
 
 /* ── Teams ── */
-.btn-add-team {
-  @apply mb-4 px-4 py-2 rounded-lg text-xs font-semibold bg-white border border-gray-300
-         text-gray-600 hover:border-brand-blue hover:text-brand-blue transition-all;
+.add-team-btn {
+  @apply w-full py-2.5 px-4 rounded-lg font-semibold text-sm bg-brand-orange text-white
+         hover:bg-brand-orange-dark transition-all duration-150 mb-4 cursor-pointer;
 }
-.teams-list { @apply space-y-4; }
-.team-card {
-  @apply border border-gray-200 rounded-xl p-3 space-y-3 bg-gray-50/50;
-}
-.team-header-row { @apply flex items-center gap-2; }
-.color-picker {
-  @apply w-8 h-8 rounded-lg border border-gray-200 cursor-pointer p-0.5 flex-shrink-0;
-  background: none;
-}
+.teams-list { @apply flex flex-col gap-4; }
+.team-card { @apply bg-gray-50 border border-gray-200 rounded-xl p-4; }
+.team-card-header { @apply flex items-start justify-between gap-3 mb-3; }
+.team-name-row { @apply flex items-center gap-2 flex-1; }
 .team-name-input {
-  @apply flex-1 text-sm font-semibold border border-gray-200 rounded-lg px-3 py-1.5
-         focus:outline-none focus:border-brand-blue bg-white;
+  @apply flex-1 px-3 py-1.5 text-sm font-semibold border-2 border-gray-300 rounded-lg
+         focus:outline-none focus:border-brand-orange transition-all;
 }
-.team-section { @apply space-y-1.5; }
-.section-label { @apply text-xs font-bold text-gray-400 uppercase tracking-wide; }
-.chips { @apply flex flex-wrap gap-1.5 min-h-[24px]; }
-.chip {
-  @apply flex items-center gap-1 text-xs bg-white border rounded-full px-2.5 py-1
-         font-medium text-brand-gray;
-  border-width: 1.5px;
+.color-picker { @apply w-8 h-8 rounded-full cursor-pointer border-2 border-gray-300 p-0.5; }
+.remove-team-btn {
+  @apply w-7 h-7 flex items-center justify-center rounded-full text-gray-400
+         hover:bg-red-100 hover:text-red-600 transition-all duration-150 text-sm font-bold
+         cursor-pointer flex-shrink-0;
 }
-.chip-remove { @apply text-gray-400 hover:text-red-500 leading-none transition-colors; }
-.empty-hint-inline { @apply text-xs text-gray-300 italic self-center; }
-.add-select {
-  @apply w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5
-         focus:outline-none focus:border-brand-blue bg-white text-gray-500 cursor-pointer;
+.section-label { @apply text-xs font-bold text-gray-500 uppercase tracking-wide mt-3 mb-2; }
+.assigned-chips { @apply flex flex-wrap gap-1.5 min-h-[28px]; }
+.assigned-chip {
+  @apply flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium text-white;
+}
+.author-chip { @apply bg-brand-blue; }
+.repo-chip   { @apply bg-brand-teal; }
+.chip-remove {
+  @apply ml-0.5 w-4 h-4 flex items-center justify-center rounded-full
+         hover:bg-white/30 text-white cursor-pointer font-bold text-xs leading-none;
+}
+.empty-hint { @apply text-xs text-gray-400 italic self-center; }
+.available-list { @apply mt-2; }
+.available-label { @apply text-xs text-gray-400 mb-1; }
+.available-pills { @apply flex flex-wrap gap-1; }
+.available-pill {
+  @apply px-2 py-0.5 rounded-full text-xs font-medium border border-brand-blue text-brand-blue
+         bg-white hover:bg-brand-blue hover:text-white transition-all duration-100 cursor-pointer;
+}
+.available-pill.repo-pill {
+  @apply border-brand-teal text-brand-teal hover:bg-brand-teal hover:text-white;
+}
+.no-teams { @apply text-center text-gray-500 py-10 space-y-2; }
+.hint-text { @apply text-xs text-gray-400; }
+.unassigned-section { @apply mt-6 p-4 bg-amber-50 border border-amber-200 rounded-xl; }
+.unassigned-title { @apply text-sm font-bold text-amber-700 mb-3; }
+.unassigned-group { @apply mb-2 flex flex-wrap items-center gap-2; }
+.unassigned-label { @apply text-xs text-amber-600 font-medium; }
+.unassigned-chip { @apply px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-800 border border-amber-300; }
+
+/* ── Author Aliases ── */
+.author-pills-grid { @apply flex flex-wrap gap-2; }
+.author-pill {
+  @apply flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold
+         bg-brand-blue text-white cursor-grab select-none transition-all duration-150;
+}
+.author-pill span { pointer-events: none; }
+.author-pill.pill-mapped      { @apply bg-gray-300 text-gray-600; }
+.author-pill.pill-dragging    { @apply opacity-40 cursor-grabbing; }
+.author-pill.pill-drop-target { @apply ring-2 ring-offset-1 ring-brand-orange scale-105 bg-brand-orange; }
+.pill-alias-badge { @apply text-gray-500 font-normal italic text-[10px]; }
+.pill-mapped .pill-alias-badge { color: inherit; }
+
+.alias-list { @apply flex flex-col gap-1.5; }
+.alias-row  { @apply flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2; }
+.alias-raw       { @apply text-xs text-gray-500 font-mono flex-1 truncate; }
+.alias-arrow-sm  { @apply text-gray-400 font-bold flex-shrink-0; }
+.alias-canonical { @apply text-xs font-semibold text-brand-blue flex-1 truncate; }
+.alias-remove {
+  @apply w-6 h-6 flex items-center justify-center rounded-full text-gray-400
+         hover:bg-red-100 hover:text-red-600 transition-all duration-150 text-xs
+         font-bold cursor-pointer flex-shrink-0;
 }
 
 /* ── Ignored Authors ── */
-.author-list { @apply space-y-1; }
-.author-row {
+.author-toggle-list { @apply flex flex-col gap-1; }
+.author-toggle-row {
   @apply flex items-center justify-between gap-3 px-3 py-2 rounded-lg
          transition-colors hover:bg-gray-50;
 }
-.author-row.ignored { @apply bg-red-50/60; }
-.author-name { @apply text-sm text-brand-gray flex-1 min-w-0 truncate; }
-.author-row.ignored .author-name { @apply text-gray-400 line-through; }
-.btn-toggle {
-  @apply px-3 py-1 rounded-lg text-xs font-semibold flex-shrink-0
+.author-toggle-row.row-ignored { @apply bg-red-50/60; }
+.toggle-name { @apply text-sm text-brand-gray flex-1 min-w-0 truncate; }
+.toggle-name.name-ignored { @apply text-gray-400 line-through; }
+.toggle-btn {
+  @apply px-3 py-1 rounded-lg text-xs font-semibold flex-shrink-0 cursor-pointer
          border border-gray-200 text-gray-500 hover:border-red-300 hover:text-red-600
          transition-all;
 }
-.btn-toggle.active {
+.toggle-btn--active {
   @apply border-green-300 text-green-700 hover:border-gray-200 hover:text-gray-500;
 }
-
-/* ── Shared ── */
-.empty-hint { @apply text-xs text-gray-400 italic py-2; }
-
-/* ── Transitions ── */
-.backdrop-enter-active, .backdrop-leave-active { transition: opacity 0.2s ease; }
-.backdrop-enter-from, .backdrop-leave-to { opacity: 0; }
-
-.panel-enter-active, .panel-leave-active { transition: transform 0.25s ease; }
-.panel-enter-from, .panel-leave-to { transform: translateX(100%); }
 </style>
