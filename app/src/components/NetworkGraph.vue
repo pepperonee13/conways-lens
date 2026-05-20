@@ -48,11 +48,11 @@
       <div v-if="tooltip.show" class="graph-tooltip"
            :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }">
         <template v-if="tooltip.isLink">
-          <div class="tt-name">{{ tooltip.source }} → {{ tooltip.target }}</div>
+          <div class="tt-name">{{ anonymize(tooltip.source) }} → {{ tooltip.target }}</div>
           <div class="tt-detail">{{ tooltip.commits.toLocaleString() }} commits</div>
         </template>
         <template v-else>
-          <div class="tt-name">{{ tooltip.name }}</div>
+          <div class="tt-name">{{ tooltip.type === 'author' ? anonymize(tooltip.name) : tooltip.name }}</div>
           <div class="tt-detail">
             {{ tooltip.type === 'author' ? 'Author' : 'Repository' }}
             · {{ tooltip.commits.toLocaleString() }} commits
@@ -68,9 +68,11 @@ import { ref, computed, watch, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { storeToRefs } from 'pinia';
 import * as d3 from 'd3';
 import { useLensStore } from '../stores/useLensStore';
+import { useAnonymize } from '../composables/useAnonymize.js';
 
 const store = useLensStore();
 const { graphData, nodeColors, crossTeamOnly, dateBounds, activeRange } = storeToRefs(store);
+const { anonymize } = useAnonymize();
 
 const svgRef       = ref(null);
 const containerRef = ref(null);
@@ -272,7 +274,7 @@ function drawGraph() {
     .attr('dy', d => d.r + 13)
     .attr('fill', '#374151').attr('font-size', '11px').attr('font-weight', '600')
     .attr('pointer-events', 'none')
-    .text(d => d.id);
+    .text(d => d.type === 'author' ? anonymize(d.id) : d.id);
 
   sim.on('tick', () => {
     nodes.forEach(n => { if (n.x != null) savedPositions[n.id] = { x: n.x, y: n.y }; });

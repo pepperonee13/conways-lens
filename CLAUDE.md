@@ -51,6 +51,7 @@ repos.json → Analyse-Repositories.ps1 → TimelineData.csv
 - **`app/src/components/NetworkGraph.vue`** — D3 force-directed bipartite graph. Authors on the left, repos on the right. When teams are configured: draws colour-coded convex hull backgrounds per team, applies a team-gravity force to cluster team members, and shows a "Cross-team only" toggle that filters edges to only cross-boundary contributions. Supports node drag, zoom/pan, and hover tooltips.
 - **`app/src/components/MappingEditor.vue`** — Floating panel for team CRUD, author assignment, and author alias normalization (multiple git identities → one canonical name). Supports JSON import/export.
 - **`app/src/views/LensView.vue`** — Root layout; handles CSV file upload/drag-drop.
+- **`app/src/composables/useAnonymize.js`** — Any UI that displays an author name must wrap it with `anonymize()` from this composable. Display-only; store data and JSON export always use real names.
 
 ### Graph Behaviour
 
