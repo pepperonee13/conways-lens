@@ -24,7 +24,7 @@
 
     <template v-if="hasLinks">
       <transition name="banner">
-        <div v-if="expandedTeam" class="drilldown-banner">
+        <div v-if="expandedTeam && !isAutoMode" class="drilldown-banner">
           <span>
             Drill-down:
             <strong :style="{ color: getTeamColor(expandedTeam) }">{{ expandedTeam }}</strong>
@@ -311,6 +311,7 @@ const crossTeamData = computed(() => {
 });
 
 const activeData = computed(() => {
+  if (isAutoMode.value) return autoModeData.value;
   const ct = crossTeamData.value;
   return ct.links.length ? ct : autoModeData.value;
 });
@@ -442,7 +443,7 @@ function drawGraph() {
   linkLabels.append('text').attr('text-anchor', 'middle').attr('dy', '0.35em').attr('font-size', '10px').attr('font-weight', '700').attr('fill', '#1f2937').attr('pointer-events', 'none').text(d => formatBadgeValue(d));
 
   const nodeEls = root.append('g').selectAll('g').data(simNodes).join('g')
-    .style('cursor', d => d.isProduct ? 'default' : expandableTeams.value.has(d.id) ? 'zoom-in' : 'grab')
+    .style('cursor', d => d.isProduct ? 'default' : (!isAutoMode.value && expandableTeams.value.has(d.id)) ? 'zoom-in' : 'grab')
     .call(d3.drag()
       .on('start', (event, d) => { dragOccurred = false; if (!event.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
       .on('drag', (event, d) => { dragOccurred = true; d.fx = event.x; d.fy = event.y; })
@@ -450,7 +451,7 @@ function drawGraph() {
     )
     .on('click', (event, d) => {
       event.stopPropagation();
-      if (d.isProduct) return;
+      if (d.isProduct || isAutoMode.value) return;
       if (expandableTeams.value.has(d.id)) expandedTeam.value = expandedTeam.value === d.id ? null : d.id;
     })
     .on('mouseenter', (event, d) => {
@@ -459,7 +460,7 @@ function drawGraph() {
         const allContribs = [...new Set(incomingLinks.flatMap(l => l.contributors))];
         tooltip.value = { show: true, x: event.clientX + 14, y: event.clientY - 10, type: 'product', productName: d.id, owningTeam: d.owningTeam, incomingLinks, allContributors: allContribs };
       } else {
-        tooltip.value = { show: true, x: event.clientX + 14, y: event.clientY - 10, type: 'node', teamName: d.id, ownContributions: d.ownContributions, outLinks: simLinks.filter(l => (l.source.id || l.source) === d.id).length, inLinks: simLinks.filter(l => (l.target.id || l.target) === d.id).length, expandable: expandableTeams.value.has(d.id) };
+        tooltip.value = { show: true, x: event.clientX + 14, y: event.clientY - 10, type: 'node', teamName: d.id, ownContributions: d.ownContributions, outLinks: simLinks.filter(l => (l.source.id || l.source) === d.id).length, inLinks: simLinks.filter(l => (l.target.id || l.target) === d.id).length, expandable: !isAutoMode.value && expandableTeams.value.has(d.id) };
       }
     })
     .on('mousemove', event => { tooltip.value.x = event.clientX + 14; tooltip.value.y = event.clientY - 10; })
@@ -484,8 +485,8 @@ function drawGraph() {
     .attr('fill', d => d.color || getTeamColor(d.owningTeam))
     .attr('stroke', '#fff').attr('stroke-width', 2).attr('opacity', 0.88);
 
-  // Expand hint on drillable team nodes
-  nodeEls.filter(d => !d.isProduct && expandableTeams.value.has(d.id))
+  // Expand hint on drillable team nodes (team mode only)
+  nodeEls.filter(d => !d.isProduct && !isAutoMode.value && expandableTeams.value.has(d.id))
     .append('text').attr('text-anchor', 'middle').attr('dy', d => -nodeR(d) + 12).attr('dx', d => nodeR(d) - 10).attr('fill', 'white').attr('font-size', '13px').attr('font-weight', '900').attr('pointer-events', 'none').text('⊕');
 
   // Inner label
