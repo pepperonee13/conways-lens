@@ -186,6 +186,14 @@
         </template>
 
       </div>
+
+      <!-- ── Footer: Import / Export ── -->
+      <div class="panel-footer">
+        <input ref="fileInput" type="file" accept=".json" class="hidden" @change="handleImport" />
+        <span v-if="importError" class="import-error">{{ importError }}</span>
+        <button class="footer-btn footer-btn--secondary" @click="fileInput.click()">⬆ Import JSON</button>
+        <button class="footer-btn footer-btn--primary"   @click="handleExport">⬇ Export JSON</button>
+      </div>
     </div>
   </transition>
 </template>
@@ -274,6 +282,31 @@ function onDrop(canonical) {
 
 // ── Ignored Authors ──
 function isIgnored(name) { return ignoredAuthors.value.includes(name); }
+
+// ── Import / Export ──
+const fileInput   = ref(null);
+const importError = ref('');
+
+function handleExport() {
+  const blob = new Blob([store.exportMappings()], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = Object.assign(document.createElement('a'), { href: url, download: 'conwaylens-mappings.json' });
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function handleImport(e) {
+  importError.value = '';
+  const file = e.target.files?.[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    store.importMappings(JSON.parse(text));
+    e.target.value = '';
+  } catch (err) {
+    importError.value = err.message;
+  }
+}
 </script>
 
 <style scoped>
@@ -422,6 +455,21 @@ function isIgnored(name) { return ignoredAuthors.value.includes(name); }
          hover:bg-red-100 hover:text-red-600 transition-all duration-150 text-xs
          font-bold cursor-pointer flex-shrink-0;
 }
+
+/* ── Footer ── */
+.panel-footer {
+  @apply flex items-center gap-2 px-5 py-3 border-t border-gray-200 bg-gray-50 flex-shrink-0;
+}
+.footer-btn {
+  @apply px-4 py-2 rounded-lg text-sm font-semibold cursor-pointer transition-all duration-150;
+}
+.footer-btn--primary {
+  @apply bg-brand-orange text-white hover:bg-brand-orange-dark ml-auto;
+}
+.footer-btn--secondary {
+  @apply border border-gray-300 text-gray-600 bg-white hover:border-brand-orange hover:text-brand-orange;
+}
+.import-error { @apply text-xs text-red-600 flex-1 truncate; }
 
 /* ── Ignored Authors ── */
 .author-toggle-list { @apply flex flex-col gap-1; }

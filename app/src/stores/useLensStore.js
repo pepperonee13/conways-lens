@@ -139,6 +139,27 @@ export const useLensStore = defineStore('lens', () => {
     ignoredAuthors.value = ignoredAuthors.value.filter(a => a !== name);
   }
 
+  // Import / Export
+  function exportMappings() {
+    return JSON.stringify({
+      version: 1,
+      teams: teams.value,
+      authorNormalizations: authorNormalizations.value,
+      ignoredAuthors: ignoredAuthors.value,
+    }, null, 2);
+  }
+
+  function importMappings(data) {
+    if (!data || typeof data !== 'object' || Array.isArray(data))
+      throw new Error('Invalid mapping file — expected a JSON object.');
+    if (Array.isArray(data.teams))
+      teams.value = data.teams;
+    if (data.authorNormalizations && typeof data.authorNormalizations === 'object' && !Array.isArray(data.authorNormalizations))
+      authorNormalizations.value = data.authorNormalizations;
+    if (Array.isArray(data.ignoredAuthors))
+      ignoredAuthors.value = data.ignoredAuthors;
+  }
+
   return {
     timelineData, dataLoaded, dataError, dateInfo,
     teams, authorNormalizations, ignoredAuthors,
@@ -148,5 +169,6 @@ export const useLensStore = defineStore('lens', () => {
     addTeam, removeTeam,
     setNormalization, removeNormalization,
     ignoreAuthor, unignoreAuthor,
+    exportMappings, importMappings,
   };
 });
