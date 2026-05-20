@@ -51,7 +51,7 @@ repos.json → Analyse-Repositories.ps1 → TimelineData.csv
 - **`app/src/components/NetworkGraph.vue`** — D3 force-directed bipartite graph. Authors on the left, repos on the right. When teams are configured: draws colour-coded convex hull backgrounds per team, applies a team-gravity force to cluster team members, and shows a "Cross-team only" toggle that filters edges to only cross-boundary contributions. Supports node drag, zoom/pan, and hover tooltips.
 - **`app/src/components/MappingEditor.vue`** — Floating panel for team CRUD, author assignment, and author alias normalization (multiple git identities → one canonical name). Supports JSON import/export.
 - **`app/src/views/LensView.vue`** — Root layout; handles CSV file upload/drag-drop.
-- **`app/src/composables/useAnonymize.js`** — Provides `anonymize(name)` for display-only author name masking. Controlled by the `VITE_ANONYMIZE_AUTHORS=true` env var. Maps canonical author names to deterministic fake human names (e.g. "Carol Davis") using two inlined 40-entry name lists (1600 combinations). The mapping is stable because it is based on alphabetical sort position of the canonical name. Raw names are resolved through `authorNormalizations` before lookup so aliases map to the same fake name as their canonical. **All new UI that renders an author name must call `anonymize()` on the display value** — store data, localStorage, and JSON export/import always use real names and must never be wrapped with `anonymize()`.
+- **`app/src/composables/useAnonymize.js`** — Any UI that displays an author name must wrap it with `anonymize()` from this composable. Display-only; store data and JSON export always use real names.
 
 ### Graph Behaviour
 
