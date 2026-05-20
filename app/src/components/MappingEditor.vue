@@ -61,13 +61,23 @@
                     </span>
                     <span v-if="!team.authors.length" class="empty-hint">No authors assigned</span>
                   </div>
-                  <div class="available-list" v-if="availableAuthors(team).length">
-                    <div class="available-label">Add author:</div>
-                    <div class="available-pills">
-                      <button v-for="a in availableAuthors(team)" :key="a" class="available-pill" @click="addTo(team, 'authors', a)">
-                        + {{ a }}
-                      </button>
-                    </div>
+                  <div class="available-list" v-if="availableAuthorGroups(team).free.length || availableAuthorGroups(team).shared.length">
+                    <template v-if="availableAuthorGroups(team).free.length">
+                      <div class="available-label">Add author:</div>
+                      <div class="available-pills">
+                        <button v-for="a in availableAuthorGroups(team).free" :key="a" class="available-pill" @click="addTo(team, 'authors', a)">
+                          + {{ a }}
+                        </button>
+                      </div>
+                    </template>
+                    <template v-if="availableAuthorGroups(team).shared.length">
+                      <div class="available-label available-label--shared">Also in another team:</div>
+                      <div class="available-pills">
+                        <button v-for="a in availableAuthorGroups(team).shared" :key="a" class="available-pill available-pill--shared" @click="addTo(team, 'authors', a)">
+                          + {{ a }}
+                        </button>
+                      </div>
+                    </template>
                   </div>
 
                   <div class="section-label">Repositories ({{ team.repos.length }})</div>
@@ -206,11 +216,24 @@ function addTeam() {
 }
 
 const ignoredSet = computed(() => new Set(ignoredAuthors.value));
-function availableAuthors(team) {
-  return allAuthors.value.filter(a => !team.authors.includes(a) && !ignoredSet.value.has(a));
+
+function availableAuthorGroups(team) {
+  const otherTeamAuthors = new Set(
+    teams.value.filter(t => t.id !== team.id).flatMap(t => t.authors)
+  );
+  const free = [], shared = [];
+  for (const a of allAuthors.value) {
+    if (team.authors.includes(a) || ignoredSet.value.has(a)) continue;
+    (otherTeamAuthors.has(a) ? shared : free).push(a);
+  }
+  return { free, shared };
 }
+
 function availableRepos(team) {
-  return allRepos.value.filter(r => !team.repos.includes(r));
+  const takenElsewhere = new Set(
+    teams.value.filter(t => t.id !== team.id).flatMap(t => t.repos)
+  );
+  return allRepos.value.filter(r => !team.repos.includes(r) && !takenElsewhere.has(r));
 }
 function addTo(team, field, value) {
   if (!team[field].includes(value)) team[field].push(value);
@@ -356,6 +379,11 @@ function isIgnored(name) { return ignoredAuthors.value.includes(name); }
 }
 .available-pill.repo-pill {
   @apply border-brand-teal text-brand-teal hover:bg-brand-teal hover:text-white;
+}
+.available-label--shared { @apply text-amber-600 mt-2; }
+.available-pill--shared {
+  @apply border-amber-400 text-amber-700 bg-amber-50
+         hover:bg-amber-400 hover:text-white hover:border-amber-400;
 }
 .no-teams { @apply text-center text-gray-500 py-10 space-y-2; }
 .hint-text { @apply text-xs text-gray-400; }
