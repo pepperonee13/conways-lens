@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Conway's Lens — Team Boundary Styles Prototype</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: #f1f5f9;
+  color: #1e293b;
+  padding-bottom: 56px;
+}
+
+header {
+  background: #2F3944;
+  color: white;
+  padding: 16px 32px;
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+}
+header h1  { font-size: 17px; font-weight: 700; letter-spacing: -.02em; }
+header p   { font-size: 12px; color: #94a3b8; }
+
+.controls {
+  background: white;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 13px 32px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ctl-label {
+  font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .08em;
+  color: #94a3b8; margin-right: 2px;
+}
+.ctl-sep {
+  width: 1px; height: 24px;
+  background: #e2e8f0; margin: 0 8px;
+  flex-shrink: 0;
+}
+.opt-btn {
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 2px solid #e2e8f0;
+  background: white;
+  font-size: 12px; font-weight: 600;
+  cursor: pointer; color: #64748b;
+  transition: all .14s;
+  line-height: 1;
+}
+.opt-btn:hover  { border-color: #225EA9; color: #225EA9; }
+.opt-btn.active { background: #225EA9; border-color: #225EA9; color: white; }
+
+.layout-btn { border-color: #334155; color: #334155; }
+.layout-btn:hover  { border-color: #334155; background: #334155; color: white; }
+.layout-btn.active { background: #334155; border-color: #334155; color: white; }
+
+#bound-section {
+  display: flex; align-items: center; gap: 8px;
+  transition: opacity .2s;
+}
+#bound-section.disabled {
+  opacity: 0.32;
+  pointer-events: none;
+}
+
+.main {
+  max-width: 1020px;
+  margin: 22px auto 0;
+  padding: 0 16px;
+}
+
+.graph-card {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 1px 12px rgba(0,0,0,.08);
+  overflow: hidden;
+}
+#graph-svg { display: block; }
+
+.legend-bar {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 22px;
+  padding: 10px 20px 13px;
+  flex-wrap: wrap;
+  border-top: 1px solid #f1f5f9;
+}
+.li {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 500; color: #475569;
+}
+.li-dot  { width: 11px; height: 11px; border-radius: 50%; }
+.li-sq   { width: 11px; height: 11px; border-radius: 2px; }
+.li-line { width: 22px; height: 2px;  border-radius: 1px; }
+
+.desc-card {
+  margin-top: 14px;
+  background: white;
+  border-radius: 12px;
+  padding: 15px 20px;
+  font-size: 13px; color: #475569; line-height: 1.65;
+  box-shadow: 0 1px 8px rgba(0,0,0,.05);
+  min-height: 62px;
+}
+.desc-card strong { color: #1e293b; }
+.desc-card em     { color: #225EA9; font-style: normal; font-weight: 600; }
+.desc-card .story { margin-top: 8px; padding-top: 8px; border-top: 1px solid #f1f5f9; }
+.desc-card .story strong { color: #dc2626; }
+
+.table-card {
+  margin-top: 14px;
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 1px 8px rgba(0,0,0,.05);
+}
+.table-hd {
+  padding: 11px 20px 9px;
+  font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .08em;
+  color: #94a3b8; border-bottom: 1px solid #f1f5f9;
+}
+table { width: 100%; border-collapse: collapse; }
+th {
+  padding: 8px 16px;
+  text-align: left; font-size: 11px; font-weight: 600;
+  color: #94a3b8; text-transform: uppercase; letter-spacing: .05em;
+  background: #f8fafc; border-bottom: 1px solid #e2e8f0;
+}
+td { padding: 9px 16px; font-size: 13px; border-bottom: 1px solid #f8fafc; }
+tr:last-child td { border-bottom: none; }
+.wbar-bg {
+  display: inline-block; height: 6px; border-radius: 3px;
+  background: #e2e8f0; vertical-align: middle; margin-left: 8px;
+  width: 80px; overflow: hidden; position: relative;
+}
+.wbar-fill { display: block; height: 100%; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Conway's Lens · Team Boundary Styles</h1>
+  <p>Prototype — e-commerce platform · 4 teams · 12 repos · cross-team edges in red · see scenarios below</p>
+</header>
+
+<div class="controls">
+  <span class="ctl-label">Layout</span>
+  <button class="opt-btn layout-btn active" id="btn-force">◎ Force-directed</button>
+  <button class="opt-btn layout-btn" id="btn-struct">⊞ Structured</button>
+  <span class="ctl-sep"></span>
+  <div id="bound-section">
+    <span class="ctl-label">Boundaries</span>
+    <button class="opt-btn active" data-opt="none">None</button>
+    <button class="opt-btn" data-opt="1">① Weighted</button>
+    <button class="opt-btn" data-opt="2">② Concentric</button>
+    <button class="opt-btn" data-opt="3">③ Blur layers</button>
+    <button class="opt-btn" data-opt="4">④ Density field</button>
+  </div>
+</div>
+
+<div class="main">
+  <div class="graph-card">
+    <svg id="graph-svg"></svg>
+    <div class="legend-bar" id="legend-bar"></div>
+  </div>
+  <div class="desc-card" id="desc-card">
+    Select a boundary style above, or switch to <strong>Structured</strong> layout for a data-driven, position-stable view.
+  </div>
+  <div class="table-card">
+    <div class="table-hd">Cross-team contributions — four scenarios illustrated</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Author (team)</th><th>→ Repo (team)</th><th>Commits</th>
+          <th>% of author's total</th><th>Signal</th><th>Scenario</th>
+        </tr>
+      </thead>
+      <tbody id="cross-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+// ─── DATA ─────────────────────────────────────────────────────────────────────
+// Scenario: fictional e-commerce platform with four teams.
+// Four Conway's Law stories encoded in the data:
+//   A. Conway's Law violation — Alice (Backend) doing heavy frontend work
+//   B. API surface coupling  — Frontend team writing their own backend-api changes
+//   C. Platform as shared infra — everyone contributes to Platform CI/infra
+//   D. Healthy isolation       — Data team is mostly self-contained
+
+const TEAMS = [
+  { id:'backend',  name:'Backend Team',  color:'#225EA9',
+    authors:['Alice','Bob','Carol'],     repos:['backend-api','auth-service','data-service'] },
+  { id:'frontend', name:'Frontend Team', color:'#088F9B',
+    authors:['Dave','Eve','Frank'],      repos:['web-app','mobile-app','design-system'] },
+  { id:'platform', name:'Platform Team', color:'#C45E0F',
+    authors:['Grace','Henry'],           repos:['platform-core','ci-pipeline','infra-tools'] },
+  { id:'data',     name:'Data Team',     color:'#5A4A80',
+    authors:['Iris','Jake'],             repos:['data-pipeline','analytics','ml-service'] },
+];
+
+const CONTRIBS = [
+  // ── Backend (within) ─────────────────────────────────────────
+  {author:'Alice', repo:'backend-api',    n:120},
+  {author:'Alice', repo:'auth-service',   n:85},
+  {author:'Bob',   repo:'backend-api',    n:95},
+  {author:'Bob',   repo:'data-service',   n:60},
+  {author:'Carol', repo:'auth-service',   n:110},
+  {author:'Carol', repo:'data-service',   n:45},
+
+  // ── Frontend (within) ────────────────────────────────────────
+  {author:'Dave',  repo:'web-app',        n:130},
+  {author:'Dave',  repo:'design-system',  n:55},
+  {author:'Eve',   repo:'web-app',        n:80},
+  {author:'Eve',   repo:'mobile-app',     n:65},
+  {author:'Frank', repo:'mobile-app',     n:115},
+  {author:'Frank', repo:'design-system',  n:45},
+
+  // ── Platform (within) ────────────────────────────────────────
+  {author:'Grace', repo:'platform-core',  n:140},
+  {author:'Grace', repo:'ci-pipeline',    n:75},
+  {author:'Henry', repo:'infra-tools',    n:100},
+  {author:'Henry', repo:'ci-pipeline',    n:90},
+  {author:'Henry', repo:'platform-core',  n:50},
+
+  // ── Data (within) ────────────────────────────────────────────
+  {author:'Iris',  repo:'data-pipeline',  n:125},
+  {author:'Iris',  repo:'analytics',      n:70},
+  {author:'Jake',  repo:'ml-service',     n:115},
+  {author:'Jake',  repo:'data-pipeline',  n:60},
+  {author:'Jake',  repo:'analytics',      n:45},
+
+  // ── CROSS (A) Conway's Law violation: Backend→Frontend ───────
+  // Alice is implementing frontend features — ownership mismatch
+  {author:'Alice', repo:'web-app',        n:65},   // 32% of Alice's output — 🔴 Strong
+  {author:'Alice', repo:'mobile-app',     n:28},   // 14% of Alice's output — 🔴 Strong
+
+  // ── CROSS (B) API surface coupling: Frontend→Backend ─────────
+  // Frontend team driving API changes themselves
+  {author:'Dave',  repo:'backend-api',    n:25},   // 12% — 🔴 Strong
+  {author:'Eve',   repo:'backend-api',    n:15},   //  9% — 🟡 Medium
+  {author:'Dave',  repo:'platform-core',  n:8},    //  4% — ⚪ Weak (bonus: front→platform)
+
+  // ── CROSS (C) Platform as shared infra: All→Platform ─────────
+  // Everyone adds pipelines; platform team is the backbone
+  {author:'Bob',   repo:'ci-pipeline',    n:22},   // 12% — 🔴 Strong
+  {author:'Frank', repo:'ci-pipeline',    n:18},   // 10% — 🟡 Medium
+  {author:'Carol', repo:'infra-tools',    n:12},   //  7% — 🟡 Medium
+
+  // ── CROSS (D) Data team healthy isolation ────────────────────
+  // Minimal coupling — only light touches on shared data layer
+  {author:'Iris',  repo:'backend-api',    n:10},   //  5% — ⚪ Weak
+  {author:'Jake',  repo:'data-service',   n:6},    //  3% — ⚪ Weak
+];
+
+const SCENARIOS = {
+  'Alice→web-app':       'A',  'Alice→mobile-app':   'A',
+  'Dave→backend-api':    'B',  'Eve→backend-api':    'B',  'Dave→platform-core': 'B',
+  'Bob→ci-pipeline':     'C',  'Frank→ci-pipeline':  'C',  'Carol→infra-tools':  'C',
+  'Iris→backend-api':    'D',  'Jake→data-service':  'D',
+};
+
+const SCENARIO_LABELS = {
+  A: 'A — Conway violation',
+  B: 'B — API coupling',
+  C: 'C — Shared infra',
+  D: 'D — Healthy isolation',
+};
+
+// ─── LOOKUPS ──────────────────────────────────────────────────────────────────
+
+const authorTeamMap = {}, repoTeamMap = {};
+for (const t of TEAMS) {
+  for (const a of t.authors) authorTeamMap[a] = t;
+  for (const r of t.repos)   repoTeamMap[r]   = t;
+}
+function isCross(c) { return authorTeamMap[c.author].id !== repoTeamMap[c.repo].id; }
+
+const authorTotals = {}, nodeTotals = {};
+for (const c of CONTRIBS) {
+  authorTotals[c.author] = (authorTotals[c.author] ?? 0) + c.n;
+  nodeTotals[c.author]   = (nodeTotals[c.author]   ?? 0) + c.n;
+  nodeTotals[c.repo]     = (nodeTotals[c.repo]     ?? 0) + c.n;
+}
+
+// ─── GRAPH STRUCTURE ──────────────────────────────────────────────────────────
+
+const nodes = [
+  ...TEAMS.flatMap(t => t.authors.map(id => ({ id, type:'author', team:t }))),
+  ...TEAMS.flatMap(t => t.repos  .map(id => ({ id, type:'repo',   team:t }))),
+];
+
+const edgeMap = {};
+for (const c of CONTRIBS) {
+  const k = `${c.author}|||${c.repo}`;
+  edgeMap[k] = (edgeMap[k] ?? 0) + c.n;
+}
+const links = Object.entries(edgeMap).map(([k, n]) => {
+  const [source, target] = k.split('|||');
+  return { source, target, n, cross: isCross({author:source, repo:target}) };
+});
+
+// ─── SVG SETUP ────────────────────────────────────────────────────────────────
+
+const W = 960, H = 640;
+const svg  = d3.select('#graph-svg').attr('width', W).attr('height', H);
+const defs = svg.append('defs');
+
+['arr','arr-red'].forEach((id, i) => {
+  defs.append('marker').attr('id', id)
+    .attr('viewBox','0 -5 10 10').attr('refX',10)
+    .attr('markerWidth',6).attr('markerHeight',6).attr('orient','auto')
+    .append('path').attr('d','M0,-5L10,0L0,5')
+    .attr('fill', i === 0 ? '#94a3b8' : '#ef4444');
+});
+
+for (const t of TEAMS) {
+  const makeFilt = (id, std, margin) => {
+    const f = defs.append('filter').attr('id', id)
+      .attr('x',`-${margin}%`).attr('y',`-${margin}%`)
+      .attr('width',`${200+margin*2}%`).attr('height',`${200+margin*2}%`);
+    f.append('feGaussianBlur').attr('stdDeviation', std);
+  };
+  makeFilt(`blur-soft-${t.id}`, 18, 55);
+  makeFilt(`blur-kde-${t.id}`,  38, 80);
+}
+
+const root  = svg.append('g');
+const hulls = root.append('g');
+const linkG = root.append('g');
+const nodeG = root.append('g');
+
+svg.call(d3.zoom().scaleExtent([0.3, 3]).on('zoom', e => root.attr('transform', e.transform)));
+
+const maxTotal = d3.max(Object.values(nodeTotals));
+const rScale   = d3.scaleSqrt().domain([0, maxTotal]).range([9, 22]);
+
+// ─── SIMULATION ───────────────────────────────────────────────────────────────
+
+function teamGravity(alpha) {
+  const cx = {}, cy = {}, cn = {};
+  for (const n of nodes) {
+    if (n.x == null) continue;
+    const id = n.team.id;
+    cx[id] = (cx[id]??0) + n.x;
+    cy[id] = (cy[id]??0) + n.y;
+    cn[id] = (cn[id]??0) + 1;
+  }
+  for (const id in cn) { cx[id] /= cn[id]; cy[id] /= cn[id]; }
+  const k = 0.06 * alpha;
+  for (const n of nodes) {
+    n.vx = (n.vx??0) + (cx[n.team.id] - (n.x??0)) * k;
+    n.vy = (n.vy??0) + (cy[n.team.id] - (n.y??0)) * k;
+  }
+}
+
+const sim = d3.forceSimulation(nodes)
+  .force('link',    d3.forceLink(links).id(d => d.id).distance(150).strength(0.35))
+  .force('charge',  d3.forceManyBody().strength(-500))
+  .force('center',  d3.forceCenter(W/2, H/2).strength(0.04))
+  .force('x',       d3.forceX(d => d.type === 'author' ? W*0.28 : W*0.72).strength(0.10))
+  .force('collide', d3.forceCollide(d => rScale(nodeTotals[d.id]??50) + 16))
+  .force('team',    teamGravity);
+
+// ─── LINK & NODE ELEMENTS ─────────────────────────────────────────────────────
+
+const linkEls = linkG.selectAll('line').data(links).join('line')
+  .attr('stroke',         l => l.cross ? '#ef4444' : '#cbd5e1')
+  .attr('stroke-width',   l => l.cross ? Math.max(1.5, Math.sqrt(l.n)*0.32) : Math.max(1, Math.sqrt(l.n)*0.22))
+  .attr('stroke-opacity', l => l.cross ? 0.80 : 0.35)
+  .attr('marker-end',     l => l.cross ? 'url(#arr-red)' : 'url(#arr)');
+
+const nodeEls = nodeG.selectAll('g').data(nodes).join('g')
+  .style('cursor', 'grab')
+  .call(d3.drag()
+    .on('start', (e, d) => {
+      if (isStructured) return;
+      if (!e.active) sim.alphaTarget(0.2).restart();
+      d.fx = d.x; d.fy = d.y;
+    })
+    .on('drag',  (e, d) => {
+      if (isStructured) return;
+      d.fx = e.x; d.fy = e.y;
+    })
+    .on('end',   (e, d) => {
+      if (isStructured) return;
+      if (!e.active) sim.alphaTarget(0);
+      d.fx = null; d.fy = null;
+    })
+  );
+
+nodeEls.filter(d => d.type === 'author')
+  .append('circle')
+  .attr('r',    d => rScale(nodeTotals[d.id]??50))
+  .attr('fill', d => d.team.color)
+  .attr('stroke','#fff').attr('stroke-width', 2);
+
+nodeEls.filter(d => d.type === 'repo')
+  .append('rect')
+  .attr('x',      d => -rScale(nodeTotals[d.id]??50))
+  .attr('y',      d => -rScale(nodeTotals[d.id]??50))
+  .attr('width',  d =>  rScale(nodeTotals[d.id]??50)*2)
+  .attr('height', d =>  rScale(nodeTotals[d.id]??50)*2)
+  .attr('rx', 3)
+  .attr('fill', d => d.team.color)
+  .attr('stroke','#fff').attr('stroke-width', 2);
+
+nodeEls.append('text')
+  .attr('text-anchor','middle')
+  .attr('dy', d => rScale(nodeTotals[d.id]??50) + 13)
+  .attr('fill','#374151').attr('font-size','11px').attr('font-weight','600')
+  .attr('pointer-events','none')
+  .text(d => d.id);
+
+// ─── HULL COMPUTATION HELPERS ─────────────────────────────────────────────────
+
+function expandPts(pts, pad = 30) {
+  const out = [], N = 8;
+  for (const [x, y, r = 14] of pts) {
+    const rad = (r ?? 14) + pad;
+    for (let i = 0; i < N; i++) {
+      const a = (i / N) * Math.PI * 2;
+      out.push([x + Math.cos(a)*rad, y + Math.sin(a)*rad]);
+    }
+  }
+  return out;
+}
+
+function hullD(pts) {
+  if (pts.length < 3) return null;
+  const h = d3.polygonHull(pts);
+  return h ? `M${h.map(p => p.join(',')).join('L')}Z` : null;
+}
+
+function teamData(team) {
+  const ownIds   = new Set([...team.authors, ...team.repos]);
+  const ownNodes = nodes.filter(n => ownIds.has(n.id) && n.x != null);
+  const centroid = {
+    x: d3.mean(ownNodes, n => n.x),
+    y: d3.mean(ownNodes, n => n.y),
+  };
+
+  const teamTotal = CONTRIBS
+    .filter(c => team.authors.includes(c.author))
+    .reduce((s, c) => s + c.n, 0);
+
+  const crossByRepo = {};
+  for (const c of CONTRIBS) {
+    if (!team.authors.includes(c.author)) continue;
+    if (team.repos.includes(c.repo)) continue;
+    crossByRepo[c.repo] = (crossByRepo[c.repo] ?? 0) + c.n;
+  }
+
+  const crossPts = [];
+  for (const [repoId, cn] of Object.entries(crossByRepo)) {
+    const rn = nodes.find(n => n.id === repoId);
+    if (!rn || rn.x == null) continue;
+    const r = rScale(nodeTotals[repoId] ?? 50);
+    crossPts.push({ x: rn.x, y: rn.y, r, commits: cn, weight: cn / teamTotal, id: repoId });
+  }
+
+  return { ownPts: ownNodes.map(n => [n.x, n.y, rScale(nodeTotals[n.id]??50)]), crossPts, centroid };
+}
+
+// ─── OPTION RENDERERS ─────────────────────────────────────────────────────────
+
+function renderNone() { hulls.selectAll('*').remove(); }
+
+function renderOpt1() {
+  hulls.selectAll('*').remove();
+  for (const team of TEAMS) {
+    const { ownPts, crossPts, centroid } = teamData(team);
+    if (ownPts.length < 1) continue;
+    const pts = [...ownPts];
+    for (const cp of crossPts) {
+      const px = centroid.x + (cp.x - centroid.x) * cp.weight;
+      const py = centroid.y + (cp.y - centroid.y) * cp.weight;
+      pts.push([px, py, Math.max(6, cp.r * Math.sqrt(cp.weight))]);
+    }
+    const d = hullD(expandPts(pts));
+    if (!d) continue;
+    hulls.append('path').attr('d', d)
+      .attr('fill',          team.color + '22')
+      .attr('stroke',        team.color)
+      .attr('stroke-width',  2)
+      .attr('stroke-dasharray', '6 4')
+      .attr('stroke-opacity', 0.70);
+  }
+}
+
+function renderOpt2() {
+  hulls.selectAll('*').remove();
+  const shells = [
+    { minW: 0.000, fillA: '0F', sOp: 0.18, sw: 1.2, dash: '9 6' },
+    { minW: 0.035, fillA: '1A', sOp: 0.32, sw: 1.6, dash: '6 4' },
+    { minW: 0.080, fillA: '2C', sOp: 0.52, sw: 2.0, dash: '5 3' },
+    { minW: 0.180, fillA: '4A', sOp: 0.85, sw: 2.0, dash: '0'   },
+  ];
+  for (const team of TEAMS) {
+    const { ownPts, crossPts } = teamData(team);
+    if (ownPts.length < 1) continue;
+    for (const sh of shells) {
+      const qualified = crossPts.filter(cp => cp.weight >= sh.minW);
+      const pts = [...ownPts, ...qualified.map(cp => [cp.x, cp.y, cp.r])];
+      const d   = hullD(expandPts(pts, 28));
+      if (!d) continue;
+      hulls.append('path').attr('d', d)
+        .attr('fill',             team.color + sh.fillA)
+        .attr('stroke',           team.color)
+        .attr('stroke-width',     sh.sw)
+        .attr('stroke-dasharray', sh.dash)
+        .attr('stroke-opacity',   sh.sOp);
+    }
+  }
+}
+
+function renderOpt3() {
+  hulls.selectAll('*').remove();
+  for (const team of TEAMS) {
+    const { ownPts, crossPts } = teamData(team);
+    if (ownPts.length < 1) continue;
+    const fullD = hullD(expandPts([...ownPts, ...crossPts.map(cp => [cp.x, cp.y, cp.r])], 50));
+    if (fullD) {
+      hulls.append('path').attr('d', fullD)
+        .attr('fill',   team.color + '3E')
+        .attr('stroke', team.color + '55')
+        .attr('stroke-width', 3)
+        .attr('filter', `url(#blur-soft-${team.id})`);
+    }
+    const sigCross = crossPts.filter(cp => cp.weight >= 0.07);
+    const sigD = hullD(expandPts([...ownPts, ...sigCross.map(cp => [cp.x, cp.y, cp.r])], 35));
+    if (sigD) {
+      hulls.append('path').attr('d', sigD)
+        .attr('fill',   team.color + '2A')
+        .attr('stroke', team.color + '70')
+        .attr('stroke-width', 2)
+        .attr('filter', `url(#blur-soft-${team.id})`);
+    }
+    const coreD = hullD(expandPts(ownPts, 20));
+    if (coreD) {
+      hulls.append('path').attr('d', coreD)
+        .attr('fill',             team.color + '26')
+        .attr('stroke',           team.color)
+        .attr('stroke-width',     2)
+        .attr('stroke-dasharray', '5 3')
+        .attr('stroke-opacity',   0.78);
+    }
+  }
+}
+
+function renderOpt4() {
+  hulls.selectAll('*').remove();
+  for (const team of TEAMS) {
+    const { ownPts, crossPts } = teamData(team);
+    if (ownPts.length < 1) continue;
+    const g = hulls.append('g').attr('filter', `url(#blur-kde-${team.id})`);
+    for (const [x, y, r] of ownPts) {
+      g.append('circle').attr('cx', x).attr('cy', y)
+        .attr('r',  (r + 48) * 1.9).attr('fill', team.color).attr('opacity', 0.22);
+    }
+    for (const cp of crossPts) {
+      if (cp.weight < 0.002) continue;
+      const blobR = (cp.r + 48) * 1.9 * Math.sqrt(cp.weight) * 2.4;
+      const alpha = Math.min(0.22, 0.22 * cp.weight * 5);
+      g.append('circle').attr('cx', cp.x).attr('cy', cp.y)
+        .attr('r', blobR).attr('fill', team.color).attr('opacity', alpha);
+    }
+  }
+}
+
+// ─── STRUCTURED LAYOUT ────────────────────────────────────────────────────────
+
+let isStructured = false;
+
+const AUTHOR_X = W * 0.22;
+const REPO_X   = W * 0.78;
+const BAND_H   = H / TEAMS.length;
+const BAND_PAD = 22;
+
+function structuredPos(id) {
+  for (let ti = 0; ti < TEAMS.length; ti++) {
+    const team = TEAMS[ti];
+    const innerTop = ti * BAND_H + BAND_PAD;
+    const innerBot = (ti + 1) * BAND_H - BAND_PAD;
+
+    const aIdx = team.authors.indexOf(id);
+    if (aIdx >= 0) {
+      const n = team.authors.length;
+      const y = n === 1 ? (innerTop + innerBot) / 2
+                        : innerTop + (aIdx / (n - 1)) * (innerBot - innerTop);
+      return { x: AUTHOR_X, y };
+    }
+
+    const rIdx = team.repos.indexOf(id);
+    if (rIdx >= 0) {
+      const n = team.repos.length;
+      const y = n === 1 ? (innerTop + innerBot) / 2
+                        : innerTop + (rIdx / (n - 1)) * (innerBot - innerTop);
+      return { x: REPO_X, y };
+    }
+  }
+  return null;
+}
+
+function renderStructured() {
+  hulls.selectAll('*').remove();
+
+  // Column headers
+  hulls.append('text')
+    .attr('x', AUTHOR_X).attr('y', 10)
+    .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
+    .attr('fill', '#94a3b8').attr('font-size', 10).attr('font-weight', 700)
+    .attr('letter-spacing', '.08em').text('AUTHORS');
+  hulls.append('text')
+    .attr('x', REPO_X).attr('y', 10)
+    .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
+    .attr('fill', '#94a3b8').attr('font-size', 10).attr('font-weight', 700)
+    .attr('letter-spacing', '.08em').text('REPOSITORIES');
+
+  TEAMS.forEach((team, ti) => {
+    const y = ti * BAND_H;
+
+    // Colored band background
+    hulls.append('rect')
+      .attr('x', 0).attr('y', y + (ti === 0 ? 16 : 0))
+      .attr('width', W)
+      .attr('height', BAND_H - (ti === 0 ? 16 : 0))
+      .attr('fill', team.color + '14')
+      .attr('stroke', team.color + '40')
+      .attr('stroke-width', ti === 0 ? 0 : 0)
+      .attr('pointer-events', 'none');
+
+    // Top divider line
+    if (ti > 0) {
+      hulls.append('line')
+        .attr('x1', 0).attr('y1', y).attr('x2', W).attr('y2', y)
+        .attr('stroke', team.color + '60').attr('stroke-width', 1.5);
+    }
+
+    // Team name label (left margin)
+    hulls.append('text')
+      .attr('x', 14).attr('y', y + BAND_H / 2 + (ti === 0 ? 8 : 0))
+      .attr('dominant-baseline', 'middle')
+      .attr('fill', team.color)
+      .attr('font-size', 11.5).attr('font-weight', 700)
+      .attr('opacity', 0.90)
+      .attr('pointer-events', 'none')
+      .text(team.name);
+
+    // Faint vertical separator between author and repo columns
+    hulls.append('line')
+      .attr('x1', W / 2).attr('y1', y + 12)
+      .attr('x2', W / 2).attr('y2', (ti + 1) * BAND_H - 8)
+      .attr('stroke', '#e2e8f0').attr('stroke-width', 1)
+      .attr('stroke-dasharray', '5 4');
+  });
+}
+
+function switchToStructured() {
+  isStructured = true;
+  for (const n of nodes) {
+    const p = structuredPos(n.id);
+    if (p) { n.fx = p.x; n.fy = p.y; }
+  }
+  sim.alpha(0.5).restart();
+  nodeEls.style('cursor', 'default');
+  document.getElementById('bound-section').classList.add('disabled');
+  renderStructured();
+}
+
+function switchToForce() {
+  isStructured = false;
+  for (const n of nodes) { n.fx = null; n.fy = null; }
+  sim.alpha(0.6).restart();
+  nodeEls.style('cursor', 'grab');
+  document.getElementById('bound-section').classList.remove('disabled');
+  renderHulls();
+}
+
+// ─── DESCRIPTIONS ─────────────────────────────────────────────────────────────
+
+const DESCS = {
+  none: `No team boundaries shown — only the contribution network. Observe how red cross-team
+         edges reveal four patterns: Alice's heavy flow into Frontend repos (A), the
+         Frontend team writing their own backend-api changes (B), everyone contributing
+         to Platform CI (C), and the Data team's near-isolation (D).`,
+
+  structured: `<strong>⊞ Structured layout</strong> — positions are fully data-driven:
+        authors are placed in their team's horizontal band on the left; repositories
+        in the right column. The layout is stable and repeatable — dragging is disabled.
+        <span class="story">
+          <strong>Why it's honest:</strong> in force-directed mode, dragging any node
+          breaks the spatial meaning of hull boundaries. Here, the bands <em>are</em>
+          the data — a red edge crossing a band line is a Conway's Law signal, regardless
+          of how many nodes exist or where they are. Compare: Alice's two red lines
+          cross from the Backend band down to the Frontend band (scenario A), while the
+          Data team's edges barely leave their band (scenario D).
+        </span>`,
+
+  '1': `<strong>① Weighted phantom points:</strong> Instead of pulling the hull all the
+        way to a cross-team repo, a <em>phantom point</em> is placed between the team's
+        centroid and that repo — at a fraction equal to <em>cross-team commits ÷ team's
+        total commits</em>. Alice's 65 commits to <em>web-app</em> (~32% of Backend's output)
+        pulls Alpha's hull far toward the Frontend cluster.
+        Jake's 6 commits to <em>data-service</em> (~3%) barely move Gamma's edge.
+        The shape is a crisp hull — just an honest one. But if you drag nodes, the hull
+        follows the positions, not the data.`,
+
+  '2': `<strong>② Concentric opacity shells:</strong> Four nested hulls at thresholds
+        0%, 3.5%, 8%, and 18%. The outermost shell is faintest; the innermost solid ring
+        covers only owned nodes. Reading inward = reading confidence.
+        You can see Alice's Backend team has two shells reaching into Frontend territory —
+        the outer faint ring (any signal) and a second ring (>3.5%), indicating
+        <em>consistently</em> significant boundary crossing — a Conway alert.
+        The Data team's shells barely leave their cluster.`,
+
+  '3': `<strong>③ SVG blur layers:</strong> Three stacked hulls: a large blurred full extent,
+        a blurred mid-layer for contributions >7%, and a crisp dashed owned-core boundary.
+        Blur makes peripheral reach look visually uncertain — it <em>might</em> extend there.
+        The crisp dashed ring is the authoritative ownership.
+        The Backend team's blurred halo bleeds noticeably into Frontend space (scenarios A).
+        The Platform team has a compact crisp core — most other teams' CI contributions
+        appear in the outer halo only (scenario C).`,
+
+  '4': `<strong>④ Kernel density field:</strong> Each owned node emits a full-strength Gaussian
+        blob; each cross-team repo emits a blob with radius and opacity scaled by <em>√weight</em>.
+        No hard boundary — the gradient <em>is</em> the signal.
+        Alice's 65+28 commits into Frontend create a visible halo bleeding across (A).
+        The Platform team's blobs show everyone touching ci-pipeline (C), producing overlapping
+        halos from Backend, Frontend, and Platform — three-way density overlap.
+        Jake's 6 commits to data-service are nearly invisible (D).`,
+};
+
+// ─── TICK HANDLER ─────────────────────────────────────────────────────────────
+
+let curOpt = 'none';
+
+function renderHulls() {
+  ({ none:renderNone, '1':renderOpt1, '2':renderOpt2, '3':renderOpt3, '4':renderOpt4 }
+    [curOpt] ?? renderNone)();
+}
+
+sim.on('tick', () => {
+  linkEls.each(function(d) {
+    const dx  = d.target.x - d.source.x;
+    const dy  = d.target.y - d.source.y;
+    const len = Math.sqrt(dx*dx + dy*dy) || 1;
+    const ux  = dx/len, uy = dy/len;
+    const sr  = rScale(nodeTotals[d.source.id] ?? 50) + 3;
+    const tr  = rScale(nodeTotals[d.target.id] ?? 50) + 3;
+    d3.select(this)
+      .attr('x1', d.source.x + ux*sr).attr('y1', d.source.y + uy*sr)
+      .attr('x2', d.target.x - ux*tr).attr('y2', d.target.y - uy*tr);
+  });
+  nodeEls.attr('transform', d => `translate(${d.x??0},${d.y??0})`);
+  if (!isStructured) renderHulls();
+});
+
+// ─── CONTROLS ─────────────────────────────────────────────────────────────────
+
+document.getElementById('btn-force').addEventListener('click', () => {
+  if (!isStructured) return;
+  document.getElementById('btn-struct').classList.remove('active');
+  document.getElementById('btn-force').classList.add('active');
+  document.getElementById('desc-card').innerHTML = DESCS[curOpt] ?? '';
+  switchToForce();
+});
+
+document.getElementById('btn-struct').addEventListener('click', () => {
+  if (isStructured) return;
+  document.getElementById('btn-force').classList.remove('active');
+  document.getElementById('btn-struct').classList.add('active');
+  document.getElementById('desc-card').innerHTML = DESCS.structured;
+  switchToStructured();
+});
+
+document.querySelectorAll('.opt-btn[data-opt]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.opt-btn[data-opt]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    curOpt = btn.dataset.opt;
+    renderHulls();
+    document.getElementById('desc-card').innerHTML = DESCS[curOpt] ?? '';
+  });
+});
+
+// ─── LEGEND ───────────────────────────────────────────────────────────────────
+
+const lb = document.getElementById('legend-bar');
+for (const t of TEAMS) {
+  lb.innerHTML += `
+    <div class="li">
+      <span class="li-dot" style="background:${t.color}"></span>Author
+      <span class="li-sq"  style="background:${t.color}"></span>${t.name}
+    </div>`;
+}
+lb.innerHTML += `
+  <div class="li"><span class="li-line" style="background:#cbd5e1"></span>Within-team</div>
+  <div class="li"><span class="li-line" style="background:#ef4444"></span>Cross-team</div>`;
+
+// ─── CROSS-TEAM TABLE ─────────────────────────────────────────────────────────
+
+const crossContribs = CONTRIBS.filter(isCross).sort((a, b) => b.n - a.n);
+const tbody = document.getElementById('cross-tbody');
+
+for (const c of crossContribs) {
+  const at  = authorTeamMap[c.author];
+  const rt  = repoTeamMap[c.repo];
+  const pct = (c.n / authorTotals[c.author] * 100).toFixed(1);
+  const w   = c.n / authorTotals[c.author];
+  const sig = w > 0.12 ? '🔴 Strong' : w > 0.045 ? '🟡 Medium' : '⚪ Weak';
+  const scen = SCENARIOS[`${c.author}→${c.repo}`] ?? '';
+  const scenLabel = SCENARIO_LABELS[scen] ?? '';
+
+  tbody.innerHTML += `
+    <tr>
+      <td>
+        <span style="color:${at.color};font-weight:700">${c.author}</span>
+        <span style="color:#94a3b8;font-size:11px"> (${at.name})</span>
+      </td>
+      <td>
+        <span style="color:${rt.color};font-weight:700">${c.repo}</span>
+        <span style="color:#94a3b8;font-size:11px"> (${rt.name})</span>
+      </td>
+      <td style="font-family:monospace;font-weight:600">${c.n}</td>
+      <td>
+        <span style="font-weight:600">${pct}%</span>
+        <span class="wbar-bg">
+          <span class="wbar-fill" style="width:${Math.min(100, pct*2.8)}%;background:${at.color}"></span>
+        </span>
+      </td>
+      <td>${sig}</td>
+      <td style="font-size:11px;color:#64748b">${scenLabel}</td>
+    </tr>`;
+}
+</script>
+</body>
+</html>
