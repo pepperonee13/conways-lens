@@ -331,6 +331,15 @@ function drawGraph() {
   });
   const links = rawLinks.map(l => ({ ...l }));
 
+  // Detect bidirectional pairs and mark them for arc rendering.
+  // Both directions use curvature = 1 — when the edge is reversed ux/uy negate
+  // naturally, so the perpendicular offset lands on opposite sides of the midpoint.
+  const linkKeySet = new Set(links.map(l => `${l.source}\x00${l.target}`));
+  for (const l of links) {
+    const rev = `${l.target}\x00${l.source}`;
+    l.curvature = linkKeySet.has(rev) ? 1 : 0;
+  }
+
   const hasTeams = effectiveTeams.value.length > 0;
 
   // Rebuild team-membership lookup maps used by edge helpers
@@ -418,7 +427,8 @@ function drawGraph() {
     .force('teamGravity', teamGravity);
 
   linkEls = root.append('g')
-    .selectAll('line').data(links).join('line')
+    .selectAll('path').data(links).join('path')
+    .attr('fill', 'none')
     .attr('marker-end', 'url(#arrow)')
     .style('cursor', 'default')
     .on('mouseenter', (e, d) => {
@@ -691,11 +701,21 @@ function drawGraph() {
             ? diamondEdgeDist(ux, uy, d.target.r) + 2
             : squareEdgeDist(ux, uy, d.target.r) + 2;
 
-      d3.select(this)
-        .attr('x1', d.source.x + ux * srcOffset)
-        .attr('y1', d.source.y + uy * srcOffset)
-        .attr('x2', d.target.x - ux * tgtOffset)
-        .attr('y2', d.target.y - uy * tgtOffset);
+      const x1 = d.source.x + ux * srcOffset;
+      const y1 = d.source.y + uy * srcOffset;
+      const x2 = d.target.x - ux * tgtOffset;
+      const y2 = d.target.y - uy * tgtOffset;
+
+      let pathD;
+      if (d.curvature) {
+        const mx = (x1 + x2) / 2;
+        const my = (y1 + y2) / 2;
+        const CURVE = 50;
+        pathD = `M${x1},${y1} Q${mx - uy * CURVE * d.curvature},${my + ux * CURVE * d.curvature} ${x2},${y2}`;
+      } else {
+        pathD = `M${x1},${y1} L${x2},${y2}`;
+      }
+      d3.select(this).attr('d', pathD);
     });
 
     nodeEls.attr('transform', d => `translate(${d.x ?? 0},${d.y ?? 0})`);
