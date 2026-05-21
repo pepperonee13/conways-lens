@@ -7,8 +7,7 @@
           <span class="legend"><span class="legend-circle"></span>Author</span>
           <span class="legend"><span class="legend-square"></span>Repository</span>
           <span class="legend"><span class="legend-team"></span>Team</span>
-          <span class="legend"><span class="legend-folder"></span>Folder</span>
-          &nbsp;·&nbsp; Node size = total commits &nbsp;·&nbsp; Drag nodes · Click to expand/collapse
+          &nbsp;·&nbsp; Node size = total commits &nbsp;·&nbsp; Drag nodes · Click team to expand/collapse
         </p>
         <button v-if="effectiveTeams.length > 0"
                 @click="store.crossTeamOnly = !store.crossTeamOnly"
@@ -64,7 +63,7 @@
     <div v-if="!hasData" class="empty-state">No contribution data to display.</div>
 
     <template v-else>
-      <p class="hint">Scroll to zoom · Drag nodes · Click team/repo/folder nodes to expand or collapse</p>
+      <p class="hint">Scroll to zoom · Drag nodes · Click team nodes to expand or collapse</p>
       <div class="svg-wrap">
         <svg ref="svgRef" class="graph-svg"></svg>
       </div>
@@ -95,7 +94,7 @@ import { useLensStore } from '../stores/useLensStore';
 import { useAnonymize } from '../composables/useAnonymize.js';
 
 const store = useLensStore();
-const { graphData, nodeColors, crossTeamOnly, dateBounds, activeRange, expandedTeams, expandedNodes, reposWithFilePaths, syntheticTeam } = storeToRefs(store);
+const { graphData, nodeColors, crossTeamOnly, dateBounds, activeRange, expandedTeams, syntheticTeam } = storeToRefs(store);
 
 // Real teams + synthetic "Outside Contributors" team (when it exists)
 const effectiveTeams = computed(() =>
@@ -116,8 +115,7 @@ const tooltip      = reactive({
   show: false, x: 0, y: 0,
   isLink: false,
   name: '', type: '', commits: 0,
-  teamName: '', folderPath: '', repoId: '', depth: 0,
-  repoCount: 0, authorCount: 0,
+  teamName: '', repoCount: 0, authorCount: 0,
   source: '', target: '', action: '',
 });
 
@@ -126,7 +124,6 @@ const hasData = computed(() => graphData.value.nodes.length > 0);
 const tooltipName = computed(() => {
   if (tooltip.type === 'author') return anonymize(tooltip.name);
   if (tooltip.type === 'team')   return tooltip.teamName;
-  if (tooltip.type === 'folder') return tooltip.folderPath;
   return tooltip.name;
 });
 
@@ -134,7 +131,6 @@ const tooltipDetail = computed(() => {
   const c = tooltip.commits.toLocaleString();
   if (tooltip.type === 'author') return `Author · ${c} commits`;
   if (tooltip.type === 'team')   return `Team · ${tooltip.repoCount} ${tooltip.repoCount === 1 ? 'repo' : 'repos'} · ${tooltip.authorCount} ${tooltip.authorCount === 1 ? 'dev' : 'devs'} · ${c} commits`;
-  if (tooltip.type === 'folder') return `Folder (depth ${tooltip.depth}) · ${c} commits`;
   return `Repository · ${c} commits`;
 });
 
@@ -166,12 +162,6 @@ function squareEdgeDist(ux, uy, r) {
   const tx = Math.abs(ux) > 1e-9 ? r / Math.abs(ux) : Infinity;
   const ty = Math.abs(uy) > 1e-9 ? r / Math.abs(uy) : Infinity;
   return Math.min(tx, ty);
-}
-
-// Diamond edge termination for folder nodes
-function diamondEdgeDist(ux, uy, r) {
-  const d = Math.abs(ux) + Math.abs(uy);
-  return d > 1e-9 ? r / d : r;
 }
 
 // ── Edge weight helpers ──────────────────────────────────────────────────────
@@ -244,25 +234,15 @@ function updateNodeColors() {
 
 
 function isNodeExpandable(d) {
-  if (d.type === 'team')   return true;
-  if (d.type === 'repo')   return reposWithFilePaths.value.has(d.id);
-  if (d.type === 'folder') return d.depth < 4;
-  return false;
+  return d.type === 'team';
 }
 
 function isNodeExpanded(d) {
-  if (d.type === 'team')   return expandedTeams.value.has(d.teamId);
-  return expandedNodes.value.has(d.id);
+  return expandedTeams.value.has(d.teamId);
 }
 
 function handleNodeClick(d) {
-  if (d.type === 'team') {
-    store.toggleTeamExpansion(d.teamId);
-  } else if (d.type === 'repo' && reposWithFilePaths.value.has(d.id)) {
-    store.toggleNodeExpansion(d.id);
-  } else if (d.type === 'folder' && d.depth < 4) {
-    store.toggleNodeExpansion(d.id);
-  }
+  if (d.type === 'team') store.toggleTeamExpansion(d.teamId);
 }
 
 function drawGraph() {
@@ -457,20 +437,14 @@ function drawGraph() {
     })
     .on('mouseenter', (e, d) => {
       highlightNode(d);
-      let action = '';
-      if (d.type === 'team') {
-        action = expandedTeams.value.has(d.teamId) ? 'Click to collapse' : 'Click to expand repos';
-      } else if (d.type === 'repo' && reposWithFilePaths.value.has(d.id)) {
-        action = expandedNodes.value.has(d.id) ? 'Click to collapse' : 'Click to expand folders';
-      } else if (d.type === 'folder' && d.depth < 4) {
-        action = expandedNodes.value.has(d.id) ? 'Click to collapse' : 'Click to expand subfolders';
-      }
+      const action = d.type === 'team'
+        ? (expandedTeams.value.has(d.teamId) ? 'Click to collapse' : 'Click to expand')
+        : '';
       Object.assign(tooltip, {
         show: true, x: e.clientX + 14, y: e.clientY - 10,
         isLink: false,
         name: d.id, type: d.type, commits: d.commits,
-        teamName: d.name ?? '', folderPath: d.folderPath ?? '', repoId: d.repoId ?? '',
-        depth: d.depth ?? 0, repoCount: d.repoCount ?? 0, authorCount: d.authorCount ?? 0,
+        teamName: d.name ?? '', repoCount: d.repoCount ?? 0, authorCount: d.authorCount ?? 0,
         action,
       });
     })
@@ -520,13 +494,6 @@ function drawGraph() {
     .attr('pointer-events', 'none')
     .text(d => `${d.repoCount} ${d.repoCount === 1 ? 'repo' : 'repos'} · ${d.authorCount} ${d.authorCount === 1 ? 'dev' : 'devs'}`);
 
-  // Folder nodes — diamond
-  nodeEls.filter(d => d.type === 'folder')
-    .append('path')
-    .attr('d', d => `M0,${-d.r} L${d.r},0 L0,${d.r} L${-d.r},0 Z`)
-    .attr('fill', d => store.getNodeColor(d.repoId, 'repo'))
-    .attr('stroke', '#fff').attr('stroke-width', 2.5).attr('opacity', 0.88);
-
   // Expand/collapse badge on clickable non-author nodes (+ or −)
   nodeEls.filter(d => isNodeExpandable(d))
     .append('circle')
@@ -553,11 +520,7 @@ function drawGraph() {
     .attr('dy', d => d.r + 13)
     .attr('fill', '#374151').attr('font-size', '11px').attr('font-weight', '600')
     .attr('pointer-events', 'none')
-    .text(d => {
-      if (d.type === 'author') return anonymize(d.id);
-      if (d.type === 'folder') return d.label || d.folderPath;
-      return d.id;
-    });
+    .text(d => d.type === 'author' ? anonymize(d.id) : d.id);
 
   // Anchor pills for expanded teams — float at centroid, click to collapse
   const PILL_H = 28;
@@ -626,17 +589,13 @@ function drawGraph() {
         ? d.source.r + 3
         : d.source.type === 'team'
           ? squareEdgeDist(ux, uy, d.source.r + 14)
-          : d.source.type === 'folder'
-            ? diamondEdgeDist(ux, uy, d.source.r) + 2
-            : squareEdgeDist(ux, uy, d.source.r) + 2;
+          : squareEdgeDist(ux, uy, d.source.r) + 2;
 
       const tgtOffset = d.target.type === 'author'
         ? d.target.r + 3
         : d.target.type === 'team'
           ? squareEdgeDist(ux, uy, d.target.r + 14)
-          : d.target.type === 'folder'
-            ? diamondEdgeDist(ux, uy, d.target.r) + 2
-            : squareEdgeDist(ux, uy, d.target.r) + 2;
+          : squareEdgeDist(ux, uy, d.target.r) + 2;
 
       const x1 = d.source.x + ux * srcOffset;
       const y1 = d.source.y + uy * srcOffset;
@@ -667,8 +626,7 @@ function drawGraph() {
           if (n.x == null || n.y == null) continue;
           if (
             (n.type === 'author' && authorIds.has(n.id)) ||
-            (n.type === 'repo'   && repoIds.has(n.id))   ||
-            (n.type === 'folder' && repoIds.has(n.repoId))
+            (n.type === 'repo'   && repoIds.has(n.id))
           ) {
             minX = Math.min(minX, n.x);
             maxX = Math.max(maxX, n.x);
@@ -746,10 +704,6 @@ onMounted(() => {
 .legend-square { display: inline-block; width: 12px; height: 12px; border-radius: 2px; background: #088F9B; }
 .legend-team   {
   display: inline-block; width: 22px; height: 12px; border-radius: 6px; background: #F08223;
-}
-.legend-folder {
-  display: inline-block; width: 12px; height: 12px; background: #5A4A80;
-  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
 }
 .date-filter-row {
   @apply flex items-center justify-center gap-2 mt-3 flex-wrap;

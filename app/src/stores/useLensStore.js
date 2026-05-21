@@ -32,8 +32,7 @@ export const useLensStore = defineStore('lens', () => {
   const activeRange = ref({ since: null, until: null });
 
   // Drill-down expansion state
-  const expandedTeams = ref(new Set()); // Set<teamId> — teams expanded to show their repo nodes
-  const expandedNodes = ref(new Set()); // Set<nodeId> — repo IDs and folder IDs expanded to show children
+  const expandedTeams = ref(new Set()); // Set<teamId> — teams expanded to show their repo/author nodes
 
   async function loadTimelineData(file) {
     dataError.value = null;
@@ -51,7 +50,6 @@ export const useLensStore = defineStore('lens', () => {
       dataLoaded.value   = true;
       activeRange.value  = { since: null, until: null };
       expandedTeams.value = new Set();
-      expandedNodes.value = new Set();
     } catch (err) {
       dataError.value  = err.message;
       dataLoaded.value = false;
@@ -69,15 +67,6 @@ export const useLensStore = defineStore('lens', () => {
   const allRepos = computed(() =>
     [...new Set(timelineData.value.map(r => r.Product))].filter(Boolean).sort()
   );
-
-  // Repos that have FilePath data — these support folder drill-down
-  const reposWithFilePaths = computed(() => {
-    const s = new Set();
-    for (const row of timelineData.value) {
-      if (row.FilePath && row.Product) s.add(row.Product);
-    }
-    return s;
-  });
 
   const ignoredSet = computed(() => new Set(ignoredAuthors.value));
 
@@ -148,47 +137,10 @@ export const useLensStore = defineStore('lens', () => {
       }
     }
 
-    // Given a repoId and filePath, find the effective target node ID based on current expansion state.
-    // Walks from repo → folder depth-1 → depth-2 … up to depth 4, stopping at the first unexpanded level.
-    function getEffectiveNodeId(repoId, filePath) {
-      if (hasTeamSetup) {
-        const repoTeamId = repoToTeam[repoId];
-        if (repoTeamId && !expandedTeams.value.has(repoTeamId)) {
-          return `team:${repoTeamId}`;
-        }
-      }
-
-      if (!expandedNodes.value.has(repoId) || !filePath) {
-        return repoId;
-      }
-
-      const normalized = filePath.replace(/\\/g, '/');
-      const dirParts   = normalized.split('/').slice(0, -1); // strip filename
-
-      if (dirParts.length === 0) {
-        return `${repoId}::(root)`;
-      }
-
-      for (let d = 1; d <= Math.min(4, dirParts.length); d++) {
-        const folderPath   = dirParts.slice(0, d).join('/');
-        const folderNodeId = `${repoId}::${folderPath}`;
-
-        if (!expandedNodes.value.has(folderNodeId)) {
-          return folderNodeId; // this folder is not expanded — land here
-        }
-        if (d === dirParts.length || d === 4) {
-          return folderNodeId; // file sits directly in this folder, or we've hit max depth
-        }
-        // folder IS expanded — descend one more level
-      }
-
-      return repoId; // unreachable fallback
-    }
-
     // Accumulate edges: `source|||target` → Set<commitSHA>
     const edgeMap     = {};
     const sourceTypes = {}; // id → 'author' | 'team'
-    const targetIsRepo = new Set(); // ids that appear as plain repo targets
+    const targetIsRepo = new Set(); // ids that appear as repo targets
 
     function addEdge(source, target, sha) {
       const key = `${source}|||${target}`;
@@ -202,12 +154,18 @@ export const useLensStore = defineStore('lens', () => {
       const author = normalizeAuthor(row.Author);
       if (ignoredSet.value.has(author)) continue;
 
-      const repoId   = row.Product;
-      const filePath = row.FilePath || '';
-      const targetId = getEffectiveNodeId(repoId, filePath);
+      const repoId = row.Product;
 
-      // Track plain repo targets (not team or folder) so we can assign the correct node type later
-      if (!targetId.startsWith('team:') && !targetId.includes('::')) {
+      // Resolve target: collapsed team node or plain repo
+      let targetId = repoId;
+      if (hasTeamSetup) {
+        const repoTeamId = repoToTeam[repoId];
+        if (repoTeamId && !expandedTeams.value.has(repoTeamId)) {
+          targetId = `team:${repoTeamId}`;
+        }
+      }
+
+      if (!targetId.startsWith('team:')) {
         targetIsRepo.add(targetId);
       }
 
@@ -256,10 +214,9 @@ export const useLensStore = defineStore('lens', () => {
         // team → team: always cross-team (self-loops already excluded above)
         if (src.startsWith('team:') || tgt.startsWith('team:')) return true;
 
-        // individual author → repo / folder
+        // individual author → repo
         const authorTeams = authorToTeams[src] ?? new Set();
-        const repoId      = tgt.includes('::') ? tgt.split('::')[0] : tgt;
-        const repoTeamId  = repoToTeam[repoId];
+        const repoTeamId  = repoToTeam[tgt];
         if (!repoTeamId) return true;
         if (authorTeams.size === 0) return true;
         return [...authorTeams].some(tid => tid !== repoTeamId);
@@ -298,14 +255,6 @@ export const useLensStore = defineStore('lens', () => {
           commits,
         };
       }
-      if (id.includes('::')) {
-        const sep        = id.indexOf('::');
-        const repoId     = id.slice(0, sep);
-        const folderPath = id.slice(sep + 2);
-        const depth      = folderPath === '(root)' ? 1 : folderPath.split('/').length;
-        const label      = folderPath === '(root)' ? '(root)' : folderPath.split('/').at(-1);
-        return { id, type: 'folder', repoId, folderPath, depth, label, commits };
-      }
       // Author or repo — authors appear only as sources, repos only as targets
       const type = targetIsRepo.has(id) ? 'repo' : (sourceTypes[id] === 'team' ? 'team' : 'author');
       return { id, type, commits };
@@ -333,36 +282,9 @@ export const useLensStore = defineStore('lens', () => {
 
   function toggleTeamExpansion(teamId) {
     const next = new Set(expandedTeams.value);
-    if (next.has(teamId)) {
-      next.delete(teamId);
-      // Collapse all repo/folder expansions that belong to this team
-      const team = teams.value.find(t => t.id === teamId) ?? (syntheticTeam.value?.id === teamId ? syntheticTeam.value : null);
-      if (team) {
-        const nodeNext = new Set(expandedNodes.value);
-        for (const repo of (team.repos ?? [])) {
-          for (const id of nodeNext) {
-            if (id === repo || id.startsWith(repo + '::')) nodeNext.delete(id);
-          }
-        }
-        expandedNodes.value = nodeNext;
-      }
-    } else {
-      next.add(teamId);
-    }
+    if (next.has(teamId)) next.delete(teamId);
+    else next.add(teamId);
     expandedTeams.value = next;
-  }
-
-  function toggleNodeExpansion(nodeId) {
-    const next = new Set(expandedNodes.value);
-    if (next.has(nodeId)) {
-      // Collapse this node and all its expanded descendants
-      for (const id of [...next]) {
-        if (id === nodeId || id.startsWith(nodeId + '::')) next.delete(id);
-      }
-    } else {
-      next.add(nodeId);
-    }
-    expandedNodes.value = next;
   }
 
   // Team CRUD
@@ -422,14 +344,14 @@ export const useLensStore = defineStore('lens', () => {
     teams, syntheticTeam, authorNormalizations, ignoredAuthors,
     dateBounds, activeRange,
     crossTeamOnly,
-    expandedTeams, expandedNodes, reposWithFilePaths,
+    expandedTeams,
     allRawAuthors, allAuthors, allRepos,
     graphData, nodeColors, getNodeColor,
     loadTimelineData,
     addTeam, removeTeam,
     setNormalization, removeNormalization,
     ignoreAuthor, unignoreAuthor,
-    toggleTeamExpansion, toggleNodeExpansion,
+    toggleTeamExpansion,
     exportMappings, importMappings,
   };
 });
