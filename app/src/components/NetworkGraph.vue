@@ -39,6 +39,15 @@
               </div>
               <p class="viz-desc">Individual author nodes &amp; edges</p>
               <div class="viz-divider"></div>
+              <div class="viz-row">
+                <span class="viz-row-label">Boundaries</span>
+              </div>
+              <div class="viz-boundary-row">
+                <button :class="['viz-boundary-btn', { active: teamBoundary === 'none' }]"    @click="teamBoundary = 'none'">None</button>
+                <button :class="['viz-boundary-btn', { active: teamBoundary === 'blur' }]"    @click="teamBoundary = 'blur'">Blur</button>
+                <button :class="['viz-boundary-btn', { active: teamBoundary === 'density' }]" @click="teamBoundary = 'density'">Density</button>
+              </div>
+              <div class="viz-divider"></div>
             </template>
 
             <div class="viz-section-title">Physics</div>
@@ -159,9 +168,10 @@ const vizDropRef   = ref(null);
 const dims         = reactive({ w: 900, h: 600 });
 
 // Visualization panel state (ephemeral — not persisted)
-const vizOpen     = ref(false);
-const edgeWeight  = ref(true);
-const showAuthors = ref(false);
+const vizOpen      = ref(false);
+const edgeWeight   = ref(true);
+const showAuthors  = ref(false);
+const teamBoundary = ref('none'); // 'none' | 'blur' | 'density'
 
 // Force simulation config — all tunable values in one place, ready for UI binding
 const SIM_DEFAULTS = {
@@ -219,12 +229,69 @@ const DIM_OPACITY   = 0.08;
 
 const savedPositions = {};
 
-let nodeEls      = null;
-let linkEls      = null;
-let anchorEls    = null;
-let sim          = null;
-let nodeTeamId   = {}; // nodeId → teamId  (rebuilt each drawGraph)
+let nodeEls       = null;
+let linkEls       = null;
+let anchorEls     = null;
+let cloudGroup    = null;
+let sim           = null;
+let simNodes      = null; // live simulation node array, shared with drawClouds
+let nodeTeamId    = {}; // nodeId → teamId  (rebuilt each drawGraph)
 let nodeTeamColor = {}; // nodeId → hex color
+
+// ── Team boundary helpers ──────────────────────────────────────────────────
+
+function teamHullPath(pts, padding) {
+  const samples = [];
+  for (const [x, y, r] of pts) {
+    const rad = (r ?? 20) + padding;
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      samples.push([x + Math.cos(a) * rad, y + Math.sin(a) * rad]);
+    }
+  }
+  const hull = d3.polygonHull(samples);
+  return hull ? `M${hull.join('L')}Z` : null;
+}
+
+function drawClouds() {
+  if (!cloudGroup || !simNodes) return;
+  cloudGroup.selectAll('*').remove();
+  if (teamBoundary.value === 'none') return;
+
+  for (const t of effectiveTeams.value) {
+    // Only cloud expanded teams — collapsed teams are already a labeled pill
+    if (!expandedTeams.value.has(t.id)) continue;
+    const pts = simNodes
+      .filter(n => n.x != null && nodeTeamId[n.id] === t.id)
+      .map(n => [n.x, n.y, n.r]);
+    if (pts.length < 1) continue;
+
+    if (teamBoundary.value === 'blur') {
+      // Outer blurred halo
+      const fullPath = teamHullPath(pts, 52);
+      if (fullPath)
+        cloudGroup.append('path').attr('d', fullPath)
+          .attr('fill', t.color + '3E').attr('stroke', t.color + '55')
+          .attr('stroke-width', 3).attr('filter', `url(#blur-soft-${t.id})`);
+      // Crisp core boundary
+      const corePath = teamHullPath(pts, 22);
+      if (corePath)
+        cloudGroup.append('path').attr('d', corePath)
+          .attr('fill', t.color + '26').attr('stroke', t.color)
+          .attr('stroke-width', 2).attr('stroke-dasharray', '5 3')
+          .attr('stroke-opacity', 0.65);
+
+    } else if (teamBoundary.value === 'density') {
+      // Gaussian blob per node, all under one heavy blur filter
+      const g = cloudGroup.append('g').attr('filter', `url(#blur-kde-${t.id})`);
+      for (const [x, y, r] of pts)
+        g.append('circle').attr('cx', x).attr('cy', y)
+          .attr('r', (r + 44) * 1.8).attr('fill', t.color).attr('opacity', 0.22);
+    }
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 
 function squareEdgeDist(ux, uy, r) {
   const tx = Math.abs(ux) > 1e-9 ? r / Math.abs(ux) : Infinity;
@@ -403,6 +470,16 @@ function drawGraph() {
     .attr('markerUnits', 'userSpaceOnUse').attr('orient', 'auto')
     .append('path').attr('d', 'M0,-5L10,0L0,5').attr('fill', 'context-stroke');
 
+  // Per-team blur filters — one per team to prevent color bleed between overlapping teams
+  for (const t of effectiveTeams.value) {
+    defs.append('filter').attr('id', `blur-soft-${t.id}`)
+      .attr('x', '-80%').attr('y', '-80%').attr('width', '260%').attr('height', '260%')
+      .append('feGaussianBlur').attr('stdDeviation', 18);
+    defs.append('filter').attr('id', `blur-kde-${t.id}`)
+      .attr('x', '-100%').attr('y', '-100%').attr('width', '300%').attr('height', '300%')
+      .append('feGaussianBlur').attr('stdDeviation', 38);
+  }
+
   const root = svg.append('g');
   svg.call(d3.zoom().scaleExtent([0.2, 4]).on('zoom', e => root.attr('transform', e.transform)));
 
@@ -477,6 +554,10 @@ function drawGraph() {
     }, w / 2, h / 2).strength(cfg.radialStrength))
     .force('collide', d3.forceCollide(d => d.r + (d.type === 'team' ? cfg.teamCollide : cfg.collide)))
     .force('teamGravity', teamGravity);
+
+  // Cloud group sits before links + nodes so boundaries render behind everything
+  simNodes   = nodes;
+  cloudGroup = root.append('g').attr('class', 'team-clouds').attr('pointer-events', 'none');
 
   linkEls = root.append('g')
     .selectAll('path').data(links).join('path')
@@ -698,6 +779,7 @@ function drawGraph() {
     });
 
     nodeEls.attr('transform', d => `translate(${d.x ?? 0},${d.y ?? 0})`);
+    drawClouds();
 
     // Float each anchor pill above the topmost node of its team's cluster
     if (anchorEls) {
@@ -733,12 +815,13 @@ function updateSize() {
   drawGraph();
 }
 
-watch(graphData,    () => drawGraph(), { deep: true });
-watch(nodeColors,   () => updateNodeColors());
-watch(dims,         () => drawGraph());
-watch(edgeWeight,   () => updateEdgeStyles());
-watch(showAuthors,  () => drawGraph());
-watch(simConfig,    () => drawGraph(), { deep: true });
+watch(graphData,      () => drawGraph(), { deep: true });
+watch(nodeColors,     () => updateNodeColors());
+watch(dims,           () => drawGraph());
+watch(edgeWeight,     () => updateEdgeStyles());
+watch(showAuthors,    () => drawGraph());
+watch(simConfig,      () => drawGraph(), { deep: true });
+watch(teamBoundary,   () => drawClouds());
 
 function handleDocClick(e) {
   if (vizOpen.value && vizDropRef.value && !vizDropRef.value.contains(e.target))
@@ -857,4 +940,12 @@ onMounted(() => {
   border: 1px solid #e2e8f0; background: transparent; cursor: pointer;
 }
 .viz-reset-btn:hover { border-color: #225EA9; color: #225EA9; }
+.viz-boundary-row { display: flex; gap: 4px; margin: 4px 0 2px; }
+.viz-boundary-btn {
+  flex: 1; padding: 3px 0; border-radius: 6px; font-size: 11px; font-weight: 600;
+  border: 1.5px solid #e2e8f0; color: #64748b; background: transparent; cursor: pointer;
+  transition: all 0.12s;
+}
+.viz-boundary-btn:hover  { border-color: #088F9B; color: #088F9B; }
+.viz-boundary-btn.active { background: #088F9B; border-color: #088F9B; color: #fff; }
 </style>
