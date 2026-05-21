@@ -80,6 +80,13 @@
             <input type="range" class="viz-slider" min="0.02" max="0.5" step="0.01"
                    v-model.number="simConfig.radialStrength" />
 
+            <div class="viz-row">
+              <span class="viz-row-label">Team gravity</span>
+              <span class="viz-val">{{ simConfig.teamGravity.toFixed(2) }}</span>
+            </div>
+            <input type="range" class="viz-slider" min="0" max="0.4" step="0.01"
+                   v-model.number="simConfig.teamGravity" />
+
             <button class="viz-reset-btn" @click="resetSimConfig">Reset</button>
           </div>
         </div>
@@ -168,6 +175,7 @@ const SIM_DEFAULTS = {
   radialStrength:   0.15,
   collide:          18,
   teamCollide:      40,
+  teamGravity:      0.08, // pull strength toward team centroid (authors + repos)
 };
 const simConfig = reactive({ ...SIM_DEFAULTS });
 function resetSimConfig() { Object.assign(simConfig, SIM_DEFAULTS); }
@@ -398,7 +406,7 @@ function drawGraph() {
   const root = svg.append('g');
   svg.call(d3.zoom().scaleExtent([0.2, 4]).on('zoom', e => root.attr('transform', e.transform)));
 
-  // Build lookup: author → their teams (for gravity and hull rendering)
+  // Build lookup: author → their teams (for gravity)
   const authorToTeamsMap = {};
   for (const t of effectiveTeams.value) {
     for (const a of (t.authors ?? [])) {
@@ -407,35 +415,52 @@ function drawGraph() {
     }
   }
 
-  // Team gravity: cluster author nodes toward their team centroid, only for expanded teams
+  // cfg alias used by teamGravity and the force setup below
+  const cfg = simConfig;
+
+  // Team gravity: pull both author and repo nodes toward their team centroid.
+  // Only applies to expanded teams (collapsed teams are represented by a single node).
   function teamGravity(alpha) {
-    if (!hasTeams) return;
+    if (!hasTeams || cfg.teamGravity === 0) return;
+    const k = cfg.teamGravity * alpha;
+
+    // Resolve which expanded team each node belongs to
+    function nodeTeam(n) {
+      if (n.type === 'author') {
+        const t = (authorToTeamsMap[n.id] ?? []).find(t => expandedTeams.value.has(t.id));
+        return t?.id ?? null;
+      }
+      if (n.type === 'repo') {
+        const tid = nodeTeamId[n.id];
+        return tid && expandedTeams.value.has(tid) ? tid : null;
+      }
+      return null;
+    }
+
+    // First pass: compute centroid per team
     const cx = {}, cy = {}, cnt = {};
     for (const n of nodes) {
-      if (n.type !== 'author' || n.x == null) continue;
-      const myTeams = (authorToTeamsMap[n.id] ?? []).filter(t => expandedTeams.value.has(t.id));
-      if (myTeams.length === 0) continue;
-      const t = myTeams[0];
-      cx[t.id]  = (cx[t.id]  ?? 0) + n.x;
-      cy[t.id]  = (cy[t.id]  ?? 0) + n.y;
-      cnt[t.id] = (cnt[t.id] ?? 0) + 1;
+      if (n.x == null) continue;
+      const tid = nodeTeam(n);
+      if (!tid) continue;
+      cx[tid]  = (cx[tid]  ?? 0) + n.x;
+      cy[tid]  = (cy[tid]  ?? 0) + n.y;
+      cnt[tid] = (cnt[tid] ?? 0) + 1;
     }
     for (const id in cnt) { cx[id] /= cnt[id]; cy[id] /= cnt[id]; }
-    const k = 0.08 * alpha;
+
+    // Second pass: apply velocity toward centroid
     for (const n of nodes) {
-      if (n.type !== 'author') continue;
-      const myTeams = (authorToTeamsMap[n.id] ?? []).filter(t => expandedTeams.value.has(t.id));
-      if (myTeams.length === 0) continue;
-      const t = myTeams[0];
-      if (cx[t.id] == null) continue;
-      n.vx = (n.vx ?? 0) + (cx[t.id] - (n.x ?? 0)) * k;
-      n.vy = (n.vy ?? 0) + (cy[t.id] - (n.y ?? 0)) * k;
+      if (n.x == null) continue;
+      const tid = nodeTeam(n);
+      if (!tid || cx[tid] == null) continue;
+      n.vx = (n.vx ?? 0) + (cx[tid] - n.x) * k;
+      n.vy = (n.vy ?? 0) + (cy[tid] - n.y) * k;
     }
   }
 
   // Radial layout: authors inner → repos middle → teams outer.
   // R grows with node count to keep the rings from getting cramped.
-  const cfg = simConfig;
   const R = Math.min(w, h) * cfg.ringScale + nodes.length * cfg.nodeSpacing;
   const hasIndividuals = nodes.some(n => n.type === 'author' || n.type === 'repo');
 
