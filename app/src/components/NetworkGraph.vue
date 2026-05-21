@@ -30,6 +30,14 @@
               </button>
             </div>
             <p class="viz-desc">Color = source team &nbsp;·&nbsp; Width = commit volume</p>
+            <div class="viz-divider"></div>
+            <div class="viz-row">
+              <span class="viz-row-label">Show authors</span>
+              <button :class="['viz-toggle-btn', { active: showAuthors }]" @click="showAuthors = !showAuthors">
+                {{ showAuthors ? 'On' : 'Off' }}
+              </button>
+            </div>
+            <p class="viz-desc">Individual author nodes &amp; edges</p>
           </div>
         </div>
       </div>
@@ -101,8 +109,9 @@ const vizDropRef   = ref(null);
 const dims         = reactive({ w: 900, h: 600 });
 
 // Visualization panel state (ephemeral — not persisted)
-const vizOpen    = ref(false);
-const edgeWeight = ref(true);
+const vizOpen     = ref(false);
+const edgeWeight  = ref(true);
+const showAuthors = ref(false);
 const tooltip      = reactive({
   show: false, x: 0, y: 0,
   isLink: false,
@@ -272,10 +281,39 @@ function drawGraph() {
   if (!svgRef.value || !hasData.value) return;
   if (sim) { sim.stop(); sim = null; }
 
-  const { nodes: rawNodes, links: rawLinks } = graphData.value;
+  let { nodes: rawNodes, links: rawLinks } = graphData.value;
   const { w, h } = dims;
 
-  const authMax   = d3.max(rawNodes.filter(n => n.type === 'author'), n => n.commits) || 1;
+  // When authors are hidden: remove author nodes and lift their edges up to
+  // the team level (only possible for collapsed teams that have a team node).
+  if (!showAuthors.value) {
+    const authorTeamNode = {};
+    for (const t of effectiveTeams.value) {
+      for (const a of (t.authors ?? [])) authorTeamNode[a] = `team:${t.id}`;
+    }
+    const visibleIds = new Set(rawNodes.filter(n => n.type !== 'author').map(n => n.id));
+    const agg = {};
+    for (const l of rawLinks) {
+      const s = typeof l.source === 'object' ? l.source.id : l.source;
+      const t = typeof l.target === 'object' ? l.target.id : l.target;
+      const srcNode = rawNodes.find(n => n.id === s);
+      let src = s;
+      if (srcNode?.type === 'author') {
+        src = authorTeamNode[s];
+        if (!src || !visibleIds.has(src)) continue; // author's team is expanded — skip
+      }
+      if (!visibleIds.has(src) || !visibleIds.has(t)) continue;
+      const key = `${src}\x00${t}`;
+      agg[key] = (agg[key] ?? 0) + (l.commits ?? 1);
+    }
+    rawNodes = rawNodes.filter(n => n.type !== 'author');
+    rawLinks = Object.entries(agg).map(([key, commits]) => {
+      const [source, target] = key.split('\x00');
+      return { source, target, commits };
+    });
+  }
+
+  const authMax    = d3.max(rawNodes.filter(n => n.type === 'author'), n => n.commits) || 1;
   const nonAuthMax = d3.max(rawNodes.filter(n => n.type !== 'author'), n => n.commits) || 1;
 
   const aScale    = d3.scaleSqrt().domain([0, authMax]).range([13, 40]);
@@ -701,6 +739,7 @@ watch(graphData,    () => drawGraph(),        { deep: true });
 watch(nodeColors,   () => updateNodeColors());
 watch(dims,         () => drawGraph());
 watch(edgeWeight,   () => updateEdgeStyles());
+watch(showAuthors,  () => drawGraph());
 
 function handleDocClick(e) {
   if (vizOpen.value && vizDropRef.value && !vizDropRef.value.contains(e.target))
@@ -808,5 +847,6 @@ onMounted(() => {
   transition: all 0.15s;
 }
 .viz-toggle-btn.active { background: #225EA9; border-color: #225EA9; color: #fff; }
-.viz-desc { font-size: 10px; color: #9ca3af; margin: 6px 0 0; text-align: center; }
+.viz-desc    { font-size: 10px; color: #9ca3af; margin: 6px 0 0; text-align: center; }
+.viz-divider { height: 1px; background: #e2e8f0; margin: 10px 0 8px; }
 </style>
