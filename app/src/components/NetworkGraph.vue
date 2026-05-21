@@ -15,28 +15,72 @@
           <span class="btn-dot"></span>
           Cross-team only
         </button>
-        <div v-if="effectiveTeams.length > 0" class="viz-dropdown-wrap" ref="vizDropRef">
+        <div class="viz-dropdown-wrap" ref="vizDropRef">
           <button :class="['cross-team-btn', { active: edgeWeight }]" @click="vizOpen = !vizOpen">
             <span class="btn-dot"></span>
             Visualization
             <span class="viz-chevron">{{ vizOpen ? '▴' : '▾' }}</span>
           </button>
           <div v-if="vizOpen" class="viz-panel">
+            <template v-if="effectiveTeams.length > 0">
+              <div class="viz-row">
+                <span class="viz-row-label">Edge weight</span>
+                <button :class="['viz-toggle-btn', { active: edgeWeight }]" @click="edgeWeight = !edgeWeight">
+                  {{ edgeWeight ? 'On' : 'Off' }}
+                </button>
+              </div>
+              <p class="viz-desc">Color = source team &nbsp;·&nbsp; Width = commit volume</p>
+              <div class="viz-divider"></div>
+              <div class="viz-row">
+                <span class="viz-row-label">Show authors</span>
+                <button :class="['viz-toggle-btn', { active: showAuthors }]" @click="showAuthors = !showAuthors">
+                  {{ showAuthors ? 'On' : 'Off' }}
+                </button>
+              </div>
+              <p class="viz-desc">Individual author nodes &amp; edges</p>
+              <div class="viz-divider"></div>
+            </template>
+
+            <div class="viz-section-title">Physics</div>
+
             <div class="viz-row">
-              <span class="viz-row-label">Edge weight</span>
-              <button :class="['viz-toggle-btn', { active: edgeWeight }]" @click="edgeWeight = !edgeWeight">
-                {{ edgeWeight ? 'On' : 'Off' }}
-              </button>
+              <span class="viz-row-label">Ring scale</span>
+              <span class="viz-val">{{ simConfig.ringScale.toFixed(2) }}</span>
             </div>
-            <p class="viz-desc">Color = source team &nbsp;·&nbsp; Width = commit volume</p>
-            <div class="viz-divider"></div>
+            <input type="range" class="viz-slider" min="0.1" max="0.8" step="0.01"
+                   v-model.number="simConfig.ringScale" />
+
             <div class="viz-row">
-              <span class="viz-row-label">Show authors</span>
-              <button :class="['viz-toggle-btn', { active: showAuthors }]" @click="showAuthors = !showAuthors">
-                {{ showAuthors ? 'On' : 'Off' }}
-              </button>
+              <span class="viz-row-label">Spread</span>
+              <span class="viz-val">{{ simConfig.nodeSpacing }}</span>
             </div>
-            <p class="viz-desc">Individual author nodes &amp; edges</p>
+            <input type="range" class="viz-slider" min="1" max="20" step="1"
+                   v-model.number="simConfig.nodeSpacing" />
+
+            <div class="viz-row">
+              <span class="viz-row-label">Repulsion</span>
+              <span class="viz-val">{{ -simConfig.charge }}</span>
+            </div>
+            <input type="range" class="viz-slider" min="100" max="2000" step="50"
+                   :value="-simConfig.charge"
+                   @input="e => { simConfig.charge = -e.target.value; simConfig.teamCharge = -e.target.value * 2.33 | 0; }" />
+
+            <div class="viz-row">
+              <span class="viz-row-label">Link distance</span>
+              <span class="viz-val">{{ simConfig.linkDistance }}</span>
+            </div>
+            <input type="range" class="viz-slider" min="40" max="300" step="5"
+                   :value="simConfig.linkDistance"
+                   @input="e => { simConfig.linkDistance = +e.target.value; simConfig.teamLinkDistance = +e.target.value * 1.45 | 0; }" />
+
+            <div class="viz-row">
+              <span class="viz-row-label">Radial pull</span>
+              <span class="viz-val">{{ simConfig.radialStrength.toFixed(2) }}</span>
+            </div>
+            <input type="range" class="viz-slider" min="0.02" max="0.5" step="0.01"
+                   v-model.number="simConfig.radialStrength" />
+
+            <button class="viz-reset-btn" @click="resetSimConfig">Reset</button>
           </div>
         </div>
       </div>
@@ -113,18 +157,20 @@ const edgeWeight  = ref(true);
 const showAuthors = ref(false);
 
 // Force simulation config — all tunable values in one place, ready for UI binding
-const simConfig = reactive({
-  ringScale:        0.38,  // R base: min(w,h) × ringScale
-  nodeSpacing:      5,     // R += nodeSpacing per node in graph
-  linkDistance:     110,   // distance for author↔repo edges
-  teamLinkDistance: 160,   // distance for edges touching a team node
+const SIM_DEFAULTS = {
+  ringScale:        0.38,
+  nodeSpacing:      5,
+  linkDistance:     110,
+  teamLinkDistance: 160,
   linkStrength:     0.4,
-  charge:          -600,   // repulsion for non-team nodes
-  teamCharge:      -1400,  // repulsion for team nodes
-  radialStrength:   0.15,  // attraction toward ring radius
-  collide:          18,    // collision padding, non-team
-  teamCollide:      40,    // collision padding, team
-});
+  charge:          -600,
+  teamCharge:      -1400,
+  radialStrength:   0.15,
+  collide:          18,
+  teamCollide:      40,
+};
+const simConfig = reactive({ ...SIM_DEFAULTS });
+function resetSimConfig() { Object.assign(simConfig, SIM_DEFAULTS); }
 const tooltip      = reactive({
   show: false, x: 0, y: 0,
   isLink: false,
@@ -760,7 +806,7 @@ onMounted(() => {
 .viz-panel {
   position: absolute; top: calc(100% + 6px); right: 0; z-index: 200;
   background: #fff; border: 1.5px solid #e2e8f0; border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.10); padding: 10px 14px 8px; min-width: 210px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.10); padding: 10px 14px 8px; min-width: 240px;
   animation: fadeIn 0.12s ease-out;
 }
 .viz-row       { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -771,6 +817,19 @@ onMounted(() => {
   transition: all 0.15s;
 }
 .viz-toggle-btn.active { background: #225EA9; border-color: #225EA9; color: #fff; }
-.viz-desc    { font-size: 10px; color: #9ca3af; margin: 6px 0 0; text-align: center; }
-.viz-divider { height: 1px; background: #e2e8f0; margin: 10px 0 8px; }
+.viz-desc         { font-size: 10px; color: #9ca3af; margin: 6px 0 0; text-align: center; }
+.viz-divider      { height: 1px; background: #e2e8f0; margin: 10px 0 8px; }
+.viz-section-title { font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.06em; margin: 4px 0 6px; }
+.viz-val          { font-size: 11px; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: #225EA9; min-width: 36px; text-align: right; }
+.viz-slider {
+  width: 100%; margin: 2px 0 8px;
+  height: 4px; border-radius: 2px; appearance: none; cursor: pointer;
+  accent-color: #088F9B;
+}
+.viz-reset-btn {
+  margin-top: 4px; width: 100%; padding: 4px 0; border-radius: 6px;
+  font-size: 11px; font-weight: 600; color: #64748b;
+  border: 1px solid #e2e8f0; background: transparent; cursor: pointer;
+}
+.viz-reset-btn:hover { border-color: #225EA9; color: #225EA9; }
 </style>
