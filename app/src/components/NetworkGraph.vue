@@ -102,7 +102,7 @@ const dims         = reactive({ w: 900, h: 600 });
 
 // Visualization panel state (ephemeral — not persisted)
 const vizOpen    = ref(false);
-const edgeWeight = ref(false);
+const edgeWeight = ref(true);
 const tooltip      = reactive({
   show: false, x: 0, y: 0,
   isLink: false,
@@ -124,7 +124,7 @@ const tooltipName = computed(() => {
 const tooltipDetail = computed(() => {
   const c = tooltip.commits.toLocaleString();
   if (tooltip.type === 'author') return `Author · ${c} commits`;
-  if (tooltip.type === 'team')   return `Team · ${tooltip.repoCount} repos · ${tooltip.authorCount} devs · ${c} commits`;
+  if (tooltip.type === 'team')   return `Team · ${tooltip.repoCount} ${tooltip.repoCount === 1 ? 'repo' : 'repos'} · ${tooltip.authorCount} ${tooltip.authorCount === 1 ? 'dev' : 'devs'} · ${c} commits`;
   if (tooltip.type === 'folder') return `Folder (depth ${tooltip.depth}) · ${c} commits`;
   return `Repository · ${c} commits`;
 });
@@ -313,9 +313,9 @@ function drawGraph() {
   svg.append('defs').append('marker')
     .attr('id', 'arrow')
     .attr('viewBox', '0 -5 10 10').attr('refX', 10).attr('refY', 0)
-    .attr('markerWidth', 8).attr('markerHeight', 8)
+    .attr('markerWidth', 14).attr('markerHeight', 14)
     .attr('markerUnits', 'userSpaceOnUse').attr('orient', 'auto')
-    .append('path').attr('d', 'M0,-5L10,0L0,5').attr('fill', EDGE_COLOR);
+    .append('path').attr('d', 'M0,-5L10,0L0,5').attr('fill', 'context-stroke');
 
   const root = svg.append('g');
   svg.call(d3.zoom().scaleExtent([0.2, 4]).on('zoom', e => root.attr('transform', e.transform)));
@@ -357,18 +357,19 @@ function drawGraph() {
     }
   }
 
+  // Scale repulsion and link distance with node count so all-expanded views don't collapse
+  const chargeScale = Math.max(1, nodes.length / 5);
+  const linkScale   = Math.max(1, Math.sqrt(nodes.length / 5));
+
   sim = d3.forceSimulation(nodes)
     .force('link',        d3.forceLink(links).id(d => d.id).distance(d => {
-      // Longer distance for team-to-team edges so team nodes spread apart
-      if (d.source.type === 'team' || d.target.type === 'team') return 280;
-      return 200;
+      if (d.source.type === 'team' || d.target.type === 'team') return 280 * linkScale;
+      return 200 * linkScale;
     }).strength(0.45))
-    .force('charge',      d3.forceManyBody().strength(d => d.type === 'team' ? -1200 : -700))
+    .force('charge',      d3.forceManyBody().strength(d => (d.type === 'team' ? -1200 : -700) * chargeScale))
     .force('center',      d3.forceCenter(w / 2, h / 2).strength(0.05))
     .force('x',           d3.forceX(d => {
       if (d.type === 'author') return w * 0.27;
-      // When all nodes are teams (collapsed default view), center them.
-      // When mixed with individual authors/repos, pull teams to right-center.
       if (d.type === 'team') {
         const hasIndividuals = nodes.some(n => n.type === 'author' || n.type === 'repo');
         return hasIndividuals ? w * 0.65 : w * 0.5;
@@ -480,7 +481,7 @@ function drawGraph() {
     .attr('dy', '1.1em')
     .attr('fill', 'rgba(255,255,255,0.75)').attr('font-size', '9px')
     .attr('pointer-events', 'none')
-    .text(d => `${d.repoCount} repos · ${d.authorCount} devs`);
+    .text(d => `${d.repoCount} ${d.repoCount === 1 ? 'repo' : 'repos'} · ${d.authorCount} ${d.authorCount === 1 ? 'dev' : 'devs'}`);
 
   // Folder nodes — diamond
   nodeEls.filter(d => d.type === 'folder')
@@ -661,21 +662,26 @@ function drawGraph() {
 
     nodeEls.attr('transform', d => `translate(${d.x ?? 0},${d.y ?? 0})`);
 
-    // Float each anchor pill at the centroid of its team's visible nodes
+    // Float each anchor pill above the topmost node of its team's cluster
     if (anchorEls) {
       anchorEls.attr('transform', function(t) {
         const authorIds = new Set(t.authors ?? []);
         const repoIds   = new Set(t.repos   ?? []);
-        let sumX = 0, sumY = 0, count = 0;
+        let minX = Infinity, maxX = -Infinity, minY = Infinity;
         for (const n of nodes) {
           if (n.x == null || n.y == null) continue;
           if (
             (n.type === 'author' && authorIds.has(n.id)) ||
             (n.type === 'repo'   && repoIds.has(n.id))   ||
             (n.type === 'folder' && repoIds.has(n.repoId))
-          ) { sumX += n.x; sumY += n.y; count++; }
+          ) {
+            minX = Math.min(minX, n.x);
+            maxX = Math.max(maxX, n.x);
+            minY = Math.min(minY, n.y - (n.r ?? 20));
+          }
         }
-        return count ? `translate(${sumX / count},${sumY / count})` : 'translate(-9999,-9999)';
+        if (minX === Infinity) return 'translate(-9999,-9999)';
+        return `translate(${(minX + maxX) / 2},${minY - 22})`;
       });
     }
   });
