@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "teams": [
+    {
+      "id": "backend",
+      "name": "Backend",
+      "color": "#225EA9",
+      "authors": ["Alice", "Bob"],
+      "repos": ["backend-api"]
+    },
+    {
+      "id": "frontend",
+      "name": "Frontend",
+      "color": "#F08223",
+      "authors": ["Carol", "Dave"],
+      "repos": ["frontend-web", "mobile-app"]
+    },
+    {
+      "id": "data",
+      "name": "Data",
+      "color": "#088F9B",
+      "authors": ["Eve", "Frank"],
+      "repos": ["data-pipeline", "analytics-db"]
+    },
+    {
+      "id": "platform",
+      "name": "Platform",
+      "color": "#5A4A80",
+      "authors": ["Grace", "Heidi"],
+      "repos": ["ci-platform"]
+    }
+  ],
+  "authorNormalizations": {},
+  "ignoredAuthors": []
+}
