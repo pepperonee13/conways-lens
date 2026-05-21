@@ -50,7 +50,7 @@
       <div v-if="tooltip.show" class="graph-tooltip"
            :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }">
         <template v-if="tooltip.isLink">
-          <div class="tt-name">{{ anonymize(tooltip.source) }} → {{ tooltip.target }}</div>
+          <div class="tt-name">{{ displayNodeName(tooltip.source) }} → {{ displayNodeName(tooltip.target) }}</div>
           <div class="tt-detail">{{ tooltip.commits.toLocaleString() }} commits</div>
         </template>
         <template v-else>
@@ -102,6 +102,16 @@ const tooltipDetail = computed(() => {
   if (tooltip.type === 'folder') return `Folder (depth ${tooltip.depth}) · ${c} commits`;
   return `Repository · ${c} commits`;
 });
+
+function displayNodeName(id) {
+  if (!id) return '';
+  if (id.startsWith('team:')) {
+    const teamId = id.slice(5);
+    const team = store.teams.find(t => t.id === teamId);
+    return team?.name ?? id;
+  }
+  return anonymize(id);
+}
 
 const EDGE_COLOR    = '#94a3b8';
 const EDGE_OPACITY  = 0.5;
@@ -282,7 +292,12 @@ function drawGraph() {
     .force('center',      d3.forceCenter(w / 2, h / 2).strength(0.05))
     .force('x',           d3.forceX(d => {
       if (d.type === 'author') return w * 0.27;
-      if (d.type === 'team')   return w * 0.65; // weak center-right pull, link forces position them
+      // When all nodes are teams (collapsed default view), center them.
+      // When mixed with individual authors/repos, pull teams to right-center.
+      if (d.type === 'team') {
+        const hasIndividuals = nodes.some(n => n.type === 'author' || n.type === 'repo');
+        return hasIndividuals ? w * 0.65 : w * 0.5;
+      }
       return w * 0.73;
     }).strength(d => d.type === 'team' ? 0.03 : 0.09))
     .force('collide',     d3.forceCollide(d => d.r + (d.type === 'team' ? 30 : 20)))

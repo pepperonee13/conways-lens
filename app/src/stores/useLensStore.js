@@ -111,6 +111,22 @@ export const useLensStore = defineStore('lens', () => {
       }
     }
 
+    // Pre-pass: count total unique commit SHAs per team (includes within-team work).
+    // Used to size and show team nodes even when they have no cross-team edges.
+    const teamTotalShas = {};
+    if (hasTeamSetup) {
+      for (const row of timelineData.value) {
+        if (!row.Author || !row.Product || !row.ChangesetId) continue;
+        if (since && row.Date < since) continue;
+        if (until && row.Date > until) continue;
+        const author = normalizeAuthor(row.Author);
+        if (ignoredSet.value.has(author)) continue;
+        for (const tid of (authorToTeams[author] ?? new Set())) {
+          (teamTotalShas[tid] ??= new Set()).add(row.ChangesetId);
+        }
+      }
+    }
+
     // Given a repoId and filePath, find the effective target node ID based on current expansion state.
     // Walks from repo → folder depth-1 → depth-2 … up to depth 4, stopping at the first unexpanded level.
     function getEffectiveNodeId(repoId, filePath) {
@@ -234,6 +250,18 @@ export const useLensStore = defineStore('lens', () => {
     for (const l of links) {
       commitsByNode[l.source] = (commitsByNode[l.source] ?? 0) + l.commits;
       commitsByNode[l.target] = (commitsByNode[l.target] ?? 0) + l.commits;
+    }
+
+    // Guarantee every collapsed team node appears in the graph, sized by its total
+    // commit activity. Without this, teams with no cross-team edges are invisible.
+    if (hasTeamSetup) {
+      for (const t of teams.value) {
+        if (!expandedTeams.value.has(t.id)) {
+          const nodeId = `team:${t.id}`;
+          const total = teamTotalShas[t.id]?.size ?? 0;
+          if (total > 0) commitsByNode[nodeId] = total;
+        }
+      }
     }
 
     const nodes = Object.entries(commitsByNode).map(([id, commits]) => {
