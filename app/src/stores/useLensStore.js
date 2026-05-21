@@ -20,7 +20,7 @@ export const useLensStore = defineStore('lens', () => {
   const dataError    = ref(null);
   const dateInfo     = ref(null);
 
-  const teams                = ref(load(STORAGE.teams, []));
+  const teams                = ref(load(STORAGE.teams, []).map(t => ({ authors: [], repos: [], ...t })));
   const authorNormalizations = ref(load(STORAGE.normalizations, {}));
   const ignoredAuthors       = ref(load(STORAGE.ignoredAuthors, []));
 
@@ -389,7 +389,7 @@ export const useLensStore = defineStore('lens', () => {
     if (!data || typeof data !== 'object' || Array.isArray(data))
       throw new Error('Invalid mapping file — expected a JSON object.');
     if (Array.isArray(data.teams))
-      teams.value = data.teams;
+      teams.value = data.teams.map(t => ({ authors: [], repos: [], ...t }));
     if (data.authorNormalizations && typeof data.authorNormalizations === 'object' && !Array.isArray(data.authorNormalizations))
       authorNormalizations.value = data.authorNormalizations;
     if (Array.isArray(data.ignoredAuthors))
