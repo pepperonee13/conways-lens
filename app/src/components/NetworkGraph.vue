@@ -7,7 +7,7 @@
           <span class="legend"><span class="legend-circle"></span>Author</span>
           <span class="legend"><span class="legend-square"></span>Repository</span>
           <span class="legend"><span class="legend-team"></span>Team</span>
-          &nbsp;·&nbsp; Node size = total commits &nbsp;·&nbsp; Drag nodes · Click team to expand/collapse
+          &nbsp;·&nbsp; Node size = total commits &nbsp;·&nbsp; Drag nodes · Click team to expand
         </p>
         <button v-if="effectiveTeams.length > 0"
                 @click="store.crossTeamOnly = !store.crossTeamOnly"
@@ -100,6 +100,16 @@
           </div>
         </div>
       </div>
+      <div v-if="expandedTeams.size > 0" class="expanded-teams-row">
+        <span class="expanded-label">Expanded:</span>
+        <button v-for="t in expandedTeamsList" :key="t.id"
+                class="expanded-team-chip"
+                :style="{ background: t.color, borderColor: t.color }"
+                @click="store.toggleTeamExpansion(t.id)">
+          {{ t.name }}&nbsp;×
+        </button>
+      </div>
+
       <div v-if="dateBounds" class="date-filter-row">
         <span class="date-filter-label">Period</span>
         <input type="date" class="date-input"
@@ -159,6 +169,9 @@ const { graphData, nodeColors, crossTeamOnly, dateBounds, activeRange, expandedT
 // Real teams + synthetic "Outside Contributors" team (when it exists)
 const effectiveTeams = computed(() =>
   syntheticTeam.value ? [...store.teams, syntheticTeam.value] : store.teams
+);
+const expandedTeamsList = computed(() =>
+  effectiveTeams.value.filter(t => expandedTeams.value.has(t.id))
 );
 const { anonymize } = useAnonymize();
 
@@ -231,7 +244,6 @@ const savedPositions = {};
 
 let nodeEls       = null;
 let linkEls       = null;
-let anchorEls     = null;
 let cloudGroup    = null;
 let sim           = null;
 let simNodes      = null; // live simulation node array, shared with drawClouds
@@ -686,60 +698,6 @@ function drawGraph() {
     .attr('pointer-events', 'none')
     .text(d => d.type === 'author' ? anonymize(d.id) : d.id);
 
-  // Anchor pills for expanded teams — float at centroid, click to collapse
-  const PILL_H = 28;
-  const expandedTeamData = effectiveTeams.value.filter(t => expandedTeams.value.has(t.id));
-
-  anchorEls = root.append('g').attr('class', 'team-anchors')
-    .selectAll('g').data(expandedTeamData, d => d.id).join('g')
-    .style('cursor', 'pointer')
-    .on('click', (e, t) => { e.stopPropagation(); store.toggleTeamExpansion(t.id); })
-    .on('mouseenter', (e, t) => {
-      Object.assign(tooltip, {
-        show: true, x: e.clientX + 14, y: e.clientY - 10,
-        isLink: false,
-        name: `team:${t.id}`, type: 'team', commits: 0,
-        teamName: t.name,
-        repoCount: (t.repos ?? []).length,
-        authorCount: (t.authors ?? []).length,
-        action: 'Click to collapse',
-      });
-    })
-    .on('mousemove', e => { tooltip.x = e.clientX + 14; tooltip.y = e.clientY - 10; })
-    .on('mouseleave', () => { tooltip.show = false; });
-
-  anchorEls.each(function(t) {
-    const g     = d3.select(this);
-    const pillW = Math.max(80, t.name.length * 7.5 + 40);
-
-    g.append('rect')
-      .attr('x', -pillW / 2).attr('y', -PILL_H / 2)
-      .attr('width', pillW).attr('height', PILL_H)
-      .attr('rx', PILL_H / 2)
-      .attr('fill', t.color || '#225EA9')
-      .attr('stroke', '#fff').attr('stroke-width', 2.5).attr('opacity', 0.92);
-
-    g.append('text')
-      .attr('text-anchor', 'middle').attr('dy', '0.35em')
-      .attr('fill', '#fff').attr('font-size', '11px').attr('font-weight', '700')
-      .attr('pointer-events', 'none')
-      .text(t.name);
-
-    // Minus badge — top-right corner of pill
-    g.append('circle')
-      .attr('cx', pillW / 2).attr('cy', -PILL_H / 2)
-      .attr('r', 8).attr('fill', '#F08223')
-      .attr('stroke', '#fff').attr('stroke-width', 1.5)
-      .attr('pointer-events', 'none');
-
-    g.append('text')
-      .attr('x', pillW / 2).attr('y', -PILL_H / 2)
-      .attr('text-anchor', 'middle').attr('dy', '0.38em')
-      .attr('fill', '#fff').attr('font-size', '11px').attr('font-weight', '700')
-      .attr('pointer-events', 'none')
-      .text('−');
-  });
-
   sim.on('tick', () => {
     nodes.forEach(n => { if (n.x != null) savedPositions[n.id] = { x: n.x, y: n.y }; });
 
@@ -780,28 +738,6 @@ function drawGraph() {
 
     nodeEls.attr('transform', d => `translate(${d.x ?? 0},${d.y ?? 0})`);
     drawClouds();
-
-    // Float each anchor pill above the topmost node of its team's cluster
-    if (anchorEls) {
-      anchorEls.attr('transform', function(t) {
-        const authorIds = new Set(t.authors ?? []);
-        const repoIds   = new Set(t.repos   ?? []);
-        let minX = Infinity, maxX = -Infinity, minY = Infinity;
-        for (const n of nodes) {
-          if (n.x == null || n.y == null) continue;
-          if (
-            (n.type === 'author' && authorIds.has(n.id)) ||
-            (n.type === 'repo'   && repoIds.has(n.id))
-          ) {
-            minX = Math.min(minX, n.x);
-            maxX = Math.max(maxX, n.x);
-            minY = Math.min(minY, n.y - (n.r ?? 20));
-          }
-        }
-        if (minX === Infinity) return 'translate(-9999,-9999)';
-        return `translate(${(minX + maxX) / 2},${minY - 22})`;
-      });
-    }
   });
 }
 
@@ -872,6 +808,20 @@ onMounted(() => {
 .legend-team   {
   display: inline-block; width: 22px; height: 12px; border-radius: 6px; background: #F08223;
 }
+.expanded-teams-row {
+  @apply flex items-center gap-2 mt-3 flex-wrap justify-center;
+}
+.expanded-label {
+  @apply text-xs font-semibold text-gray-400 uppercase tracking-wide;
+}
+.expanded-team-chip {
+  display: inline-flex; align-items: center;
+  padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 700;
+  color: #fff; border: 1.5px solid; cursor: pointer;
+  opacity: 0.92; transition: opacity 0.12s, transform 0.12s;
+}
+.expanded-team-chip:hover { opacity: 1; transform: scale(1.04); }
+
 .date-filter-row {
   @apply flex items-center justify-center gap-2 mt-3 flex-wrap;
 }
