@@ -16,6 +16,22 @@
           <span class="btn-dot"></span>
           Cross-team only
         </button>
+        <div v-if="effectiveTeams.length > 0" class="viz-dropdown-wrap" ref="vizDropRef">
+          <button :class="['cross-team-btn', { active: edgeWeight }]" @click="vizOpen = !vizOpen">
+            <span class="btn-dot"></span>
+            Visualization
+            <span class="viz-chevron">{{ vizOpen ? '▴' : '▾' }}</span>
+          </button>
+          <div v-if="vizOpen" class="viz-panel">
+            <div class="viz-row">
+              <span class="viz-row-label">Edge weight</span>
+              <button :class="['viz-toggle-btn', { active: edgeWeight }]" @click="edgeWeight = !edgeWeight">
+                {{ edgeWeight ? 'On' : 'Off' }}
+              </button>
+            </div>
+            <p class="viz-desc">Color = source team &nbsp;·&nbsp; Width = commit volume</p>
+          </div>
+        </div>
       </div>
       <div v-if="dateBounds" class="date-filter-row">
         <span class="date-filter-label">Period</span>
@@ -81,7 +97,12 @@ const { anonymize } = useAnonymize();
 
 const svgRef       = ref(null);
 const containerRef = ref(null);
+const vizDropRef   = ref(null);
 const dims         = reactive({ w: 900, h: 600 });
+
+// Visualization panel state (ephemeral — not persisted)
+const vizOpen    = ref(false);
+const edgeWeight = ref(false);
 const tooltip      = reactive({
   show: false, x: 0, y: 0,
   isLink: false,
@@ -125,10 +146,12 @@ const DIM_OPACITY   = 0.08;
 
 const savedPositions = {};
 
-let nodeEls   = null;
-let linkEls   = null;
-let anchorEls = null;
-let sim       = null;
+let nodeEls      = null;
+let linkEls      = null;
+let anchorEls    = null;
+let sim          = null;
+let nodeTeamId   = {}; // nodeId → teamId  (rebuilt each drawGraph)
+let nodeTeamColor = {}; // nodeId → hex color
 
 function squareEdgeDist(ux, uy, r) {
   const tx = Math.abs(ux) > 1e-9 ? r / Math.abs(ux) : Infinity;
@@ -142,6 +165,37 @@ function diamondEdgeDist(ux, uy, r) {
   return d > 1e-9 ? r / d : r;
 }
 
+// ── Edge weight helpers ──────────────────────────────────────────────────────
+
+function edgeSrcColor(link) {
+  const srcTeam = nodeTeamId[link.source.id];
+  const tgtTeam = nodeTeamId[link.target.id];
+  if (srcTeam && tgtTeam && srcTeam !== tgtTeam)
+    return nodeTeamColor[link.source.id] ?? EDGE_COLOR;
+  return EDGE_COLOR;
+}
+
+function edgeStrokeWidth(link) {
+  return edgeWeight.value ? Math.max(1, 1 + Math.log1p(link.commits) * 0.9) : 1.5;
+}
+
+function edgeStrokeOpacity(link) {
+  if (!edgeWeight.value) return EDGE_OPACITY;
+  const srcTeam = nodeTeamId[link.source.id];
+  const tgtTeam = nodeTeamId[link.target.id];
+  return (srcTeam && tgtTeam && srcTeam !== tgtTeam) ? 0.75 : 0.18;
+}
+
+function updateEdgeStyles() {
+  if (!linkEls) return;
+  linkEls
+    .attr('stroke',         d => edgeWeight.value ? edgeSrcColor(d)        : EDGE_COLOR)
+    .attr('stroke-width',   d => edgeStrokeWidth(d))
+    .attr('stroke-opacity', d => edgeStrokeOpacity(d));
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+
 function highlightNode(d) {
   const connected = new Set([d.id]);
   linkEls.each(l => {
@@ -150,7 +204,9 @@ function highlightNode(d) {
   });
   nodeEls.attr('opacity', n => connected.has(n.id) ? 1 : DIM_OPACITY);
   linkEls
-    .attr('stroke',         l => (l.source.id === d.id || l.target.id === d.id) ? EDGE_HL_COLOR : EDGE_COLOR)
+    .attr('stroke', l => (l.source.id === d.id || l.target.id === d.id)
+      ? EDGE_HL_COLOR
+      : (edgeWeight.value ? edgeSrcColor(l) : EDGE_COLOR))
     .attr('stroke-opacity', l => (l.source.id === d.id || l.target.id === d.id) ? 0.9 : DIM_OPACITY);
 }
 
@@ -158,14 +214,16 @@ function highlightLink(d) {
   const s = d.source.id, t = d.target.id;
   nodeEls.attr('opacity', n => (n.id === s || n.id === t) ? 1 : DIM_OPACITY);
   linkEls
-    .attr('stroke',         l => l === d ? EDGE_HL_COLOR : EDGE_COLOR)
+    .attr('stroke', l => l === d
+      ? EDGE_HL_COLOR
+      : (edgeWeight.value ? edgeSrcColor(l) : EDGE_COLOR))
     .attr('stroke-opacity', l => l === d ? 0.9 : DIM_OPACITY);
 }
 
 function resetHighlight() {
   if (!nodeEls || !linkEls) return;
   nodeEls.attr('opacity', 1);
-  linkEls.attr('stroke', EDGE_COLOR).attr('stroke-opacity', EDGE_OPACITY);
+  updateEdgeStyles();
 }
 
 function updateNodeColors() {
@@ -236,6 +294,17 @@ function drawGraph() {
   const links = rawLinks.map(l => ({ ...l }));
 
   const hasTeams = effectiveTeams.value.length > 0;
+
+  // Rebuild team-membership lookup maps used by edge helpers
+  nodeTeamId    = {};
+  nodeTeamColor = {};
+  for (const t of effectiveTeams.value) {
+    const key = `team:${t.id}`;
+    nodeTeamId[key]    = t.id;
+    nodeTeamColor[key] = t.color;
+    for (const a of (t.authors ?? [])) { nodeTeamId[a]    = t.id; nodeTeamColor[a]    = t.color; }
+    for (const r of (t.repos   ?? [])) { nodeTeamId[r]    = t.id; nodeTeamColor[r]    = t.color; }
+  }
 
   const svg = d3.select(svgRef.value);
   svg.selectAll('*').remove();
@@ -311,9 +380,6 @@ function drawGraph() {
 
   linkEls = root.append('g')
     .selectAll('line').data(links).join('line')
-    .attr('stroke', EDGE_COLOR)
-    .attr('stroke-width', 1.5)
-    .attr('stroke-opacity', EDGE_OPACITY)
     .attr('marker-end', 'url(#arrow)')
     .style('cursor', 'default')
     .on('mouseenter', (e, d) => {
@@ -326,6 +392,8 @@ function drawGraph() {
     })
     .on('mousemove',  e => { tooltip.x = e.clientX + 14; tooltip.y = e.clientY - 10; })
     .on('mouseleave', () => { resetHighlight(); tooltip.show = false; });
+
+  updateEdgeStyles();
 
   nodeEls = root.append('g')
     .selectAll('g').data(nodes).join('g')
@@ -626,13 +694,21 @@ function updateSize() {
 watch(graphData,    () => drawGraph(),        { deep: true });
 watch(nodeColors,   () => updateNodeColors());
 watch(dims,         () => drawGraph());
+watch(edgeWeight,   () => updateEdgeStyles());
+
+function handleDocClick(e) {
+  if (vizOpen.value && vizDropRef.value && !vizDropRef.value.contains(e.target))
+    vizOpen.value = false;
+}
 
 onMounted(() => {
   updateSize();
   const onResize = debounce(updateSize, 150);
   window.addEventListener('resize', onResize);
+  document.addEventListener('mousedown', handleDocClick);
   onBeforeUnmount(() => {
     window.removeEventListener('resize', onResize);
+    document.removeEventListener('mousedown', handleDocClick);
     if (sim) sim.stop();
   });
 });
@@ -708,4 +784,23 @@ onMounted(() => {
 .tt-name   { @apply font-bold text-brand-gray text-base; }
 .tt-detail { @apply text-gray-500 text-xs mt-0.5; }
 .tt-action { @apply text-brand-blue text-xs mt-1 font-medium; }
+
+/* ── Visualization dropdown ── */
+.viz-dropdown-wrap { position: relative; }
+.viz-chevron       { font-size: 9px; margin-left: 3px; }
+.viz-panel {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 200;
+  background: #fff; border: 1.5px solid #e2e8f0; border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.10); padding: 10px 14px 8px; min-width: 210px;
+  animation: fadeIn 0.12s ease-out;
+}
+.viz-row       { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.viz-row-label { font-size: 13px; font-weight: 600; color: #374151; }
+.viz-toggle-btn {
+  font-size: 11px; font-weight: 700; padding: 2px 10px; border-radius: 999px;
+  border: 1.5px solid #94a3b8; color: #64748b; background: transparent; cursor: pointer;
+  transition: all 0.15s;
+}
+.viz-toggle-btn.active { background: #225EA9; border-color: #225EA9; color: #fff; }
+.viz-desc { font-size: 10px; color: #9ca3af; margin: 6px 0 0; text-align: center; }
 </style>
