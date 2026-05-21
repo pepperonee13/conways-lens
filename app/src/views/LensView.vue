@@ -18,6 +18,9 @@
         <div v-if="loadedFilename" class="filename-chip" :title="loadedFilename">
           📄 {{ loadedFilename }}
         </div>
+        <button v-if="dataLoaded" class="new-scenario-btn" @click="store.clearData()">
+          ⚗️ New scenario
+        </button>
         <label class="load-btn" title="Load a TimelineData.csv file">
           {{ dataLoaded ? '↺ Load file' : '📂 Load CSV' }}
           <input type="file" accept=".csv" class="hidden-input" @change="onFileInput" />
@@ -223,6 +226,10 @@ function onAppDrop(event) {
 
 .filename-chip {
   @apply text-xs text-gray-500 bg-gray-100 border border-gray-200 rounded-full px-3 py-1 max-w-[180px] truncate;
+}
+
+.new-scenario-btn {
+  @apply flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold border border-gray-200 text-gray-500 bg-white hover:border-brand-teal hover:text-brand-teal transition-all duration-150 cursor-pointer;
 }
 
 .load-btn {

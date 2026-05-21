@@ -333,6 +333,15 @@ export const useLensStore = defineStore('lens', () => {
   }
 
   // Simulation
+  function clearData() {
+    timelineData.value  = [];
+    dataLoaded.value    = false;
+    dataError.value     = null;
+    dateInfo.value      = null;
+    activeRange.value   = { since: null, until: null };
+    expandedTeams.value = new Set();
+  }
+
   function loadSimulatedData({ authorCount, repoCount, minCommits, maxCommits }) {
     const authors = SIM_AUTHORS.slice(0, authorCount);
     const repos   = SIM_REPOS.slice(0, repoCount);
@@ -391,7 +400,7 @@ export const useLensStore = defineStore('lens', () => {
     expandedTeams,
     allRawAuthors, allAuthors, allRepos,
     graphData, nodeColors, getNodeColor,
-    loadTimelineData, loadSimulatedData,
+    loadTimelineData, loadSimulatedData, clearData,
     addTeam, removeTeam,
     setNormalization, removeNormalization,
     ignoreAuthor, unignoreAuthor,
