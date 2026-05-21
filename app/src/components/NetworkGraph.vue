@@ -10,7 +10,7 @@
           <span class="legend"><span class="legend-folder"></span>Folder</span>
           &nbsp;·&nbsp; Node size = total commits &nbsp;·&nbsp; Drag nodes · Click to expand/collapse
         </p>
-        <button v-if="store.teams.length > 0"
+        <button v-if="effectiveTeams.length > 0"
                 @click="store.crossTeamOnly = !store.crossTeamOnly"
                 :class="['cross-team-btn', { active: crossTeamOnly }]">
           <span class="btn-dot"></span>
@@ -71,7 +71,12 @@ import { useLensStore } from '../stores/useLensStore';
 import { useAnonymize } from '../composables/useAnonymize.js';
 
 const store = useLensStore();
-const { graphData, nodeColors, crossTeamOnly, dateBounds, activeRange, expandedTeams, expandedNodes, reposWithFilePaths } = storeToRefs(store);
+const { graphData, nodeColors, crossTeamOnly, dateBounds, activeRange, expandedTeams, expandedNodes, reposWithFilePaths, syntheticTeam } = storeToRefs(store);
+
+// Real teams + synthetic "Outside Contributors" team (when it exists)
+const effectiveTeams = computed(() =>
+  syntheticTeam.value ? [...store.teams, syntheticTeam.value] : store.teams
+);
 const { anonymize } = useAnonymize();
 
 const svgRef       = ref(null);
@@ -107,7 +112,7 @@ function displayNodeName(id) {
   if (!id) return '';
   if (id.startsWith('team:')) {
     const teamId = id.slice(5);
-    const team = store.teams.find(t => t.id === teamId);
+    const team = effectiveTeams.value.find(t => t.id === teamId);
     return team?.name ?? id;
   }
   return anonymize(id);
@@ -230,7 +235,7 @@ function drawGraph() {
   });
   const links = rawLinks.map(l => ({ ...l }));
 
-  const hasTeams = store.teams.length > 0;
+  const hasTeams = effectiveTeams.value.length > 0;
 
   const svg = d3.select(svgRef.value);
   svg.selectAll('*').remove();
@@ -250,7 +255,7 @@ function drawGraph() {
 
   // Build lookup: author → their teams (for gravity and hull rendering)
   const authorToTeamsMap = {};
-  for (const t of store.teams) {
+  for (const t of effectiveTeams.value) {
     for (const a of (t.authors ?? [])) {
       if (!authorToTeamsMap[a]) authorToTeamsMap[a] = [];
       authorToTeamsMap[a].push(t);
@@ -450,7 +455,7 @@ function drawGraph() {
 
   // Anchor pills for expanded teams — float at centroid, click to collapse
   const PILL_H = 28;
-  const expandedTeamData = store.teams.filter(t => expandedTeams.value.has(t.id));
+  const expandedTeamData = effectiveTeams.value.filter(t => expandedTeams.value.has(t.id));
 
   anchorEls = root.append('g').attr('class', 'team-anchors')
     .selectAll('g').data(expandedTeamData, d => d.id).join('g')
@@ -510,7 +515,7 @@ function drawGraph() {
       const teamPtsMap = {};
       const nodeById   = Object.fromEntries(nodes.map(n => [n.id, n]));
 
-      for (const t of store.teams) {
+      for (const t of effectiveTeams.value) {
         if (!expandedTeams.value.has(t.id)) continue; // only hull expanded teams
 
         const teamRepos = new Set(t.repos ?? []);
