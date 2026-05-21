@@ -241,19 +241,6 @@ function updateNodeColors() {
   nodeEls.filter(d => d.type === 'repo')  .select('rect')  .attr('fill', d => store.getNodeColor(d.id, 'repo'));
 }
 
-function teamHullPath(pts, padding = 38) {
-  const samples = [];
-  const ANGLES = 10;
-  for (const [x, y, r] of pts) {
-    const rad = (r ?? 20) + padding;
-    for (let i = 0; i < ANGLES; i++) {
-      const a = (i / ANGLES) * Math.PI * 2;
-      samples.push([x + Math.cos(a) * rad, y + Math.sin(a) * rad]);
-    }
-  }
-  const hull = d3.polygonHull(samples);
-  return hull ? `M${hull.join('L')}Z` : null;
-}
 
 function isNodeExpandable(d) {
   if (d.type === 'team')   return true;
@@ -357,17 +344,30 @@ function drawGraph() {
   svg.selectAll('*').remove();
   svg.attr('width', w).attr('height', h).attr('viewBox', `0 0 ${w} ${h}`);
 
-  svg.append('defs').append('marker')
+  const defs = svg.append('defs');
+
+  defs.append('marker')
     .attr('id', 'arrow')
     .attr('viewBox', '0 -5 10 10').attr('refX', 10).attr('refY', 0)
     .attr('markerWidth', 14).attr('markerHeight', 14)
     .attr('markerUnits', 'userSpaceOnUse').attr('orient', 'auto')
     .append('path').attr('d', 'M0,-5L10,0L0,5').attr('fill', 'context-stroke');
 
+  // Gooey / metaball filter: blur each team's circle group then threshold the
+  // alpha so overlapping circles merge into one organic cloud shape.
+  const gooeyFilter = defs.append('filter')
+    .attr('id', 'team-gooey')
+    .attr('x', '-50%').attr('y', '-50%').attr('width', '200%').attr('height', '200%');
+  gooeyFilter.append('feGaussianBlur')
+    .attr('in', 'SourceGraphic').attr('stdDeviation', 20).attr('result', 'blur');
+  gooeyFilter.append('feColorMatrix')
+    .attr('in', 'blur').attr('type', 'matrix')
+    .attr('values', '1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 12 -4');
+
   const root = svg.append('g');
   svg.call(d3.zoom().scaleExtent([0.2, 4]).on('zoom', e => root.attr('transform', e.transform)));
 
-  const hullGroup = root.append('g').attr('class', 'team-hulls');
+  const blobGroup = root.append('g').attr('class', 'team-blobs');
 
   // Build lookup: author → their teams (for gravity and hull rendering)
   const authorToTeamsMap = {};
@@ -627,56 +627,43 @@ function drawGraph() {
   sim.on('tick', () => {
     nodes.forEach(n => { if (n.x != null) savedPositions[n.id] = { x: n.x, y: n.y }; });
 
-    // Draw hulls around EXPANDED teams (covering their repo and folder nodes)
+    // Draw soft blob clouds around EXPANDED teams using the gooey SVG filter.
+    // Each team gets its own <g filter="url(#team-gooey)"> containing one circle
+    // per team-owned node; the filter merges overlapping circles into an organic
+    // cloud shape. Only the team's own nodes are included (fixes the old hull bug
+    // where cross-team link targets leaked into the boundary).
     if (hasTeams) {
-      const teamPtsMap = {};
-      const nodeById   = Object.fromEntries(nodes.map(n => [n.id, n]));
-
+      const blobData = [];
       for (const t of effectiveTeams.value) {
-        if (!expandedTeams.value.has(t.id)) continue; // only hull expanded teams
-
-        const teamRepos = new Set(t.repos ?? []);
-
+        if (!expandedTeams.value.has(t.id)) continue;
+        const teamAuthors = new Set(t.authors ?? []);
+        const teamRepos   = new Set(t.repos   ?? []);
+        const circles = [];
         for (const n of nodes) {
           if (n.x == null) continue;
-
-          // Include repo nodes and folder nodes belonging to this team
-          if (n.type === 'repo' && teamRepos.has(n.id)) {
-            (teamPtsMap[t.id] ??= { team: t, pts: [] }).pts.push([n.x, n.y, n.r]);
-            // Pull in every author that touches this repo
-            for (const link of links) {
-              const authorNode = link.source === n || link.source.id === n.id ? null
-                : link.target === n || link.target.id === n.id ? nodeById[link.source.id ?? link.source] : null;
-              if (!authorNode || authorNode.x == null) continue;
-              (teamPtsMap[t.id] ??= { team: t, pts: [] }).pts.push([authorNode.x, authorNode.y, authorNode.r ?? 20]);
-            }
-          }
-          if (n.type === 'folder' && teamRepos.has(n.repoId)) {
-            (teamPtsMap[t.id] ??= { team: t, pts: [] }).pts.push([n.x, n.y, n.r]);
-          }
-          // Include this team's own author nodes
-          if (n.type === 'author' && (authorToTeamsMap[n.id] ?? []).some(tm => tm.id === t.id)) {
-            (teamPtsMap[t.id] ??= { team: t, pts: [] }).pts.push([n.x, n.y, n.r]);
-            // Also pull in all repos this author has edges to
-            for (const link of links) {
-              const repo = link.source === n || link.source.id === n.id ? link.target : null;
-              if (!repo || repo.x == null) continue;
-              (teamPtsMap[t.id] ??= { team: t, pts: [] }).pts.push([repo.x, repo.y, repo.r ?? 20]);
-            }
-          }
+          if (n.type === 'author' && teamAuthors.has(n.id))      circles.push([n.x, n.y, n.r]);
+          if (n.type === 'repo'   && teamRepos.has(n.id))         circles.push([n.x, n.y, n.r]);
+          if (n.type === 'folder' && teamRepos.has(n.repoId))     circles.push([n.x, n.y, n.r]);
         }
+        if (circles.length) blobData.push({ team: t, circles });
       }
 
-      hullGroup.selectAll('path')
-        .data(Object.values(teamPtsMap), d => d.team.id)
-        .join('path')
-        .attr('fill',         d => d.team.color + '18')
-        .attr('stroke',       d => d.team.color)
-        .attr('stroke-width', 2)
-        .attr('stroke-dasharray', '6 4')
-        .attr('stroke-opacity', 0.55)
+      blobGroup.selectAll('g.team-blob')
+        .data(blobData, d => d.team.id)
+        .join('g')
+        .attr('class', 'team-blob')
+        .attr('filter', 'url(#team-gooey)')
         .attr('pointer-events', 'none')
-        .attr('d', d => teamHullPath(d.pts));
+        .each(function(d) {
+          d3.select(this).selectAll('circle')
+            .data(d.circles)
+            .join('circle')
+            .attr('cx', c => c[0])
+            .attr('cy', c => c[1])
+            .attr('r',  c => c[2] + 52)
+            .attr('fill', d.team.color)
+            .attr('opacity', 0.65);
+        });
     }
 
     linkEls.each(function(d) {
