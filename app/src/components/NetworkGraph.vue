@@ -120,9 +120,10 @@ const DIM_OPACITY   = 0.08;
 
 const savedPositions = {};
 
-let nodeEls = null;
-let linkEls = null;
-let sim     = null;
+let nodeEls   = null;
+let linkEls   = null;
+let anchorEls = null;
+let sim       = null;
 
 function squareEdgeDist(ux, uy, r) {
   const tx = Math.abs(ux) > 1e-9 ? r / Math.abs(ux) : Infinity;
@@ -447,6 +448,60 @@ function drawGraph() {
       return d.id;
     });
 
+  // Anchor pills for expanded teams — float at centroid, click to collapse
+  const PILL_H = 28;
+  const expandedTeamData = store.teams.filter(t => expandedTeams.value.has(t.id));
+
+  anchorEls = root.append('g').attr('class', 'team-anchors')
+    .selectAll('g').data(expandedTeamData, d => d.id).join('g')
+    .style('cursor', 'pointer')
+    .on('click', (e, t) => { e.stopPropagation(); store.toggleTeamExpansion(t.id); })
+    .on('mouseenter', (e, t) => {
+      Object.assign(tooltip, {
+        show: true, x: e.clientX + 14, y: e.clientY - 10,
+        isLink: false,
+        name: `team:${t.id}`, type: 'team', commits: 0,
+        teamName: t.name,
+        repoCount: (t.repos ?? []).length,
+        authorCount: (t.authors ?? []).length,
+        action: 'Click to collapse',
+      });
+    })
+    .on('mousemove', e => { tooltip.x = e.clientX + 14; tooltip.y = e.clientY - 10; })
+    .on('mouseleave', () => { tooltip.show = false; });
+
+  anchorEls.each(function(t) {
+    const g     = d3.select(this);
+    const pillW = Math.max(80, t.name.length * 7.5 + 40);
+
+    g.append('rect')
+      .attr('x', -pillW / 2).attr('y', -PILL_H / 2)
+      .attr('width', pillW).attr('height', PILL_H)
+      .attr('rx', PILL_H / 2)
+      .attr('fill', t.color || '#225EA9')
+      .attr('stroke', '#fff').attr('stroke-width', 2.5).attr('opacity', 0.92);
+
+    g.append('text')
+      .attr('text-anchor', 'middle').attr('dy', '0.35em')
+      .attr('fill', '#fff').attr('font-size', '11px').attr('font-weight', '700')
+      .attr('pointer-events', 'none')
+      .text(t.name);
+
+    // Minus badge — top-right corner of pill
+    g.append('circle')
+      .attr('cx', pillW / 2).attr('cy', -PILL_H / 2)
+      .attr('r', 8).attr('fill', '#F08223')
+      .attr('stroke', '#fff').attr('stroke-width', 1.5)
+      .attr('pointer-events', 'none');
+
+    g.append('text')
+      .attr('x', pillW / 2).attr('y', -PILL_H / 2)
+      .attr('text-anchor', 'middle').attr('dy', '0.38em')
+      .attr('fill', '#fff').attr('font-size', '11px').attr('font-weight', '700')
+      .attr('pointer-events', 'none')
+      .text('−');
+  });
+
   sim.on('tick', () => {
     nodes.forEach(n => { if (n.x != null) savedPositions[n.id] = { x: n.x, y: n.y }; });
 
@@ -532,6 +587,24 @@ function drawGraph() {
     });
 
     nodeEls.attr('transform', d => `translate(${d.x ?? 0},${d.y ?? 0})`);
+
+    // Float each anchor pill at the centroid of its team's visible nodes
+    if (anchorEls) {
+      anchorEls.attr('transform', function(t) {
+        const authorIds = new Set(t.authors ?? []);
+        const repoIds   = new Set(t.repos   ?? []);
+        let sumX = 0, sumY = 0, count = 0;
+        for (const n of nodes) {
+          if (n.x == null || n.y == null) continue;
+          if (
+            (n.type === 'author' && authorIds.has(n.id)) ||
+            (n.type === 'repo'   && repoIds.has(n.id))   ||
+            (n.type === 'folder' && repoIds.has(n.repoId))
+          ) { sumX += n.x; sumY += n.y; count++; }
+        }
+        return count ? `translate(${sumX / count},${sumY / count})` : 'translate(-9999,-9999)';
+      });
+    }
   });
 }
 
