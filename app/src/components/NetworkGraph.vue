@@ -373,23 +373,23 @@ function drawGraph() {
     }
   }
 
-  // Radial layout: authors on inner ring, repos on outer ring, teams between.
-  // Scale the ring radius with node count so denser graphs spread out.
-  const R = Math.min(w, h) * 0.28 + nodes.length * 3.5;
+  // Radial layout: authors inner → repos middle → teams outer.
+  // R grows with node count to keep the rings from getting cramped.
+  const R = Math.min(w, h) * 0.38 + nodes.length * 5;
   const hasIndividuals = nodes.some(n => n.type === 'author' || n.type === 'repo');
 
   sim = d3.forceSimulation(nodes)
     .force('link',    d3.forceLink(links).id(d => d.id)
-      .distance(d => (d.source.type === 'team' || d.target.type === 'team') ? 140 : 90)
-      .strength(0.5))
-    .force('charge',  d3.forceManyBody().strength(d => d.type === 'team' ? -800 : -350))
+      .distance(d => (d.source.type === 'team' || d.target.type === 'team') ? 160 : 110)
+      .strength(0.4))
+    .force('charge',  d3.forceManyBody().strength(d => d.type === 'team' ? -1400 : -600))
     .force('center',  d3.forceCenter(w / 2, h / 2).strength(0.08))
     .force('radial',  d3.forceRadial(d => {
-      if (d.type === 'team')   return hasIndividuals ? R * 0.65 : R * 0.75;
-      if (d.type === 'author') return R * 0.45;
-      return R;
-    }, w / 2, h / 2).strength(0.22))
-    .force('collide', d3.forceCollide(d => d.r + (d.type === 'team' ? 22 : 14)))
+      if (d.type === 'team')   return hasIndividuals ? R : R * 0.75;
+      if (d.type === 'author') return R * 0.35;
+      return R * 0.65;
+    }, w / 2, h / 2).strength(0.15))
+    .force('collide', d3.forceCollide(d => d.r + (d.type === 'team' ? 40 : 18)))
     .force('teamGravity', teamGravity);
 
   linkEls = root.append('g')
