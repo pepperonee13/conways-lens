@@ -111,6 +111,20 @@ const dims         = reactive({ w: 900, h: 600 });
 const vizOpen     = ref(false);
 const edgeWeight  = ref(true);
 const showAuthors = ref(false);
+
+// Force simulation config — all tunable values in one place, ready for UI binding
+const simConfig = reactive({
+  ringScale:        0.38,  // R base: min(w,h) × ringScale
+  nodeSpacing:      5,     // R += nodeSpacing per node in graph
+  linkDistance:     110,   // distance for author↔repo edges
+  teamLinkDistance: 160,   // distance for edges touching a team node
+  linkStrength:     0.4,
+  charge:          -600,   // repulsion for non-team nodes
+  teamCharge:      -1400,  // repulsion for team nodes
+  radialStrength:   0.15,  // attraction toward ring radius
+  collide:          18,    // collision padding, non-team
+  teamCollide:      40,    // collision padding, team
+});
 const tooltip      = reactive({
   show: false, x: 0, y: 0,
   isLink: false,
@@ -375,21 +389,22 @@ function drawGraph() {
 
   // Radial layout: authors inner → repos middle → teams outer.
   // R grows with node count to keep the rings from getting cramped.
-  const R = Math.min(w, h) * 0.38 + nodes.length * 5;
+  const cfg = simConfig;
+  const R = Math.min(w, h) * cfg.ringScale + nodes.length * cfg.nodeSpacing;
   const hasIndividuals = nodes.some(n => n.type === 'author' || n.type === 'repo');
 
   sim = d3.forceSimulation(nodes)
     .force('link',    d3.forceLink(links).id(d => d.id)
-      .distance(d => (d.source.type === 'team' || d.target.type === 'team') ? 160 : 110)
-      .strength(0.4))
-    .force('charge',  d3.forceManyBody().strength(d => d.type === 'team' ? -1400 : -600))
+      .distance(d => (d.source.type === 'team' || d.target.type === 'team') ? cfg.teamLinkDistance : cfg.linkDistance)
+      .strength(cfg.linkStrength))
+    .force('charge',  d3.forceManyBody().strength(d => d.type === 'team' ? cfg.teamCharge : cfg.charge))
     .force('center',  d3.forceCenter(w / 2, h / 2).strength(0.08))
     .force('radial',  d3.forceRadial(d => {
       if (d.type === 'team')   return hasIndividuals ? R : R * 0.75;
       if (d.type === 'author') return R * 0.35;
       return R * 0.65;
-    }, w / 2, h / 2).strength(0.15))
-    .force('collide', d3.forceCollide(d => d.r + (d.type === 'team' ? 40 : 18)))
+    }, w / 2, h / 2).strength(cfg.radialStrength))
+    .force('collide', d3.forceCollide(d => d.r + (d.type === 'team' ? cfg.teamCollide : cfg.collide)))
     .force('teamGravity', teamGravity);
 
   linkEls = root.append('g')
@@ -647,11 +662,12 @@ function updateSize() {
   drawGraph();
 }
 
-watch(graphData,    () => drawGraph(),        { deep: true });
+watch(graphData,    () => drawGraph(), { deep: true });
 watch(nodeColors,   () => updateNodeColors());
 watch(dims,         () => drawGraph());
 watch(edgeWeight,   () => updateEdgeStyles());
 watch(showAuthors,  () => drawGraph());
+watch(simConfig,    () => drawGraph(), { deep: true });
 
 function handleDocClick(e) {
   if (vizOpen.value && vizDropRef.value && !vizDropRef.value.contains(e.target))
