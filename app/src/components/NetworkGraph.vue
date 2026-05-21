@@ -192,7 +192,8 @@ function edgeStrokeOpacity(link) {
   if (!edgeWeight.value) return EDGE_OPACITY;
   const srcTeam = nodeTeamId[link.source.id];
   const tgtTeam = nodeTeamId[link.target.id];
-  return (srcTeam && tgtTeam && srcTeam !== tgtTeam) ? 0.75 : 0.18;
+  if (!srcTeam || !tgtTeam) return EDGE_OPACITY; // no team context — show at normal opacity
+  return (srcTeam !== tgtTeam) ? 0.75 : 0.18;
 }
 
 function updateEdgeStyles() {
@@ -273,7 +274,8 @@ function drawGraph() {
 
   // When authors are hidden: remove author nodes and lift their edges up to
   // the team level (only possible for collapsed teams that have a team node).
-  if (!showAuthors.value) {
+  // Skip entirely when no teams exist — authors can't be lifted to anything.
+  if (!showAuthors.value && effectiveTeams.value.length > 0) {
     const authorTeamNode = {};
     for (const t of effectiveTeams.value) {
       for (const a of (t.authors ?? [])) authorTeamNode[a] = `team:${t.id}`;
