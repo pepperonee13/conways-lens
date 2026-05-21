@@ -1,7 +1,7 @@
 # ConwaysLens — Development Progress
 
-> Working branch: `claude/visualize-conways-law-65nB4`
-> Last updated: 2026-05-20
+> Working branch: `claude/analyze-team-structure-SHwSk`
+> Last updated: 2026-05-21
 
 ---
 
@@ -88,16 +88,14 @@ The most significant feature. Teams, repos, and folders can now be expanded and 
 
 Standalone `boundary-styles-prototype.html` (no server needed, D3 from CDN) for evaluating how to visualize team territories weighted by cross-team contribution strength.
 
-**Problem being prototyped:** Convex hulls that include cross-team repos (as currently drawn in the main app) can mislead — a single commit from Alice to a distant repo stretches the hull all the way to that repo, suggesting ownership that isn't there. What's the right honest visualization?
-
 **Four hull rendering options:**
 
 | Option | Approach | Verdict |
 |---|---|---|
 | ① Weighted phantom points | Phantom point at `centroid + (repoPos-centroid) * weight`; hull stays crisp but honest | Conservative, principled |
 | ② Concentric shells | 4 nested hulls at 0/3.5/8/18% thresholds; read like a contour map | Good information density |
-| ③ SVG blur layers | 3 layers: full-extent (blurred+faint), sig>7% (blurred), crisp core | **User preferred** |
-| ④ Kernel density field | Gaussian blobs with `sqrt(weight)`-scaled radius/opacity, heavy blur; no hard boundary | **User preferred** |
+| ③ SVG blur layers | 3 layers: full-extent (blurred+faint), sig>7% (blurred), crisp core | Liked in isolation |
+| ④ Kernel density field | Gaussian blobs with `sqrt(weight)`-scaled radius/opacity, heavy blur; no hard boundary | Liked in isolation |
 
 **Structured layout mode (added in second prototype commit):**
 
@@ -106,7 +104,6 @@ A second graph mode where positions are fully data-driven (not force-directed):
 - Team backgrounds are colored band rectangles — not spatial hulls
 - Dragging disabled; layout is stable and repeatable
 - Cross-team edges that cross a band line are unambiguous Conway's Law signals regardless of node count or screen size
-- Smooth animation when switching modes (simulation drives nodes to fixed positions)
 
 **Dataset — e-commerce platform (4 teams, 10 authors, 12 repos):**
 
@@ -119,127 +116,125 @@ A second graph mode where positions are fully data-driven (not force-directed):
 
 ---
 
-### Design session — node-level violation encoding (2026-05-20, not yet implemented)
+### Graph improvements & Playwright POM (`74c722f` / `b092ab1`)
 
-Discussed how to make nodes and edges carry the Conway signal directly, rather than relying only on hull/territory backgrounds. Three candidate approaches were evaluated:
+**Edge weight encoding (on by default):**
+- Cross-team edges colored with the author's team color; within-team edges muted gray (`#94a3b8`, opacity 0.18)
+- Stroke width scales with commit volume: `1 + log1p(commits) * 0.9`
+- `edgeSrcColor()` / `edgeStrokeWidth()` / `edgeStrokeOpacity()` helpers extracted for clean reuse
+- Arrowhead: `markerUnits="userSpaceOnUse"`, `markerWidth/Height=14`, fill `context-stroke` so the arrowhead always matches the edge color
 
-| Option | Approach | Decision |
-|---|---|---|
-| A — Edge encoding | Color cross-team edges with the author's team color; muted gray for within-team; thickness = commit count | **Ship this** |
-| B — Violation rings | Thin outer arc on each node showing % of cross-team involvement | **Ship this, as a toggle** |
-| C — Repo color blending | Repo fill blends proportionally between contributing teams' colors | **Rejected** — loses authoritative ownership color, gets muddy with 3+ teams |
+**Bidirectional arc rendering:**
+- When two nodes have edges in both directions, they render as opposing quadratic Bézier arcs rather than overlapping straight lines
+- Both directions use `curvature = 1`; reversing the edge naturally negates `ux`/`uy`, placing control points on opposite sides of the midpoint
+- Key insight: using `-1` for one direction and `+1` for the other cancels out because ux/uy also negate — both must be `+1`
 
-**Key decisions:**
+**Show authors toggle (off by default):**
+- When off: individual author nodes are hidden; their edges are aggregated up to the team node (`team:X → repo`)
+- Aggregation keyed on `src\x00tgt` with commit sums
+- Authors whose team is currently expanded (no team node visible) are silently skipped
 
-- **Node ownership color is authoritative.** Repo and author node colors are set by team mapping and never overridden by cross-team contributions. The team mapping reflects organizational intent; that must remain visually clear.
-- **Edge encoding is the primary Conway signal.** Cross-team edges colored by the author's team color make boundary crossings immediately visible. Within-team edges are muted/gray background noise.
-- **Violation rings are an opt-in overlay.** A thin arc on each node encodes % cross-team involvement (author: % of commits to outside-team repos; repo: % of commits from outside-team authors). Must be toggleable — at scale they become noise if always on.
-- **All indicators must be individually toggleable.** Scale target is ~100 contributors and ~200 repos. At that density every always-on overlay becomes a liability.
+**Force scaling with node count:**
+- `chargeScale = max(1, nodeCount / 5)` — repulsion grows with graph density
+- `linkScale = max(1, sqrt(nodeCount / 5))` — link distance grows more slowly
+- Prevents collapse in all-expanded views with many nodes
 
-**Progressive disclosure model — four levels:**
+**Anchor pill position:**
+- Floats above the topmost node in the team cluster (`minY - 22`), not at the centroid
+- Centered on the horizontal midpoint of the cluster
 
-| Level | What's shown | Control |
-|---|---|---|
-| 0 | Nodes with team colors, uniform edges | Base — always on |
-| 1 | Cross-team edges only; nodes with only within-team contributions hidden | Existing "Cross-team only" toggle |
-| 2 | Edge color (author's team) + edge thickness (commit count) | New "Edge weight" toggle |
-| 3 | Violation rings on nodes (with minimum threshold, e.g. hide ring if < 10% cross-team) | New "Violation rings" toggle |
+**Minor fixes:**
+- Tooltip grammar: `"repo"` / `"repos"`, `"dev"` / `"devs"` (singular/plural)
 
-**Controls UI:** A "Visualization" dropdown/panel in the graph header (so the header stays clean). Toggles inside it control levels 2 and 3. Toggle states are ephemeral (not persisted — they are display preferences, not data).
+**Playwright POM (`playwright/lens-page.mjs`):**
+- `LensPage` class wraps all browser interactions: `loadCSV`, `importMappings`, `expandNode`, `collapseNode`, `hoverNode`, `screenshot`
+- `_clickSvgLabel(name)` dispatches a click event on the closest `<g>` ancestor of the matching SVG `<text>` node
+- `screenshot.mjs` rewritten to use the POM (35 lines vs original boilerplate)
+- `.claude/skills/run-app/SKILL.md` documents the POM for future AI sessions
 
-**Scale note:** At 100+ contributors, structured layout (team bands) becomes *more* valuable than force-directed, because cross-band edges are unambiguous Conway signals regardless of node density. The layout toggle is itself a noise-reduction tool.
+---
+
+### Hull/boundary visualizations — tried and removed (`9fceb12`)
+
+Three approaches to team boundary rendering were implemented and then fully removed:
+
+1. **Convex hull** (original, from PR #2): extended to cross-team repos via link traversal — misleading, showed "influence" rather than ownership
+2. **Gooey metaball** (`feGaussianBlur` stdDeviation=20 + `feColorMatrix` threshold): merged overlapping circles into organic blobs, but created hard edges and looked harsh
+3. **KDE density field** (from prototype option ④): per-team pure Gaussian blur (stdDeviation=38), soft gradients, owned nodes + cross-team phantom blobs scaled by `sqrt(weight)` — softer but still added visual noise without sufficient clarity payoff
+
+**Decision: removed entirely.** The graph is cleaner without any territory overlay. The feature may be revisited when the use case is better understood at scale.
+
+---
+
+## Failures & What to Avoid
+
+- **Hull/boundary overlays hurt more than they help at this stage.** All three implementations added visual complexity without making Conway signals clearer. The prototype has good reference implementations, but none should be automatically integrated — validate with real data at scale first.
+
+- **Shared SVG filter across teams causes color bleeding.** A single `feGaussianBlur` filter referenced by all teams merges their blobs if they overlap in screen space. If boundaries are ever revisited: one filter element per team.
+
+- **`feColorMatrix` for alpha thresholding creates harsh boundaries.** The `0 0 0 12 -4` trick turns a Gaussian into a hard-edged metaball outline. It looked more like a border than a territory, which is not what users want from a "soft cloud" metaphor.
+
+- **Bidirectional arc math trap.** Using `curvature = +1` for one edge direction and `-1` for the other looks correct but silently cancels: reversed edges also negate `ux`/`uy`, so the perpendicular offset lands on the same side. Both must use `curvature = 1`.
+
+- **`forceX` strength reduction breaks all-expanded views.** Reducing strength below `0.09` to spread nodes out more caused nodes to drift off-canvas in dense graphs. Keep `0.09` for non-team nodes.
+
+- **`vite: not found` during build:** Ran `npm run build` from the repo root instead of `app/`. All npm commands must run from `app/`.
+
+- **`git add` path errors:** Staging files using relative paths from wrong working directory. Always run git from `/home/user/conways-lens`.
 
 ---
 
 ## Open Questions
 
-**1. Semantics of hull boundaries**
-The current main app draws hulls that extend to cross-team repos. User acknowledged this can be misleading but liked the visual signal it provides as a "hint / entry point for further analysis." The honest framing: hulls show *influence* not *ownership*. We haven't decided on final semantics yet.
+**1. Hull / boundary semantics — deferred**
+All boundary implementations have been removed. The question of what "team territory" means in a force-directed layout (ownership vs. influence vs. contribution density) remains open. Revisit when the tool is being used with real large-scale data and users can articulate what they need.
 
-**2. Which boundary style to ship?**
-User liked options ③ (blur layers) and ④ (density field) in the prototype. Neither has been integrated into `NetworkGraph.vue` yet. ④ is more honest (no hard boundary), ③ gives clearer spatial separation. The choice might depend on user feedback at scale.
+**2. Structured layout mode in the main app**
+The prototype has a working structured layout (team bands, stable positions). It hasn't been ported to the main app. At scale (100+ contributors), the structured view is likely more legible than force-directed for Conway's Law analysis.
 
-**3. What to call the hull feature in the UI?**
-The user rejected "hull" as a label. "Cross-team boundaries" and "Team territories" were discussed. "Team boundaries" seems to be the leading candidate but hasn't been finalized.
+**3. Violation rings**
+Thin arcs on nodes encoding % cross-team involvement were designed (2026-05-20) but never implemented. Still the highest-value unbuilt feature.
 
-**4. Structured layout in the main app** *(decision: ship both)*
-Both modes should coexist. Force-directed is better at the high level (spatial zone map); structured layout is the honest Conway view at scale. The layout toggle serves as a noise-reduction tool when the graph gets dense.
+**4. Weight threshold for violation rings**
+Tentatively 10% minimum to suppress noise. Whether user-configurable or fixed TBD.
 
-**5. Weight threshold for violation rings** *(partially decided)*
-Violation rings should have a minimum threshold (tentatively 10%) so weak signals don't clutter the graph at scale. Whether this threshold is user-configurable or a fixed default is still open — a single "sensitivity" slider could eventually control this and the hull thresholds together.
+**5. Multi-team author assignment UX**
+MappingEditor lets authors be assigned to multiple teams with no visual warning that they'll appear in multiple team nodes. A badge or info tooltip would help.
 
 **6. Folder drill-down requires FilePath in CSV**
-Only repos that have `FilePath` data can be drilled into. The PowerShell script already produces this column, but existing CSVs without it silently disable the feature. This is correct behavior — but worth documenting for users.
-
-**7. Multi-team author assignment UX**
-The MappingEditor currently lets authors be assigned to multiple teams, but there's no visual warning in the editor that this person will be "split" across team nodes. A subtle indicator would help.
-
----
-
-## Failures / Blockers Encountered
-
-- **`vite: not found` during build:** Ran `npm run build` from the repo root instead of `app/`. Fixed by `cd app && npm install && npx vite build`.
-- **`git add` path errors:** Attempted to stage files using relative paths from wrong working directory. Fixed by running git from `/home/user/conways-lens`.
-- **Hull extends to dragged nodes:** In force-directed mode, if you drag a node far from its team cluster, the hull stretches to follow. This is the core honesty problem that motivated the prototype. No fix yet in the main app.
+Only repos with `FilePath` data can be drilled into. Correct behavior — but worth surfacing to users clearly (a "no folder data" state label on repo nodes that can't expand).
 
 ---
 
 ## Next Steps (Rough Priority)
 
-### High — node-level violation encoding (designed 2026-05-20, ready to implement)
+### High — violation rings (designed, ready to build)
 
-1. **Edge encoding toggle in `NetworkGraph.vue`**
-   - New "Visualization" dropdown in graph header (keeps header clean)
-   - Toggle: "Edge weight" (default off)
-   - When on: cross-team edges colored with the author's team color; within-team edges muted gray; stroke-width scales with commit count (e.g. `1 + log(commitCount)` to tame outliers)
-   - Edge color should use the *author's* team color (not the repo's) — shows which team is "reaching out"
+1. **"Violation rings" toggle in the Visualization dropdown (default off)**
+   - Thin outer arc on each visible node; arc length = % cross-team involvement
+   - Author node: % of commits that went to outside-team repos
+   - Repo node: % of commits from outside-team authors
+   - Arc color: brand orange `#F08223` (warning color, independent of team)
+   - Hide arc entirely if cross-team % < 10% (noise reduction)
+   - Ephemeral — not persisted to localStorage
 
-2. **Violation rings toggle in `NetworkGraph.vue`**
-   - Toggle: "Violation rings" inside the same "Visualization" dropdown (default off)
-   - When on: thin outer arc drawn on each visible node, arc length = % cross-team involvement
-   - Author node: arc = % of that author's commits that went to outside-team repos
-   - Repo node: arc = % of commits to that repo that came from outside-team authors
-   - Arc color: a fixed warning color (e.g. the brand orange `#F08223`), independent of team
-   - Minimum threshold: hide arc entirely if cross-team % < 10% (reduces noise at scale)
-   - Both toggles are ephemeral — not persisted to localStorage
+### Medium — structured layout mode
 
-### High — integrate prototype boundary styles into main app
+2. **Add structured layout as a second graph mode**
+   - Toggle: "Force-directed" / "Structured" in graph header
+   - Team bands with colored backgrounds, fixed bipartite positions, no dragging
+   - Most legible Conway view at scale (100+ contributors)
 
-3. **Add team boundary toggle to `NetworkGraph.vue`**
-   - Name: "Team boundaries" (not "hull")
-   - Default off; inside the "Visualization" dropdown
-   - Start with option ③ (blur layers) — clear spatial zones + blurred halo for peripheral contributions
-   - Auto-disable in structured layout mode
+### Medium — UX polish
 
-### Medium — structured layout mode in main app
+3. **Folder drill-down state label** — show "no folder data" on repo nodes that can't expand (currently they have a + badge that does nothing)
+4. **Multi-team author badge in MappingEditor** — warn when an author is in more than one team
+5. **Sensitivity slider** — single control for ring minimum threshold (future: also gates boundary thresholds if boundaries ever return)
 
-4. **Add structured layout as a second graph mode**
-   - Toggle: "Force-directed" / "Structured" in graph header (separate from the Visualization dropdown)
-   - In structured mode: team bands with colored backgrounds, fixed bipartite positions, no dragging
-   - Team boundaries toggle auto-disables in this mode (bands replace hulls)
-   - This is the most legible Conway view at scale (100+ contributors)
+### Lower — documentation
 
-5. **Weight threshold / sensitivity control**
-   - Single slider: "Sensitivity" (low = only show strong signals, high = show all)
-   - Controls the 10% ring minimum and the hull layer thresholds together
-
-### Lower — polish and UX
-
-6. **Multi-team author indicator in MappingEditor**
-   - When an author is assigned to >1 team, show a small badge or warning in the editor
-   - Help text: "This author will appear in both team nodes and their cross-team contributions will be counted for each team"
-
-7. **Visualization tooltip / legend**
-   - When any "Visualization" overlay is on, show a small info icon explaining what each indicator means
-   - "Ring arc = % of contributions crossing team boundaries. Edge color = contributing team."
-
-8. **Folder drill-down depth indicator**
-   - The +/− badge already shows expand/collapse state
-   - Consider showing the current depth level (e.g., `+2` for depth 2) as a tiny label
-
-9. **Analysis script documentation**
-   - Add a `repos.json.example` with comments explaining each field
-   - Document that `FilePath` is required for folder drill-down
+6. `repos.json.example` with comments
+7. Document that `FilePath` column is required for folder drill-down
 
 ---
 
@@ -252,6 +247,8 @@ The MappingEditor currently lets authors be assigned to multiple teams, but ther
 | `app/src/components/MappingEditor.vue` | Team CRUD, author normalization, import/export |
 | `app/src/views/LensView.vue` | Root layout, CSV upload/drag-drop |
 | `app/src/composables/useAnonymize.js` | Display-only author name pseudonymization |
-| `boundary-styles-prototype.html` | Self-contained prototype for boundary style comparison |
+| `boundary-styles-prototype.html` | Self-contained prototype for boundary style comparison (reference only) |
+| `playwright/lens-page.mjs` | Playwright Page Object Model for all browser automation |
+| `screenshot.mjs` | Demo script — captures 5 canonical screenshots using POM |
 | `analysis/Analyse-Repositories.ps1` | PowerShell: clone repos, extract git history → TimelineData.csv |
 | `analysis/repos.json` | List of repos to analyse |

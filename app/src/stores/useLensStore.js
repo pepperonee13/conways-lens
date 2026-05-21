@@ -8,7 +8,8 @@ const STORAGE = {
   ignoredAuthors: 'conwaylens:ignoredAuthors',
 };
 
-const DEFAULT_COLORS = ['#225EA9', '#088F9B', '#F08223', '#5A4A80', '#C45E0F', '#006B75', '#3A75BA', '#1A9FA9'];
+const DEFAULT_COLORS  = ['#225EA9', '#088F9B', '#F08223', '#5A4A80', '#C45E0F', '#006B75', '#3A75BA', '#1A9FA9'];
+const UNASSIGNED_ID   = '__unassigned__';
 
 function load(key, fallback) {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
@@ -20,7 +21,7 @@ export const useLensStore = defineStore('lens', () => {
   const dataError    = ref(null);
   const dateInfo     = ref(null);
 
-  const teams                = ref(load(STORAGE.teams, []));
+  const teams                = ref(load(STORAGE.teams, []).map(t => ({ authors: [], repos: [], ...t })));
   const authorNormalizations = ref(load(STORAGE.normalizations, {}));
   const ignoredAuthors       = ref(load(STORAGE.ignoredAuthors, []));
 
@@ -92,22 +93,58 @@ export const useLensStore = defineStore('lens', () => {
 
   const crossTeamOnly = ref(false);
 
+  // Virtual team for authors and repos not yet assigned to any real team.
+  // Only exists when at least one real team is configured.
+  const syntheticTeam = computed(() => {
+    if (!dataLoaded.value || teams.value.length === 0) return null;
+    const assignedAuthors = new Set(teams.value.flatMap(t => t.authors ?? []));
+    const assignedRepos   = new Set(teams.value.flatMap(t => t.repos   ?? []));
+    const freeAuthors = allAuthors.value.filter(a => !assignedAuthors.has(a) && !ignoredSet.value.has(a));
+    const freeRepos   = allRepos.value.filter(r => !assignedRepos.has(r));
+    if (freeAuthors.length === 0 && freeRepos.length === 0) return null;
+    return {
+      id: UNASSIGNED_ID, name: 'Outside Contributors', color: '#9CA3AF',
+      authors: freeAuthors, repos: freeRepos, isSynthetic: true,
+    };
+  });
+
   const graphData = computed(() => {
     const since = activeRange.value.since;
     const until = activeRange.value.until;
-    const hasTeamSetup = teams.value.length > 0;
 
-    // Build team membership lookups
+    // Merge real teams with the synthetic "Outside Contributors" team so all
+    // unassigned authors/repos are treated identically to real-team members.
+    const syntheticT = syntheticTeam.value;
+    const allTeams   = syntheticT ? [...teams.value, syntheticT] : teams.value;
+    const hasTeamSetup = allTeams.length > 0;
+
+    // Build team membership lookups (synthetic team members included)
     const authorToTeams = {}; // normalizedAuthor → Set<teamId>
-    const repoToTeam    = {}; // repoId → teamId (last write wins if repo appears in multiple teams)
+    const repoToTeam    = {}; // repoId → teamId
 
     if (hasTeamSetup) {
-      for (const t of teams.value) {
+      for (const t of allTeams) {
         for (const a of (t.authors ?? [])) {
           if (!authorToTeams[a]) authorToTeams[a] = new Set();
           authorToTeams[a].add(t.id);
         }
         for (const r of (t.repos ?? [])) repoToTeam[r] = t.id;
+      }
+    }
+
+    // Pre-pass: count total unique commit SHAs per team (includes within-team work).
+    // Used to size and show team nodes even when they have no cross-team edges.
+    const teamTotalShas = {};
+    if (hasTeamSetup) {
+      for (const row of timelineData.value) {
+        if (!row.Author || !row.Product || !row.ChangesetId) continue;
+        if (since && row.Date < since) continue;
+        if (until && row.Date > until) continue;
+        const author = normalizeAuthor(row.Author);
+        if (ignoredSet.value.has(author)) continue;
+        for (const tid of (authorToTeams[author] ?? new Set())) {
+          (teamTotalShas[tid] ??= new Set()).add(row.ChangesetId);
+        }
       }
     }
 
@@ -236,10 +273,22 @@ export const useLensStore = defineStore('lens', () => {
       commitsByNode[l.target] = (commitsByNode[l.target] ?? 0) + l.commits;
     }
 
+    // Guarantee every collapsed team node appears in the graph, sized by its total
+    // commit activity. Without this, teams with no cross-team edges are invisible.
+    if (hasTeamSetup) {
+      for (const t of allTeams) {
+        if (!expandedTeams.value.has(t.id)) {
+          const nodeId = `team:${t.id}`;
+          const total = teamTotalShas[t.id]?.size ?? 0;
+          if (total > 0) commitsByNode[nodeId] = total;
+        }
+      }
+    }
+
     const nodes = Object.entries(commitsByNode).map(([id, commits]) => {
       if (id.startsWith('team:')) {
         const teamId = id.slice(5);
-        const team   = teams.value.find(t => t.id === teamId);
+        const team   = syntheticT?.id === teamId ? syntheticT : teams.value.find(t => t.id === teamId);
         return {
           id, type: 'team', teamId,
           name:        team?.name  ?? teamId,
@@ -287,7 +336,7 @@ export const useLensStore = defineStore('lens', () => {
     if (next.has(teamId)) {
       next.delete(teamId);
       // Collapse all repo/folder expansions that belong to this team
-      const team = teams.value.find(t => t.id === teamId);
+      const team = teams.value.find(t => t.id === teamId) ?? (syntheticTeam.value?.id === teamId ? syntheticTeam.value : null);
       if (team) {
         const nodeNext = new Set(expandedNodes.value);
         for (const repo of (team.repos ?? [])) {
@@ -361,7 +410,7 @@ export const useLensStore = defineStore('lens', () => {
     if (!data || typeof data !== 'object' || Array.isArray(data))
       throw new Error('Invalid mapping file — expected a JSON object.');
     if (Array.isArray(data.teams))
-      teams.value = data.teams;
+      teams.value = data.teams.map(t => ({ authors: [], repos: [], ...t }));
     if (data.authorNormalizations && typeof data.authorNormalizations === 'object' && !Array.isArray(data.authorNormalizations))
       authorNormalizations.value = data.authorNormalizations;
     if (Array.isArray(data.ignoredAuthors))
@@ -370,7 +419,7 @@ export const useLensStore = defineStore('lens', () => {
 
   return {
     timelineData, dataLoaded, dataError, dateInfo,
-    teams, authorNormalizations, ignoredAuthors,
+    teams, syntheticTeam, authorNormalizations, ignoredAuthors,
     dateBounds, activeRange,
     crossTeamOnly,
     expandedTeams, expandedNodes, reposWithFilePaths,
