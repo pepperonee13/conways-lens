@@ -353,16 +353,16 @@ function drawGraph() {
     .attr('markerUnits', 'userSpaceOnUse').attr('orient', 'auto')
     .append('path').attr('d', 'M0,-5L10,0L0,5').attr('fill', 'context-stroke');
 
-  // Gooey / metaball filter: blur each team's circle group then threshold the
-  // alpha so overlapping circles merge into one organic cloud shape.
-  const gooeyFilter = defs.append('filter')
-    .attr('id', 'team-gooey')
-    .attr('x', '-50%').attr('y', '-50%').attr('width', '200%').attr('height', '200%');
-  gooeyFilter.append('feGaussianBlur')
-    .attr('in', 'SourceGraphic').attr('stdDeviation', 20).attr('result', 'blur');
-  gooeyFilter.append('feColorMatrix')
-    .attr('in', 'blur').attr('type', 'matrix')
-    .attr('values', '1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 12 -4');
+  // Per-team KDE blur filters — soft density field, no feColorMatrix threshold.
+  // Larger stdDeviation and bigger filter region prevent hard edges and clipping.
+  // Separate filter per team prevents color bleeding between adjacent clusters.
+  for (const t of effectiveTeams.value) {
+    const f = defs.append('filter')
+      .attr('id', `team-kde-${t.id}`)
+      .attr('x', '-80%').attr('y', '-80%')
+      .attr('width', '260%').attr('height', '260%');
+    f.append('feGaussianBlur').attr('in', 'SourceGraphic').attr('stdDeviation', 38);
+  }
 
   const root = svg.append('g');
   svg.call(d3.zoom().scaleExtent([0.2, 4]).on('zoom', e => root.attr('transform', e.transform)));
@@ -425,6 +425,24 @@ function drawGraph() {
     }).strength(d => d.type === 'team' ? 0.03 : 0.09))
     .force('collide',     d3.forceCollide(d => d.r + (d.type === 'team' ? 30 : 20)))
     .force('teamGravity', teamGravity);
+
+  // Precompute cross-team contribution weights for density field phantom blobs.
+  // Uses raw store links (author→repo) so author-level flows are always captured
+  // regardless of the showAuthors toggle.
+  const teamTotalCommits = {};
+  const teamCrossRepoCommits = {};
+  for (const l of graphData.value.links) {
+    const sId = typeof l.source === 'object' ? l.source.id : l.source;
+    const tId = typeof l.target === 'object' ? l.target.id : l.target;
+    for (const t of effectiveTeams.value) {
+      if (!(t.authors ?? []).includes(sId)) continue;
+      teamTotalCommits[t.id] = (teamTotalCommits[t.id] ?? 0) + (l.commits ?? 1);
+      if (!(t.repos ?? []).includes(tId)) {
+        if (!teamCrossRepoCommits[t.id]) teamCrossRepoCommits[t.id] = {};
+        teamCrossRepoCommits[t.id][tId] = (teamCrossRepoCommits[t.id][tId] ?? 0) + (l.commits ?? 1);
+      }
+    }
+  }
 
   linkEls = root.append('g')
     .selectAll('path').data(links).join('path')
@@ -627,11 +645,9 @@ function drawGraph() {
   sim.on('tick', () => {
     nodes.forEach(n => { if (n.x != null) savedPositions[n.id] = { x: n.x, y: n.y }; });
 
-    // Draw soft blob clouds around EXPANDED teams using the gooey SVG filter.
-    // Each team gets its own <g filter="url(#team-gooey)"> containing one circle
-    // per team-owned node; the filter merges overlapping circles into an organic
-    // cloud shape. Only the team's own nodes are included (fixes the old hull bug
-    // where cross-team link targets leaked into the boundary).
+    // Density field: owned nodes emit full-strength Gaussian blobs; cross-team
+    // repos emit phantom blobs scaled by sqrt(crossCommits/teamTotal) so the
+    // cloud naturally bleeds toward repos a team actually touches.
     if (hasTeams) {
       const blobData = [];
       for (const t of effectiveTeams.value) {
@@ -641,9 +657,23 @@ function drawGraph() {
         const circles = [];
         for (const n of nodes) {
           if (n.x == null) continue;
-          if (n.type === 'author' && teamAuthors.has(n.id))      circles.push([n.x, n.y, n.r]);
-          if (n.type === 'repo'   && teamRepos.has(n.id))         circles.push([n.x, n.y, n.r]);
-          if (n.type === 'folder' && teamRepos.has(n.repoId))     circles.push([n.x, n.y, n.r]);
+          if ((n.type === 'author' && teamAuthors.has(n.id)) ||
+              (n.type === 'repo'   && teamRepos.has(n.id))   ||
+              (n.type === 'folder' && teamRepos.has(n.repoId))) {
+            circles.push({ x: n.x, y: n.y, r: (n.r + 48) * 1.9, opacity: 0.22 });
+          }
+        }
+        const total = teamTotalCommits[t.id] ?? 1;
+        for (const [repoId, crossCommits] of Object.entries(teamCrossRepoCommits[t.id] ?? {})) {
+          const rn = nodes.find(n => n.id === repoId && n.x != null);
+          if (!rn) continue;
+          const weight = crossCommits / total;
+          if (weight < 0.002) continue;
+          circles.push({
+            x: rn.x, y: rn.y,
+            r: (rn.r + 48) * 1.9 * Math.sqrt(weight) * 2.4,
+            opacity: Math.min(0.22, 0.22 * weight * 5),
+          });
         }
         if (circles.length) blobData.push({ team: t, circles });
       }
@@ -652,17 +682,17 @@ function drawGraph() {
         .data(blobData, d => d.team.id)
         .join('g')
         .attr('class', 'team-blob')
-        .attr('filter', 'url(#team-gooey)')
+        .attr('filter', d => `url(#team-kde-${d.team.id})`)
         .attr('pointer-events', 'none')
-        .each(function(d) {
+        .each(function(teamDatum) {
           d3.select(this).selectAll('circle')
-            .data(d.circles)
+            .data(teamDatum.circles)
             .join('circle')
-            .attr('cx', c => c[0])
-            .attr('cy', c => c[1])
-            .attr('r',  c => c[2] + 52)
-            .attr('fill', d.team.color)
-            .attr('opacity', 0.65);
+            .attr('cx', c => c.x)
+            .attr('cy', c => c.y)
+            .attr('r',  c => c.r)
+            .attr('fill', teamDatum.team.color)
+            .attr('opacity', c => c.opacity);
         });
     }
 
