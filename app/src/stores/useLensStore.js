@@ -340,15 +340,8 @@ export const useLensStore = defineStore('lens', () => {
       if (!authorTeam) continue;                  // author has no team — skip
       if (authorTeam === owningTeam) continue;     // within-team — skip
 
-      // Determine target: collapsed owning team node, or repo directly if expanded
-      let targetId;
-      if (owningTeam && !expandedTeams.value.has(owningTeam)) {
-        targetId = `team:${owningTeam}`;
-      } else {
-        targetId = repoId;
-      }
-
-      const key = `${authorTeam}\x00${targetId}`;
+      // Always target the repo directly so violation edges visibly cross sector boundaries.
+      const key = `${authorTeam}\x00${repoId}`;
       (edgeMap[key] ??= new Set()).add(sha);
     }
 
@@ -365,11 +358,6 @@ export const useLensStore = defineStore('lens', () => {
       return { source: `team:${srcTid}`, target: tgt, commits: shas.size };
     });
 
-    // Collect which repos are referenced as link targets (expanded owning team or unowned)
-    const repoTargetIds = new Set(
-      links.map(l => l.target).filter(t => !t.startsWith('team:'))
-    );
-
     // Build nodes
     const teamNodes = allTeams.map(t => ({
       id:         `team:${t.id}`,
@@ -380,17 +368,10 @@ export const useLensStore = defineStore('lens', () => {
       commits:    teamTotalCommits[t.id] ?? 0,
       repoCount:  (t.repos    ?? []).length,
       authorCount:(t.authors  ?? []).length,
-      isExpanded: expandedTeams.value.has(t.id),
     }));
 
-    // Repo nodes: repos of expanded teams + unowned repos referenced in links
-    const repoNodeIds = new Set();
-    for (const t of allTeams) {
-      if (expandedTeams.value.has(t.id)) {
-        for (const r of (t.repos ?? [])) repoNodeIds.add(r);
-      }
-    }
-    for (const rid of repoTargetIds) repoNodeIds.add(rid);
+    // Repo nodes: every repo that has commits in range (owned + unowned).
+    const repoNodeIds = new Set(Object.keys(repoTotalShas));
 
     const repoNodes = [...repoNodeIds].map(repoId => {
       const owningTeamId  = repoToTeamId[repoId] ?? null;

@@ -40,16 +40,6 @@
         </div>
       </div>
 
-      <div v-if="expandedTeams.size > 0" class="expanded-teams-row">
-        <span class="expanded-label">Expanded:</span>
-        <button v-for="t in expandedTeamsList" :key="t.id"
-                class="expanded-team-chip"
-                :style="{ background: t.color, borderColor: t.color }"
-                @click="store.toggleTeamExpansion(t.id)">
-          {{ t.name }}&nbsp;×
-        </button>
-      </div>
-
       <div v-if="dateBounds" class="date-filter-row">
         <span class="date-filter-label">Period</span>
         <input type="date" class="date-input"
@@ -76,7 +66,7 @@
     </div>
 
     <template v-else>
-      <p class="hint">Scroll to zoom · Drag nodes · Click team nodes to expand or collapse</p>
+      <p class="hint">Scroll to zoom · Hover nodes or edges to inspect</p>
       <div class="svg-wrap">
         <svg ref="svgRef" class="graph-svg"></svg>
       </div>
@@ -108,14 +98,11 @@ import { useConwayGraph } from '../composables/graphs/useConwayGraph.js';
 const store = useLensStore();
 const {
   ownershipGraphData, nodeColors,
-  dateBounds, activeRange, expandedTeams, syntheticTeam,
+  dateBounds, activeRange, syntheticTeam,
 } = storeToRefs(store);
 
 const effectiveTeams = computed(() =>
   syntheticTeam.value ? [...store.teams, syntheticTeam.value] : store.teams
-);
-const expandedTeamsList = computed(() =>
-  effectiveTeams.value.filter(t => expandedTeams.value.has(t.id))
 );
 
 const svgRef       = ref(null);
@@ -156,26 +143,17 @@ function displayNodeName(id) {
   return id;
 }
 
-// ── Saved positions (persist across redraws) ──────────────────────────────
-const savedPositions = {};
-
 // ── Renderer ──────────────────────────────────────────────────────────────
 const renderer = useConwayGraph({
   svgRef,
   effectiveTeams,
-  expandedTeams,
-  getNodeColor:        store.getNodeColor,
-  toggleTeamExpansion: store.toggleTeamExpansion,
-  savedPositions,
+  getNodeColor: store.getNodeColor,
   onShowNodeTooltip: (d, x, y) => {
-    const action = d.type === 'team'
-      ? (expandedTeams.value.has(d.teamId) ? 'Click to collapse' : 'Click to expand')
-      : '';
     Object.assign(tooltip, {
       show: true, x, y, isLink: false,
       name: d.id, type: d.type, commits: d.commits,
       teamName: d.name ?? '', repoCount: d.repoCount ?? 0, authorCount: d.authorCount ?? 0,
-      action,
+      action: '',
     });
   },
   onShowLinkTooltip: (d, x, y) => {
@@ -194,8 +172,8 @@ function redraw() {
   renderer.draw({ dims, data: ownershipGraphData.value });
 }
 
-watch(ownershipGraphData, () => redraw(), { deep: true });
-watch(dims,               () => redraw());
+watch(ownershipGraphData, () => redraw(), { deep: true, flush: 'post' });
+watch(dims,               () => redraw(), { flush: 'post' });
 watch(edgeWeight,         () => renderer.updateEdgeStyles());
 watch(nodeColors,         () => renderer.updateNodeColors());
 watch(violationThreshold, () => renderer.drawOverlays());
@@ -261,20 +239,6 @@ onMounted(() => {
   display: inline-block; width: 20px; height: 12px; border-radius: 4px;
   background: transparent; border: 2px dashed #F08223; opacity: 0.8;
 }
-.expanded-teams-row {
-  @apply flex items-center gap-2 mt-3 flex-wrap justify-center;
-}
-.expanded-label {
-  @apply text-xs font-semibold text-gray-400 uppercase tracking-wide;
-}
-.expanded-team-chip {
-  display: inline-flex; align-items: center;
-  padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 700;
-  color: #fff; border: 1.5px solid; cursor: pointer;
-  opacity: 0.92; transition: opacity 0.12s, transform 0.12s;
-}
-.expanded-team-chip:hover { opacity: 1; transform: scale(1.04); }
-
 .date-filter-row {
   @apply flex items-center justify-center gap-2 mt-3 flex-wrap;
 }
