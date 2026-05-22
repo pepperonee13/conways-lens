@@ -4,10 +4,10 @@
       <h3 class="graph-title">Conway's Law Violation Graph</h3>
       <div class="graph-desc-row">
         <p class="graph-desc">
+          <span class="legend"><span class="legend-team"></span>Team lane</span>
           <span class="legend"><span class="legend-square"></span>Bounded Context</span>
-          <span class="legend"><span class="legend-team"></span>Team</span>
-          <span class="legend"><span class="legend-hull"></span>Ownership Boundary</span>
-          &nbsp;·&nbsp; Node size = total commits &nbsp;·&nbsp; Edge crossing a boundary = violation
+          <span class="legend"><span class="legend-ring"></span>Violation ring</span>
+          &nbsp;·&nbsp; Lanes sorted by violation severity &nbsp;·&nbsp; Edge crossing a lane = cross-team contribution
         </p>
         <div class="viz-dropdown-wrap" ref="vizDropRef">
           <button :class="['cross-team-btn', { active: edgeWeight }]" @click="vizOpen = !vizOpen">
@@ -93,7 +93,7 @@
 import { ref, computed, watch, reactive, onMounted, onBeforeUnmount } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useLensStore } from '../stores/useLensStore';
-import { useConwayGraph } from '../composables/graphs/useConwayGraph.js';
+import { useSwimlaneGraph } from '../composables/graphs/useSwimlaneGraph.js';
 
 const store = useLensStore();
 const {
@@ -144,7 +144,7 @@ function displayNodeName(id) {
 }
 
 // ── Renderer ──────────────────────────────────────────────────────────────
-const renderer = useConwayGraph({
+const renderer = useSwimlaneGraph({
   svgRef,
   effectiveTeams,
   getNodeColor: store.getNodeColor,
@@ -235,9 +235,9 @@ onMounted(() => {
 .legend        { @apply flex items-center gap-1.5 font-medium; }
 .legend-square { display: inline-block; width: 12px; height: 12px; border-radius: 2px; background: #088F9B; }
 .legend-team   { display: inline-block; width: 22px; height: 12px; border-radius: 6px; background: #F08223; }
-.legend-hull   {
-  display: inline-block; width: 20px; height: 12px; border-radius: 4px;
-  background: transparent; border: 2px dashed #F08223; opacity: 0.8;
+.legend-ring   {
+  display: inline-block; width: 14px; height: 14px; border-radius: 50%;
+  background: #fff; border: 3px solid #F08223; opacity: 0.85;
 }
 .date-filter-row {
   @apply flex items-center justify-center gap-2 mt-3 flex-wrap;
