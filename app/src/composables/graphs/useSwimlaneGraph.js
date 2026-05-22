@@ -22,6 +22,7 @@ export function useSwimlaneGraph({
   onHideTooltip,
   edgeWeight,
   violationThreshold,
+  violatingOnly,
 }) {
   const EDGE_OPACITY  = 0.55;
   const EDGE_HL_COLOR = '#225EA9';
@@ -162,9 +163,19 @@ export function useSwimlaneGraph({
     if (!teams.length) return { positions: {}, lanes: [], totalH: 0, gridLeft: LANE_LABEL_W };
 
     // Repos grouped by owningTeamId
+    const threshold = violationThreshold.value;
+    const onlyViolating = !!violatingOnly?.value;
+    const isViolating = (repo) => {
+      if (!repo.contributions || !repo.commits) return false;
+      return repo.contributions.some(c =>
+        c.teamId !== repo.owningTeamId && (c.commits / repo.commits) * 100 >= threshold
+      );
+    };
+
     const reposByTeam = {};
     for (const n of data.nodes) {
       if (n.type !== 'repo') continue;
+      if (onlyViolating && !isViolating(n)) continue;
       const tid = n.owningTeamId ?? '__unowned__';
       (reposByTeam[tid] ??= []).push(n);
     }

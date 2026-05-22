@@ -34,6 +34,15 @@
                      v-model.number="violationThreshold" />
               <p class="viz-desc">Min outside-team % to show a violation ring or edge</p>
               <div class="viz-divider"></div>
+
+              <div class="viz-row">
+                <span class="viz-row-label">Violating repos only</span>
+                <button :class="['viz-toggle-btn', { active: violatingOnly }]" @click="violatingOnly = !violatingOnly">
+                  {{ violatingOnly ? 'On' : 'Off' }}
+                </button>
+              </div>
+              <p class="viz-desc">Hide repos with no contribution above the threshold</p>
+              <div class="viz-divider"></div>
             </template>
 
           </div>
@@ -122,6 +131,7 @@ const dims         = reactive({ w: 900, h: 600 });
 const vizOpen            = ref(false);
 const edgeWeight         = ref(true);
 const violationThreshold = ref(10);
+const violatingOnly      = ref(false);
 
 const tooltip = reactive({
   show: false, x: 0, y: 0,
@@ -191,6 +201,7 @@ const renderer = useSwimlaneGraph({
   onHideTooltip: () => { tooltip.show = false; },
   edgeWeight,
   violationThreshold,
+  violatingOnly,
 });
 
 function redraw() {
@@ -201,7 +212,8 @@ watch(ownershipGraphData, () => redraw(), { deep: true, flush: 'post' });
 watch(dims,               () => redraw(), { flush: 'post' });
 watch(edgeWeight,         () => renderer.updateEdgeStyles());
 watch(nodeColors,         () => renderer.updateNodeColors());
-watch(violationThreshold, () => renderer.drawOverlays());
+watch(violationThreshold, () => violatingOnly.value ? redraw() : renderer.drawOverlays());
+watch(violatingOnly,      () => redraw());
 
 // ── Resize ────────────────────────────────────────────────────────────────
 
