@@ -36,53 +36,6 @@
               <div class="viz-divider"></div>
             </template>
 
-            <div class="viz-section-title">Physics</div>
-
-            <div class="viz-row">
-              <span class="viz-row-label">Ring scale</span>
-              <span class="viz-val">{{ simConfig.ringScale.toFixed(2) }}</span>
-            </div>
-            <input type="range" class="viz-slider" min="0.1" max="0.8" step="0.01"
-                   v-model.number="simConfig.ringScale" />
-
-            <div class="viz-row">
-              <span class="viz-row-label">Spread</span>
-              <span class="viz-val">{{ simConfig.nodeSpacing }}</span>
-            </div>
-            <input type="range" class="viz-slider" min="1" max="20" step="1"
-                   v-model.number="simConfig.nodeSpacing" />
-
-            <div class="viz-row">
-              <span class="viz-row-label">Repulsion</span>
-              <span class="viz-val">{{ -simConfig.charge }}</span>
-            </div>
-            <input type="range" class="viz-slider" min="100" max="2000" step="50"
-                   :value="-simConfig.charge"
-                   @input="e => { simConfig.charge = -e.target.value; simConfig.teamCharge = -e.target.value * 2.33 | 0; }" />
-
-            <div class="viz-row">
-              <span class="viz-row-label">Link distance</span>
-              <span class="viz-val">{{ simConfig.linkDistance }}</span>
-            </div>
-            <input type="range" class="viz-slider" min="40" max="300" step="5"
-                   :value="simConfig.linkDistance"
-                   @input="e => { simConfig.linkDistance = +e.target.value; simConfig.teamLinkDistance = +e.target.value * 1.45 | 0; }" />
-
-            <div class="viz-row">
-              <span class="viz-row-label">Radial pull</span>
-              <span class="viz-val">{{ simConfig.radialStrength.toFixed(2) }}</span>
-            </div>
-            <input type="range" class="viz-slider" min="0.02" max="0.5" step="0.01"
-                   v-model.number="simConfig.radialStrength" />
-
-            <div class="viz-row">
-              <span class="viz-row-label">Team gravity</span>
-              <span class="viz-val">{{ simConfig.teamGravity.toFixed(2) }}</span>
-            </div>
-            <input type="range" class="viz-slider" min="0" max="0.4" step="0.01"
-                   v-model.number="simConfig.teamGravity" />
-
-            <button class="viz-reset-btn" @click="resetSimConfig">Reset</button>
           </div>
         </div>
       </div>
@@ -174,22 +127,6 @@ const vizOpen            = ref(false);
 const edgeWeight         = ref(true);
 const violationThreshold = ref(10);
 
-const SIM_DEFAULTS = {
-  ringScale:        0.38,
-  nodeSpacing:      5,
-  linkDistance:     110,
-  teamLinkDistance: 160,
-  linkStrength:     0.4,
-  charge:          -600,
-  teamCharge:      -1400,
-  radialStrength:   0.15,
-  collide:          18,
-  teamCollide:      40,
-  teamGravity:      0.08,
-};
-const simConfig = reactive({ ...SIM_DEFAULTS });
-function resetSimConfig() { Object.assign(simConfig, SIM_DEFAULTS); }
-
 const tooltip = reactive({
   show: false, x: 0, y: 0,
   isLink: false,
@@ -249,7 +186,6 @@ const renderer = useConwayGraph({
   },
   onMoveTooltip: (x, y) => { tooltip.x = x; tooltip.y = y; },
   onHideTooltip: () => { tooltip.show = false; },
-  config:              simConfig,
   edgeWeight,
   violationThreshold,
 });
@@ -260,7 +196,6 @@ function redraw() {
 
 watch(ownershipGraphData, () => redraw(), { deep: true });
 watch(dims,               () => redraw());
-watch(simConfig,          () => redraw(), { deep: true });
 watch(edgeWeight,         () => renderer.updateEdgeStyles());
 watch(nodeColors,         () => renderer.updateNodeColors());
 watch(violationThreshold, () => renderer.drawOverlays());
@@ -395,17 +330,10 @@ onMounted(() => {
 .viz-toggle-btn.active { background: #225EA9; border-color: #225EA9; color: #fff; }
 .viz-desc         { font-size: 10px; color: #9ca3af; margin: 6px 0 0; text-align: center; }
 .viz-divider      { height: 1px; background: #e2e8f0; margin: 10px 0 8px; }
-.viz-section-title { font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.06em; margin: 4px 0 6px; }
 .viz-val          { font-size: 11px; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: #225EA9; min-width: 36px; text-align: right; }
 .viz-slider {
   width: 100%; margin: 2px 0 8px;
   height: 4px; border-radius: 2px; appearance: none; cursor: pointer;
   accent-color: #088F9B;
 }
-.viz-reset-btn {
-  margin-top: 4px; width: 100%; padding: 4px 0; border-radius: 6px;
-  font-size: 11px; font-weight: 600; color: #64748b;
-  border: 1px solid #e2e8f0; background: transparent; cursor: pointer;
-}
-.viz-reset-btn:hover { border-color: #225EA9; color: #225EA9; }
 </style>
