@@ -1,20 +1,14 @@
 <template>
   <div class="graph-wrap" ref="containerRef">
     <div class="graph-header">
-      <h3 class="graph-title">Contribution Network</h3>
+      <h3 class="graph-title">Conway's Law Violation Graph</h3>
       <div class="graph-desc-row">
         <p class="graph-desc">
-          <span class="legend"><span class="legend-circle"></span>Author</span>
-          <span class="legend"><span class="legend-square"></span>Repository</span>
+          <span class="legend"><span class="legend-square"></span>Bounded Context</span>
           <span class="legend"><span class="legend-team"></span>Team</span>
-          &nbsp;·&nbsp; Node size = total commits &nbsp;·&nbsp; Drag nodes · Click team to expand
+          <span class="legend"><span class="legend-hull"></span>Ownership Boundary</span>
+          &nbsp;·&nbsp; Node size = total commits &nbsp;·&nbsp; Edge crossing a boundary = violation
         </p>
-        <button v-if="effectiveTeams.length > 0"
-                @click="store.crossTeamOnly = !store.crossTeamOnly"
-                :class="['cross-team-btn', { active: crossTeamOnly }]">
-          <span class="btn-dot"></span>
-          Cross-team only
-        </button>
         <div class="viz-dropdown-wrap" ref="vizDropRef">
           <button :class="['cross-team-btn', { active: edgeWeight }]" @click="vizOpen = !vizOpen">
             <span class="btn-dot"></span>
@@ -22,84 +16,30 @@
             <span class="viz-chevron">{{ vizOpen ? '▴' : '▾' }}</span>
           </button>
           <div v-if="vizOpen" class="viz-panel">
+            <div class="viz-row">
+              <span class="viz-row-label">Edge weight</span>
+              <button :class="['viz-toggle-btn', { active: edgeWeight }]" @click="edgeWeight = !edgeWeight">
+                {{ edgeWeight ? 'On' : 'Off' }}
+              </button>
+            </div>
+            <p class="viz-desc">Color = source team &nbsp;·&nbsp; Width = commit volume</p>
+            <div class="viz-divider"></div>
+
             <template v-if="effectiveTeams.length > 0">
               <div class="viz-row">
-                <span class="viz-row-label">Edge weight</span>
-                <button :class="['viz-toggle-btn', { active: edgeWeight }]" @click="edgeWeight = !edgeWeight">
-                  {{ edgeWeight ? 'On' : 'Off' }}
-                </button>
+                <span class="viz-row-label">Violation threshold</span>
+                <span class="viz-val">{{ violationThreshold }}%</span>
               </div>
-              <p class="viz-desc">Color = source team &nbsp;·&nbsp; Width = commit volume</p>
-              <div class="viz-divider"></div>
-              <div class="viz-row">
-                <span class="viz-row-label">Show authors</span>
-                <button :class="['viz-toggle-btn', { active: showAuthors }]" @click="showAuthors = !showAuthors">
-                  {{ showAuthors ? 'On' : 'Off' }}
-                </button>
-              </div>
-              <p class="viz-desc">Individual author nodes &amp; edges</p>
-              <div class="viz-divider"></div>
-              <div class="viz-row">
-                <span class="viz-row-label">Boundaries</span>
-              </div>
-              <div class="viz-boundary-row">
-                <button :class="['viz-boundary-btn', { active: teamBoundary === 'none' }]"    @click="teamBoundary = 'none'">None</button>
-                <button :class="['viz-boundary-btn', { active: teamBoundary === 'blur' }]"    @click="teamBoundary = 'blur'">Blur</button>
-                <button :class="['viz-boundary-btn', { active: teamBoundary === 'density' }]" @click="teamBoundary = 'density'">Density</button>
-              </div>
+              <input type="range" class="viz-slider" min="1" max="50" step="1"
+                     v-model.number="violationThreshold" />
+              <p class="viz-desc">Min outside-team % to show a violation ring</p>
               <div class="viz-divider"></div>
             </template>
 
-            <div class="viz-section-title">Physics</div>
-
-            <div class="viz-row">
-              <span class="viz-row-label">Ring scale</span>
-              <span class="viz-val">{{ simConfig.ringScale.toFixed(2) }}</span>
-            </div>
-            <input type="range" class="viz-slider" min="0.1" max="0.8" step="0.01"
-                   v-model.number="simConfig.ringScale" />
-
-            <div class="viz-row">
-              <span class="viz-row-label">Spread</span>
-              <span class="viz-val">{{ simConfig.nodeSpacing }}</span>
-            </div>
-            <input type="range" class="viz-slider" min="1" max="20" step="1"
-                   v-model.number="simConfig.nodeSpacing" />
-
-            <div class="viz-row">
-              <span class="viz-row-label">Repulsion</span>
-              <span class="viz-val">{{ -simConfig.charge }}</span>
-            </div>
-            <input type="range" class="viz-slider" min="100" max="2000" step="50"
-                   :value="-simConfig.charge"
-                   @input="e => { simConfig.charge = -e.target.value; simConfig.teamCharge = -e.target.value * 2.33 | 0; }" />
-
-            <div class="viz-row">
-              <span class="viz-row-label">Link distance</span>
-              <span class="viz-val">{{ simConfig.linkDistance }}</span>
-            </div>
-            <input type="range" class="viz-slider" min="40" max="300" step="5"
-                   :value="simConfig.linkDistance"
-                   @input="e => { simConfig.linkDistance = +e.target.value; simConfig.teamLinkDistance = +e.target.value * 1.45 | 0; }" />
-
-            <div class="viz-row">
-              <span class="viz-row-label">Radial pull</span>
-              <span class="viz-val">{{ simConfig.radialStrength.toFixed(2) }}</span>
-            </div>
-            <input type="range" class="viz-slider" min="0.02" max="0.5" step="0.01"
-                   v-model.number="simConfig.radialStrength" />
-
-            <div class="viz-row">
-              <span class="viz-row-label">Team gravity</span>
-              <span class="viz-val">{{ simConfig.teamGravity.toFixed(2) }}</span>
-            </div>
-            <input type="range" class="viz-slider" min="0" max="0.4" step="0.01"
-                   v-model.number="simConfig.teamGravity" />
-
-            <button class="viz-reset-btn" @click="resetSimConfig">Reset</button>
           </div>
         </div>
       </div>
+
       <div v-if="expandedTeams.size > 0" class="expanded-teams-row">
         <span class="expanded-label">Expanded:</span>
         <button v-for="t in expandedTeamsList" :key="t.id"
@@ -130,7 +70,10 @@
       </div>
     </div>
 
-    <div v-if="!hasData" class="empty-state">No contribution data to display.</div>
+    <div v-if="!store.dataLoaded" class="empty-state">Upload contribution data to get started.</div>
+    <div v-else-if="effectiveTeams.length === 0" class="empty-state">
+      Configure teams in the editor to visualize Conway's Law violations.
+    </div>
 
     <template v-else>
       <p class="hint">Scroll to zoom · Drag nodes · Click team nodes to expand or collapse</p>
@@ -159,50 +102,32 @@
 <script setup>
 import { ref, computed, watch, reactive, onMounted, onBeforeUnmount } from 'vue';
 import { storeToRefs } from 'pinia';
-import * as d3 from 'd3';
 import { useLensStore } from '../stores/useLensStore';
-import { useAnonymize } from '../composables/useAnonymize.js';
+import { useConwayGraph } from '../composables/graphs/useConwayGraph.js';
 
 const store = useLensStore();
-const { graphData, nodeColors, crossTeamOnly, dateBounds, activeRange, expandedTeams, syntheticTeam } = storeToRefs(store);
+const {
+  ownershipGraphData, nodeColors,
+  dateBounds, activeRange, expandedTeams, syntheticTeam,
+} = storeToRefs(store);
 
-// Real teams + synthetic "Outside Contributors" team (when it exists)
 const effectiveTeams = computed(() =>
   syntheticTeam.value ? [...store.teams, syntheticTeam.value] : store.teams
 );
 const expandedTeamsList = computed(() =>
   effectiveTeams.value.filter(t => expandedTeams.value.has(t.id))
 );
-const { anonymize } = useAnonymize();
 
 const svgRef       = ref(null);
 const containerRef = ref(null);
 const vizDropRef   = ref(null);
 const dims         = reactive({ w: 900, h: 600 });
 
-// Visualization panel state (ephemeral — not persisted)
-const vizOpen      = ref(false);
-const edgeWeight   = ref(true);
-const showAuthors  = ref(false);
-const teamBoundary = ref('none'); // 'none' | 'blur' | 'density'
+const vizOpen            = ref(false);
+const edgeWeight         = ref(true);
+const violationThreshold = ref(10);
 
-// Force simulation config — all tunable values in one place, ready for UI binding
-const SIM_DEFAULTS = {
-  ringScale:        0.38,
-  nodeSpacing:      5,
-  linkDistance:     110,
-  teamLinkDistance: 160,
-  linkStrength:     0.4,
-  charge:          -600,
-  teamCharge:      -1400,
-  radialStrength:   0.15,
-  collide:          18,
-  teamCollide:      40,
-  teamGravity:      0.08, // pull strength toward team centroid (authors + repos)
-};
-const simConfig = reactive({ ...SIM_DEFAULTS });
-function resetSimConfig() { Object.assign(simConfig, SIM_DEFAULTS); }
-const tooltip      = reactive({
+const tooltip = reactive({
   show: false, x: 0, y: 0,
   isLink: false,
   name: '', type: '', commits: 0,
@@ -210,536 +135,72 @@ const tooltip      = reactive({
   source: '', target: '', action: '',
 });
 
-const hasData = computed(() => graphData.value.nodes.length > 0);
-
 const tooltipName = computed(() => {
-  if (tooltip.type === 'author') return anonymize(tooltip.name);
-  if (tooltip.type === 'team')   return tooltip.teamName;
+  if (tooltip.type === 'team') return tooltip.teamName;
   return tooltip.name;
 });
 
 const tooltipDetail = computed(() => {
   const c = tooltip.commits.toLocaleString();
-  if (tooltip.type === 'author') return `Author · ${c} commits`;
-  if (tooltip.type === 'team')   return `Team · ${tooltip.repoCount} ${tooltip.repoCount === 1 ? 'repo' : 'repos'} · ${tooltip.authorCount} ${tooltip.authorCount === 1 ? 'dev' : 'devs'} · ${c} commits`;
-  return `Repository · ${c} commits`;
+  if (tooltip.type === 'team')
+    return `Team · ${tooltip.repoCount} ${tooltip.repoCount === 1 ? 'repo' : 'repos'} · ${tooltip.authorCount} ${tooltip.authorCount === 1 ? 'dev' : 'devs'} · ${c} commits`;
+  return `Bounded Context · ${c} commits`;
 });
 
 function displayNodeName(id) {
   if (!id) return '';
   if (id.startsWith('team:')) {
     const teamId = id.slice(5);
-    const team = effectiveTeams.value.find(t => t.id === teamId);
-    return team?.name ?? id;
+    return effectiveTeams.value.find(t => t.id === teamId)?.name ?? id;
   }
-  return anonymize(id);
+  return id;
 }
 
-const EDGE_COLOR    = '#94a3b8';
-const EDGE_OPACITY  = 0.5;
-const EDGE_HL_COLOR = '#225EA9';
-const DIM_OPACITY   = 0.08;
-
+// ── Saved positions (persist across redraws) ──────────────────────────────
 const savedPositions = {};
 
-let nodeEls       = null;
-let linkEls       = null;
-let cloudGroup    = null;
-let sim           = null;
-let simNodes      = null; // live simulation node array, shared with drawClouds
-let nodeTeamId    = {}; // nodeId → teamId  (rebuilt each drawGraph)
-let nodeTeamColor = {}; // nodeId → hex color
-
-// ── Team boundary helpers ──────────────────────────────────────────────────
-
-function teamHullPath(pts, padding) {
-  const samples = [];
-  for (const [x, y, r] of pts) {
-    const rad = (r ?? 20) + padding;
-    for (let i = 0; i < 12; i++) {
-      const a = (i / 12) * Math.PI * 2;
-      samples.push([x + Math.cos(a) * rad, y + Math.sin(a) * rad]);
-    }
-  }
-  const hull = d3.polygonHull(samples);
-  return hull ? `M${hull.join('L')}Z` : null;
-}
-
-function drawClouds() {
-  if (!cloudGroup || !simNodes) return;
-  cloudGroup.selectAll('*').remove();
-  if (teamBoundary.value === 'none') return;
-
-  for (const t of effectiveTeams.value) {
-    // Only cloud expanded teams — collapsed teams are already a labeled pill
-    if (!expandedTeams.value.has(t.id)) continue;
-    const pts = simNodes
-      .filter(n => n.x != null && nodeTeamId[n.id] === t.id)
-      .map(n => [n.x, n.y, n.r]);
-    if (pts.length < 1) continue;
-
-    if (teamBoundary.value === 'blur') {
-      // Outer blurred halo
-      const fullPath = teamHullPath(pts, 52);
-      if (fullPath)
-        cloudGroup.append('path').attr('d', fullPath)
-          .attr('fill', t.color + '3E').attr('stroke', t.color + '55')
-          .attr('stroke-width', 3).attr('filter', `url(#blur-soft-${t.id})`);
-      // Crisp core boundary
-      const corePath = teamHullPath(pts, 22);
-      if (corePath)
-        cloudGroup.append('path').attr('d', corePath)
-          .attr('fill', t.color + '26').attr('stroke', t.color)
-          .attr('stroke-width', 2).attr('stroke-dasharray', '5 3')
-          .attr('stroke-opacity', 0.65);
-
-    } else if (teamBoundary.value === 'density') {
-      // Gaussian blob per node, all under one heavy blur filter
-      const g = cloudGroup.append('g').attr('filter', `url(#blur-kde-${t.id})`);
-      for (const [x, y, r] of pts)
-        g.append('circle').attr('cx', x).attr('cy', y)
-          .attr('r', (r + 44) * 1.8).attr('fill', t.color).attr('opacity', 0.22);
-    }
-  }
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-
-function squareEdgeDist(ux, uy, r) {
-  const tx = Math.abs(ux) > 1e-9 ? r / Math.abs(ux) : Infinity;
-  const ty = Math.abs(uy) > 1e-9 ? r / Math.abs(uy) : Infinity;
-  return Math.min(tx, ty);
-}
-
-// ── Edge weight helpers ──────────────────────────────────────────────────────
-
-function edgeSrcColor(link) {
-  const srcTeam = nodeTeamId[link.source.id];
-  const tgtTeam = nodeTeamId[link.target.id];
-  if (srcTeam && tgtTeam && srcTeam !== tgtTeam)
-    return nodeTeamColor[link.source.id] ?? EDGE_COLOR;
-  return EDGE_COLOR;
-}
-
-function edgeStrokeWidth(link) {
-  return edgeWeight.value ? Math.max(1, 1 + Math.log1p(link.commits) * 0.9) : 1.5;
-}
-
-function edgeStrokeOpacity(link) {
-  if (!edgeWeight.value) return EDGE_OPACITY;
-  const srcTeam = nodeTeamId[link.source.id];
-  const tgtTeam = nodeTeamId[link.target.id];
-  if (!srcTeam || !tgtTeam) return EDGE_OPACITY; // no team context — show at normal opacity
-  return (srcTeam !== tgtTeam) ? 0.75 : 0.18;
-}
-
-function updateEdgeStyles() {
-  if (!linkEls) return;
-  linkEls
-    .attr('stroke',         d => edgeWeight.value ? edgeSrcColor(d)        : EDGE_COLOR)
-    .attr('stroke-width',   d => edgeStrokeWidth(d))
-    .attr('stroke-opacity', d => edgeStrokeOpacity(d));
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-
-function highlightNode(d) {
-  const connected = new Set([d.id]);
-  linkEls.each(l => {
-    const s = l.source.id, t = l.target.id;
-    if (s === d.id || t === d.id) { connected.add(s); connected.add(t); }
-  });
-  nodeEls.attr('opacity', n => connected.has(n.id) ? 1 : DIM_OPACITY);
-  linkEls
-    .attr('stroke', l => (l.source.id === d.id || l.target.id === d.id)
-      ? EDGE_HL_COLOR
-      : (edgeWeight.value ? edgeSrcColor(l) : EDGE_COLOR))
-    .attr('stroke-opacity', l => (l.source.id === d.id || l.target.id === d.id) ? 0.9 : DIM_OPACITY);
-}
-
-function highlightLink(d) {
-  const s = d.source.id, t = d.target.id;
-  nodeEls.attr('opacity', n => (n.id === s || n.id === t) ? 1 : DIM_OPACITY);
-  linkEls
-    .attr('stroke', l => l === d
-      ? EDGE_HL_COLOR
-      : (edgeWeight.value ? edgeSrcColor(l) : EDGE_COLOR))
-    .attr('stroke-opacity', l => l === d ? 0.9 : DIM_OPACITY);
-}
-
-function resetHighlight() {
-  if (!nodeEls || !linkEls) return;
-  nodeEls.attr('opacity', 1);
-  updateEdgeStyles();
-}
-
-function updateNodeColors() {
-  if (!nodeEls) return;
-  nodeEls.filter(d => d.type === 'author').select('circle').attr('fill', d => store.getNodeColor(d.id, 'author'));
-  nodeEls.filter(d => d.type === 'repo')  .select('rect')  .attr('fill', d => store.getNodeColor(d.id, 'repo'));
-}
-
-
-function isNodeExpandable(d) {
-  return d.type === 'team';
-}
-
-function isNodeExpanded(d) {
-  return expandedTeams.value.has(d.teamId);
-}
-
-function handleNodeClick(d) {
-  if (d.type === 'team') store.toggleTeamExpansion(d.teamId);
-}
-
-function drawGraph() {
-  if (!svgRef.value || !hasData.value) return;
-  if (sim) { sim.stop(); sim = null; }
-
-  let { nodes: rawNodes, links: rawLinks } = graphData.value;
-  const { w, h } = dims;
-
-  // When authors are hidden: remove author nodes and lift their edges up to
-  // the team level (only possible for collapsed teams that have a team node).
-  // Skip entirely when no teams exist — authors can't be lifted to anything.
-  if (!showAuthors.value && effectiveTeams.value.length > 0) {
-    const authorTeamNode = {};
-    for (const t of effectiveTeams.value) {
-      for (const a of (t.authors ?? [])) authorTeamNode[a] = `team:${t.id}`;
-    }
-    const visibleIds = new Set(rawNodes.filter(n => n.type !== 'author').map(n => n.id));
-    const agg = {};
-    for (const l of rawLinks) {
-      const s = typeof l.source === 'object' ? l.source.id : l.source;
-      const t = typeof l.target === 'object' ? l.target.id : l.target;
-      const srcNode = rawNodes.find(n => n.id === s);
-      let src = s;
-      if (srcNode?.type === 'author') {
-        src = authorTeamNode[s];
-        if (!src || !visibleIds.has(src)) continue; // author's team is expanded — skip
-      }
-      if (!visibleIds.has(src) || !visibleIds.has(t)) continue;
-      const key = `${src}\x00${t}`;
-      agg[key] = (agg[key] ?? 0) + (l.commits ?? 1);
-    }
-    rawNodes = rawNodes.filter(n => n.type !== 'author');
-    rawLinks = Object.entries(agg).map(([key, commits]) => {
-      const [source, target] = key.split('\x00');
-      return { source, target, commits };
+// ── Renderer ──────────────────────────────────────────────────────────────
+const renderer = useConwayGraph({
+  svgRef,
+  effectiveTeams,
+  expandedTeams,
+  getNodeColor:        store.getNodeColor,
+  toggleTeamExpansion: store.toggleTeamExpansion,
+  savedPositions,
+  onShowNodeTooltip: (d, x, y) => {
+    const action = d.type === 'team'
+      ? (expandedTeams.value.has(d.teamId) ? 'Click to collapse' : 'Click to expand')
+      : '';
+    Object.assign(tooltip, {
+      show: true, x, y, isLink: false,
+      name: d.id, type: d.type, commits: d.commits,
+      teamName: d.name ?? '', repoCount: d.repoCount ?? 0, authorCount: d.authorCount ?? 0,
+      action,
     });
-  }
-
-  const authMax    = d3.max(rawNodes.filter(n => n.type === 'author'), n => n.commits) || 1;
-  const nonAuthMax = d3.max(rawNodes.filter(n => n.type !== 'author'), n => n.commits) || 1;
-
-  const aScale    = d3.scaleSqrt().domain([0, authMax]).range([13, 40]);
-  const otherScale = d3.scaleSqrt().domain([0, nonAuthMax]).range([14, 40]);
-  // Team nodes are larger
-  const teamScale = d3.scaleSqrt().domain([0, nonAuthMax]).range([28, 55]);
-
-  const nodes = rawNodes.map(n => {
-    const saved = savedPositions[n.id];
-    let r;
-    if (n.type === 'author') r = aScale(n.commits);
-    else if (n.type === 'team') r = teamScale(n.commits);
-    else r = otherScale(n.commits);
-    return { ...n, r, x: saved?.x, y: saved?.y };
-  });
-  const links = rawLinks.map(l => ({ ...l }));
-
-  // Detect bidirectional pairs and mark them for arc rendering.
-  // Both directions use curvature = 1 — when the edge is reversed ux/uy negate
-  // naturally, so the perpendicular offset lands on opposite sides of the midpoint.
-  const linkKeySet = new Set(links.map(l => `${l.source}\x00${l.target}`));
-  for (const l of links) {
-    const rev = `${l.target}\x00${l.source}`;
-    l.curvature = linkKeySet.has(rev) ? 1 : 0;
-  }
-
-  const hasTeams = effectiveTeams.value.length > 0;
-
-  // Rebuild team-membership lookup maps used by edge helpers
-  nodeTeamId    = {};
-  nodeTeamColor = {};
-  for (const t of effectiveTeams.value) {
-    const key = `team:${t.id}`;
-    nodeTeamId[key]    = t.id;
-    nodeTeamColor[key] = t.color;
-    for (const a of (t.authors ?? [])) { nodeTeamId[a]    = t.id; nodeTeamColor[a]    = t.color; }
-    for (const r of (t.repos   ?? [])) { nodeTeamId[r]    = t.id; nodeTeamColor[r]    = t.color; }
-  }
-
-  const svg = d3.select(svgRef.value);
-  svg.selectAll('*').remove();
-  svg.attr('width', w).attr('height', h).attr('viewBox', `0 0 ${w} ${h}`);
-
-  const defs = svg.append('defs');
-
-  defs.append('marker')
-    .attr('id', 'arrow')
-    .attr('viewBox', '0 -5 10 10').attr('refX', 10).attr('refY', 0)
-    .attr('markerWidth', 14).attr('markerHeight', 14)
-    .attr('markerUnits', 'userSpaceOnUse').attr('orient', 'auto')
-    .append('path').attr('d', 'M0,-5L10,0L0,5').attr('fill', 'context-stroke');
-
-  // Per-team blur filters — one per team to prevent color bleed between overlapping teams
-  for (const t of effectiveTeams.value) {
-    defs.append('filter').attr('id', `blur-soft-${t.id}`)
-      .attr('x', '-80%').attr('y', '-80%').attr('width', '260%').attr('height', '260%')
-      .append('feGaussianBlur').attr('stdDeviation', 18);
-    defs.append('filter').attr('id', `blur-kde-${t.id}`)
-      .attr('x', '-100%').attr('y', '-100%').attr('width', '300%').attr('height', '300%')
-      .append('feGaussianBlur').attr('stdDeviation', 38);
-  }
-
-  const root = svg.append('g');
-  svg.call(d3.zoom().scaleExtent([0.2, 4]).on('zoom', e => root.attr('transform', e.transform)));
-
-  // Build lookup: author → their teams (for gravity)
-  const authorToTeamsMap = {};
-  for (const t of effectiveTeams.value) {
-    for (const a of (t.authors ?? [])) {
-      if (!authorToTeamsMap[a]) authorToTeamsMap[a] = [];
-      authorToTeamsMap[a].push(t);
-    }
-  }
-
-  // cfg alias used by teamGravity and the force setup below
-  const cfg = simConfig;
-
-  // Team gravity: pull both author and repo nodes toward their team centroid.
-  // Only applies to expanded teams (collapsed teams are represented by a single node).
-  function teamGravity(alpha) {
-    if (!hasTeams || cfg.teamGravity === 0) return;
-    const k = cfg.teamGravity * alpha;
-
-    // Resolve which expanded team each node belongs to
-    function nodeTeam(n) {
-      if (n.type === 'author') {
-        const t = (authorToTeamsMap[n.id] ?? []).find(t => expandedTeams.value.has(t.id));
-        return t?.id ?? null;
-      }
-      if (n.type === 'repo') {
-        const tid = nodeTeamId[n.id];
-        return tid && expandedTeams.value.has(tid) ? tid : null;
-      }
-      return null;
-    }
-
-    // First pass: compute centroid per team
-    const cx = {}, cy = {}, cnt = {};
-    for (const n of nodes) {
-      if (n.x == null) continue;
-      const tid = nodeTeam(n);
-      if (!tid) continue;
-      cx[tid]  = (cx[tid]  ?? 0) + n.x;
-      cy[tid]  = (cy[tid]  ?? 0) + n.y;
-      cnt[tid] = (cnt[tid] ?? 0) + 1;
-    }
-    for (const id in cnt) { cx[id] /= cnt[id]; cy[id] /= cnt[id]; }
-
-    // Second pass: apply velocity toward centroid
-    for (const n of nodes) {
-      if (n.x == null) continue;
-      const tid = nodeTeam(n);
-      if (!tid || cx[tid] == null) continue;
-      n.vx = (n.vx ?? 0) + (cx[tid] - n.x) * k;
-      n.vy = (n.vy ?? 0) + (cy[tid] - n.y) * k;
-    }
-  }
-
-  // Radial layout: authors inner → repos middle → teams outer.
-  // R grows with node count to keep the rings from getting cramped.
-  const R = Math.min(w, h) * cfg.ringScale + nodes.length * cfg.nodeSpacing;
-  const hasIndividuals = nodes.some(n => n.type === 'author' || n.type === 'repo');
-
-  sim = d3.forceSimulation(nodes)
-    .force('link',    d3.forceLink(links).id(d => d.id)
-      .distance(d => (d.source.type === 'team' || d.target.type === 'team') ? cfg.teamLinkDistance : cfg.linkDistance)
-      .strength(cfg.linkStrength))
-    .force('charge',  d3.forceManyBody().strength(d => d.type === 'team' ? cfg.teamCharge : cfg.charge))
-    .force('center',  d3.forceCenter(w / 2, h / 2).strength(0.08))
-    .force('radial',  d3.forceRadial(d => {
-      if (d.type === 'team')   return hasIndividuals ? R : R * 0.75;
-      if (d.type === 'author') return R * 0.35;
-      return R * 0.65;
-    }, w / 2, h / 2).strength(cfg.radialStrength))
-    .force('collide', d3.forceCollide(d => d.r + (d.type === 'team' ? cfg.teamCollide : cfg.collide)))
-    .force('teamGravity', teamGravity);
-
-  // Cloud group sits before links + nodes so boundaries render behind everything
-  simNodes   = nodes;
-  cloudGroup = root.append('g').attr('class', 'team-clouds').attr('pointer-events', 'none');
-
-  linkEls = root.append('g')
-    .selectAll('path').data(links).join('path')
-    .attr('fill', 'none')
-    .attr('marker-end', 'url(#arrow)')
-    .style('cursor', 'default')
-    .on('mouseenter', (e, d) => {
-      highlightLink(d);
-      Object.assign(tooltip, {
-        show: true, x: e.clientX + 14, y: e.clientY - 10,
-        isLink: true,
-        source: d.source.id, target: d.target.id, commits: d.commits,
-      });
-    })
-    .on('mousemove',  e => { tooltip.x = e.clientX + 14; tooltip.y = e.clientY - 10; })
-    .on('mouseleave', () => { resetHighlight(); tooltip.show = false; });
-
-  updateEdgeStyles();
-
-  nodeEls = root.append('g')
-    .selectAll('g').data(nodes).join('g')
-    .style('cursor', d => isNodeExpandable(d) ? 'pointer' : 'grab')
-    .call(d3.drag()
-      .on('start', (e, d) => {
-        d._moved = false;
-        if (!e.active) sim.alphaTarget(0.3).restart();
-        d.fx = d.x; d.fy = d.y;
-      })
-      .on('drag', (e, d) => {
-        d._moved = true;
-        d.fx = e.x; d.fy = e.y;
-      })
-      .on('end', (e, d) => {
-        if (!e.active) sim.alphaTarget(0);
-        d.fx = null; d.fy = null;
-      })
-    )
-    .on('click', (e, d) => {
-      if (d._moved) { d._moved = false; return; }
-      handleNodeClick(d);
-    })
-    .on('mouseenter', (e, d) => {
-      highlightNode(d);
-      const action = d.type === 'team'
-        ? (expandedTeams.value.has(d.teamId) ? 'Click to collapse' : 'Click to expand')
-        : '';
-      Object.assign(tooltip, {
-        show: true, x: e.clientX + 14, y: e.clientY - 10,
-        isLink: false,
-        name: d.id, type: d.type, commits: d.commits,
-        teamName: d.name ?? '', repoCount: d.repoCount ?? 0, authorCount: d.authorCount ?? 0,
-        action,
-      });
-    })
-    .on('mousemove',  e => { tooltip.x = e.clientX + 14; tooltip.y = e.clientY - 10; })
-    .on('mouseleave', () => { resetHighlight(); tooltip.show = false; });
-
-  // Author nodes — circles
-  nodeEls.filter(d => d.type === 'author')
-    .append('circle')
-    .attr('r', d => d.r)
-    .attr('fill', d => store.getNodeColor(d.id, 'author'))
-    .attr('stroke', '#fff').attr('stroke-width', 2.5).attr('opacity', 0.92);
-
-  // Repo nodes — squares
-  nodeEls.filter(d => d.type === 'repo')
-    .append('rect')
-    .attr('x', d => -d.r).attr('y', d => -d.r)
-    .attr('width', d => d.r * 2).attr('height', d => d.r * 2)
-    .attr('rx', 4)
-    .attr('fill', d => store.getNodeColor(d.id, 'repo'))
-    .attr('stroke', '#fff').attr('stroke-width', 2.5).attr('opacity', 0.92);
-
-  // Team nodes — wide pill / rounded rectangle
-  nodeEls.filter(d => d.type === 'team')
-    .append('rect')
-    .attr('x', d => -(d.r + 14)).attr('y', d => -d.r)
-    .attr('width', d => (d.r + 14) * 2).attr('height', d => d.r * 2)
-    .attr('rx', d => d.r)
-    .attr('fill', d => d.color)
-    .attr('stroke', '#fff').attr('stroke-width', 3).attr('opacity', 0.95);
-
-  // Team node label (centered, white)
-  nodeEls.filter(d => d.type === 'team')
-    .append('text')
-    .attr('text-anchor', 'middle')
-    .attr('dy', '-0.15em')
-    .attr('fill', '#fff').attr('font-size', '13px').attr('font-weight', '700')
-    .attr('pointer-events', 'none')
-    .text(d => d.name);
-
-  // Team node sub-label
-  nodeEls.filter(d => d.type === 'team')
-    .append('text')
-    .attr('text-anchor', 'middle')
-    .attr('dy', '1.1em')
-    .attr('fill', 'rgba(255,255,255,0.75)').attr('font-size', '9px')
-    .attr('pointer-events', 'none')
-    .text(d => `${d.repoCount} ${d.repoCount === 1 ? 'repo' : 'repos'} · ${d.authorCount} ${d.authorCount === 1 ? 'dev' : 'devs'}`);
-
-  // Expand/collapse badge on clickable non-author nodes (+ or −)
-  nodeEls.filter(d => isNodeExpandable(d))
-    .append('circle')
-    .attr('cx', d => d.type === 'team' ? d.r + 10 : d.r * 0.65)
-    .attr('cy', d => d.type === 'team' ? -d.r      : -d.r * 0.65)
-    .attr('r', 8)
-    .attr('fill', d => isNodeExpanded(d) ? '#F08223' : '#22c55e')
-    .attr('stroke', '#fff').attr('stroke-width', 1.5)
-    .attr('pointer-events', 'none');
-
-  nodeEls.filter(d => isNodeExpandable(d))
-    .append('text')
-    .attr('x', d => d.type === 'team' ? d.r + 10 : d.r * 0.65)
-    .attr('y', d => d.type === 'team' ? -d.r      : -d.r * 0.65)
-    .attr('text-anchor', 'middle').attr('dy', '0.38em')
-    .attr('fill', '#fff').attr('font-size', '11px').attr('font-weight', '700')
-    .attr('pointer-events', 'none')
-    .text(d => isNodeExpanded(d) ? '−' : '+');
-
-  // Text labels below nodes (all types except team, which has inline labels)
-  nodeEls.filter(d => d.type !== 'team')
-    .append('text')
-    .attr('text-anchor', 'middle')
-    .attr('dy', d => d.r + 13)
-    .attr('fill', '#374151').attr('font-size', '11px').attr('font-weight', '600')
-    .attr('pointer-events', 'none')
-    .text(d => d.type === 'author' ? anonymize(d.id) : d.id);
-
-  sim.on('tick', () => {
-    nodes.forEach(n => { if (n.x != null) savedPositions[n.id] = { x: n.x, y: n.y }; });
-
-    linkEls.each(function(d) {
-      const dx  = d.target.x - d.source.x;
-      const dy  = d.target.y - d.source.y;
-      const len = Math.sqrt(dx * dx + dy * dy) || 1;
-      const ux  = dx / len, uy = dy / len;
-
-      const srcOffset = d.source.type === 'author'
-        ? d.source.r + 3
-        : d.source.type === 'team'
-          ? squareEdgeDist(ux, uy, d.source.r + 14)
-          : squareEdgeDist(ux, uy, d.source.r) + 2;
-
-      const tgtOffset = d.target.type === 'author'
-        ? d.target.r + 3
-        : d.target.type === 'team'
-          ? squareEdgeDist(ux, uy, d.target.r + 14)
-          : squareEdgeDist(ux, uy, d.target.r) + 2;
-
-      const x1 = d.source.x + ux * srcOffset;
-      const y1 = d.source.y + uy * srcOffset;
-      const x2 = d.target.x - ux * tgtOffset;
-      const y2 = d.target.y - uy * tgtOffset;
-
-      let pathD;
-      if (d.curvature) {
-        const mx = (x1 + x2) / 2;
-        const my = (y1 + y2) / 2;
-        const CURVE = 50;
-        pathD = `M${x1},${y1} Q${mx - uy * CURVE * d.curvature},${my + ux * CURVE * d.curvature} ${x2},${y2}`;
-      } else {
-        pathD = `M${x1},${y1} L${x2},${y2}`;
-      }
-      d3.select(this).attr('d', pathD);
+  },
+  onShowLinkTooltip: (d, x, y) => {
+    Object.assign(tooltip, {
+      show: true, x, y, isLink: true,
+      source: d.source.id, target: d.target.id, commits: d.commits,
     });
+  },
+  onMoveTooltip: (x, y) => { tooltip.x = x; tooltip.y = y; },
+  onHideTooltip: () => { tooltip.show = false; },
+  edgeWeight,
+  violationThreshold,
+});
 
-    nodeEls.attr('transform', d => `translate(${d.x ?? 0},${d.y ?? 0})`);
-    drawClouds();
-  });
+function redraw() {
+  renderer.draw({ dims, data: ownershipGraphData.value });
 }
+
+watch(ownershipGraphData, () => redraw(), { deep: true });
+watch(dims,               () => redraw());
+watch(edgeWeight,         () => renderer.updateEdgeStyles());
+watch(nodeColors,         () => renderer.updateNodeColors());
+watch(violationThreshold, () => renderer.drawOverlays());
+
+// ── Resize ────────────────────────────────────────────────────────────────
 
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 
@@ -748,16 +209,7 @@ function updateSize() {
   const r = containerRef.value.getBoundingClientRect();
   dims.w = Math.max(500, r.width - 48);
   dims.h = Math.max(400, Math.min(800, dims.w * 0.65));
-  drawGraph();
 }
-
-watch(graphData,      () => drawGraph(), { deep: true });
-watch(nodeColors,     () => updateNodeColors());
-watch(dims,           () => drawGraph());
-watch(edgeWeight,     () => updateEdgeStyles());
-watch(showAuthors,    () => drawGraph());
-watch(simConfig,      () => drawGraph(), { deep: true });
-watch(teamBoundary,   () => drawClouds());
 
 function handleDocClick(e) {
   if (vizOpen.value && vizDropRef.value && !vizDropRef.value.contains(e.target))
@@ -772,7 +224,7 @@ onMounted(() => {
   onBeforeUnmount(() => {
     window.removeEventListener('resize', onResize);
     document.removeEventListener('mousedown', handleDocClick);
-    if (sim) sim.stop();
+    renderer.teardown();
   });
 });
 </script>
@@ -796,17 +248,18 @@ onMounted(() => {
   border-color: #94a3b8; color: #64748b; background: transparent;
   cursor: pointer;
 }
-.cross-team-btn:hover { border-color: #225EA9; color: #225EA9; }
+.cross-team-btn:hover  { border-color: #225EA9; color: #225EA9; }
 .cross-team-btn.active { background: #225EA9; border-color: #225EA9; color: #fff; }
 .btn-dot {
   display: inline-block; width: 7px; height: 7px; border-radius: 50%;
   background: currentColor; flex-shrink: 0;
 }
 .legend        { @apply flex items-center gap-1.5 font-medium; }
-.legend-circle { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: #225EA9; }
 .legend-square { display: inline-block; width: 12px; height: 12px; border-radius: 2px; background: #088F9B; }
-.legend-team   {
-  display: inline-block; width: 22px; height: 12px; border-radius: 6px; background: #F08223;
+.legend-team   { display: inline-block; width: 22px; height: 12px; border-radius: 6px; background: #F08223; }
+.legend-hull   {
+  display: inline-block; width: 20px; height: 12px; border-radius: 4px;
+  background: transparent; border: 2px dashed #F08223; opacity: 0.8;
 }
 .expanded-teams-row {
   @apply flex items-center gap-2 mt-3 flex-wrap justify-center;
@@ -832,19 +285,19 @@ onMounted(() => {
   @apply text-xs border border-gray-200 rounded-lg px-2 py-1 text-gray-600 bg-white
          focus:outline-none focus:ring-2 focus:border-brand-blue transition-all;
   font-family: 'JetBrains Mono', monospace;
-  --tw-ring-color: #225EA933;
+  --tw-ring-color: #225EA9;
 }
-.date-sep { @apply text-gray-400 text-sm font-medium; }
-.date-reset-btn {
+.date-sep          { @apply text-gray-400 text-sm font-medium; }
+.date-reset-btn    {
   @apply text-xs px-2.5 py-1 rounded-lg border border-brand-orange text-brand-orange
          hover:bg-brand-orange hover:text-white transition-all duration-150 cursor-pointer;
   background: transparent;
 }
-.date-bounds-hint { @apply text-xs text-gray-300 font-mono ml-1; }
-.hint         { @apply text-xs text-gray-400 italic text-center mb-2; }
-.svg-wrap     { overflow: auto; border-radius: 8px; scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
-.graph-svg    { display: block; }
-.empty-state  { @apply flex items-center justify-center py-16 text-gray-400 text-base; }
+.date-bounds-hint  { @apply text-xs text-gray-300 font-mono ml-1; }
+.hint              { @apply text-xs text-gray-400 italic text-center mb-2; }
+.svg-wrap          { overflow: auto; border-radius: 8px; scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
+.graph-svg         { display: block; }
+.empty-state       { @apply flex items-center justify-center py-16 text-gray-400 text-base; }
 .graph-tooltip {
   @apply fixed pointer-events-none bg-white rounded-xl shadow-2xl border-2 px-4 py-2.5 text-sm;
   border-color: #225EA9; z-index: 9999; min-width: 160px;
@@ -859,16 +312,16 @@ onMounted(() => {
 .tt-action { @apply text-brand-blue text-xs mt-1 font-medium; }
 
 /* ── Visualization dropdown ── */
-.viz-dropdown-wrap { position: relative; }
-.viz-chevron       { font-size: 9px; margin-left: 3px; }
+.viz-dropdown-wrap  { position: relative; }
+.viz-chevron        { font-size: 9px; margin-left: 3px; }
 .viz-panel {
   position: absolute; top: calc(100% + 6px); right: 0; z-index: 200;
   background: #fff; border: 1.5px solid #e2e8f0; border-radius: 10px;
   box-shadow: 0 8px 24px rgba(0,0,0,0.10); padding: 10px 14px 8px; min-width: 240px;
   animation: fadeIn 0.12s ease-out;
 }
-.viz-row       { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.viz-row-label { font-size: 13px; font-weight: 600; color: #374151; }
+.viz-row        { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.viz-row-label  { font-size: 13px; font-weight: 600; color: #374151; }
 .viz-toggle-btn {
   font-size: 11px; font-weight: 700; padding: 2px 10px; border-radius: 999px;
   border: 1.5px solid #94a3b8; color: #64748b; background: transparent; cursor: pointer;
@@ -877,25 +330,10 @@ onMounted(() => {
 .viz-toggle-btn.active { background: #225EA9; border-color: #225EA9; color: #fff; }
 .viz-desc         { font-size: 10px; color: #9ca3af; margin: 6px 0 0; text-align: center; }
 .viz-divider      { height: 1px; background: #e2e8f0; margin: 10px 0 8px; }
-.viz-section-title { font-size: 10px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.06em; margin: 4px 0 6px; }
 .viz-val          { font-size: 11px; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: #225EA9; min-width: 36px; text-align: right; }
 .viz-slider {
   width: 100%; margin: 2px 0 8px;
   height: 4px; border-radius: 2px; appearance: none; cursor: pointer;
   accent-color: #088F9B;
 }
-.viz-reset-btn {
-  margin-top: 4px; width: 100%; padding: 4px 0; border-radius: 6px;
-  font-size: 11px; font-weight: 600; color: #64748b;
-  border: 1px solid #e2e8f0; background: transparent; cursor: pointer;
-}
-.viz-reset-btn:hover { border-color: #225EA9; color: #225EA9; }
-.viz-boundary-row { display: flex; gap: 4px; margin: 4px 0 2px; }
-.viz-boundary-btn {
-  flex: 1; padding: 3px 0; border-radius: 6px; font-size: 11px; font-weight: 600;
-  border: 1.5px solid #e2e8f0; color: #64748b; background: transparent; cursor: pointer;
-  transition: all 0.12s;
-}
-.viz-boundary-btn:hover  { border-color: #088F9B; color: #088F9B; }
-.viz-boundary-btn.active { background: #088F9B; border-color: #088F9B; color: #fff; }
 </style>

@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Ownership Boundary Layout Options</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: #f1f5f9;
+    padding: 24px;
+    color: #1e293b;
+  }
+  h1   { font-size: 18px; font-weight: 700; color: #2F3944; margin-bottom: 2px; }
+  .sub { font-size: 12px; color: #64748b; margin-bottom: 20px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 860px; }
+  .card {
+    background: #fff;
+    border-radius: 14px;
+    padding: 18px 18px 14px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.07);
+    border: 1.5px solid #e2e8f0;
+  }
+  .card-title { font-size: 14px; font-weight: 700; color: #1e293b; margin-bottom: 3px; }
+  .card-desc  { font-size: 11.5px; color: #64748b; margin-bottom: 10px; line-height: 1.5; }
+  svg { display: block; border-radius: 10px; background: #fafafa; border: 1px solid #e2e8f0; }
+  .verdict {
+    display: flex; gap: 8px; margin-top: 10px;
+  }
+  .pro, .con {
+    flex: 1; font-size: 10.5px; padding: 7px 9px;
+    border-radius: 7px; line-height: 1.55;
+  }
+  .pro { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+  .con { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+  .pro strong, .con strong { display: block; font-weight: 700; font-size: 11px; margin-bottom: 1px; }
+  .legend {
+    display: flex; gap: 14px; margin: 8px 0 0; flex-wrap: wrap;
+    font-size: 10px; color: #64748b;
+  }
+  .legend span { display: flex; align-items: center; gap: 4px; }
+  .dot-sq { width:10px; height:10px; border-radius:2px; display:inline-block; }
+  .dot-vio { width:18px; height:2px; background:#ef4444; display:inline-block; border-top: 2px dashed #ef4444; }
+</style>
+</head>
+<body>
+
+<h1>Ownership Boundary Layout — Two Options</h1>
+<p class="sub">Red dashed arrows = cross-team contributions (violations). All 3 teams expanded.</p>
+
+<div class="grid">
+  <div class="card">
+    <div class="card-title">Option A — Sector Layout</div>
+    <div class="card-desc">Canvas divided into fixed wedges — one per team. Repos always placed inside their sector. Boundaries are the sector lines themselves: geometrically guaranteed never to overlap.</div>
+    <svg id="a" width="390" height="360"></svg>
+    <div class="legend">
+      <span><span class="dot-sq" style="background:#16a34a"></span> Team Grün</span>
+      <span><span class="dot-sq" style="background:#225EA9"></span> Team Blau</span>
+      <span><span class="dot-sq" style="background:#374151"></span> Team Schwarz</span>
+      <span><span class="dot-vio"></span> violation (crosses boundary line)</span>
+    </div>
+    <div class="verdict">
+      <div class="pro"><strong>✓ Guaranteed</strong>Hulls can never overlap — they are fixed geometry, not physics.</div>
+      <div class="con"><strong>✗ Trade-off</strong>Layout is algorithm-driven, not data-driven. Large teams get the same wedge as small ones.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Option B — Orbit / Satellite Layout</div>
+    <div class="card-desc">Teams placed on an outer ring. Each team's repos orbit the anchor in a tight arc, fanning outward. Boundary = circle sized to the cluster. Violation edges cross the circle.</div>
+    <svg id="b" width="390" height="360"></svg>
+    <div class="legend">
+      <span><span class="dot-sq" style="background:#16a34a"></span> Team Grün</span>
+      <span><span class="dot-sq" style="background:#225EA9"></span> Team Blau</span>
+      <span><span class="dot-sq" style="background:#374151"></span> Team Schwarz</span>
+      <span><span class="dot-vio"></span> violation (crosses boundary circle)</span>
+    </div>
+    <div class="verdict">
+      <div class="pro"><strong>✓ More organic</strong>Clusters feel natural. Similar to current layout. Force sim can still drive inter-team spacing.</div>
+      <div class="con"><strong>✗ Soft guarantee</strong>Circles sized by repo count — can overlap when teams are close or have many repos.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Shared ─────────────────────────────────────────────────────────────────
+const TEAMS = [
+  { id:'gruen',  name:'Team Grün',    color:'#16a34a',
+    repos:['zlm.gov','bst.au','fw.bst','bst.bav','mlf.mat','fw.rbb2'] },
+  { id:'blau',   name:'Team Blau',    color:'#225EA9',
+    repos:['zlm.mzv','fw.co','fw.hb','vbm.api'] },
+  { id:'schwarz',name:'Team Schwarz', color:'#374151',
+    repos:['vbm.reb','hbu.sbs','ap.slm','hbu.ext','bst.cfg'] },
+];
+// Violations: { src: teamId, tgt: repoId }  (cross-team contributions)
+const VIOLATIONS = [
+  { src:'blau',    tgt:'fw.bst'  },   // Blau → Grün's repo
+  { src:'gruen',   tgt:'vbm.reb' },   // Grün → Schwarz's repo
+  { src:'schwarz', tgt:'bst.au'  },   // Schwarz → Grün's repo
+];
+
+const W=390, H=360, CX=W/2, CY=H/2;
+
+function repoOwner(repoId) {
+  return TEAMS.find(t => t.repos.includes(repoId));
+}
+
+// ── OPTION A: Sector layout ────────────────────────────────────────────────
+(function() {
+  const svg  = d3.select('#a');
+  const N    = TEAMS.length;
+  const outerR = 172;
+  const innerR = 28;          // hole in center
+  const teamAnchorR = 150;    // team pill radius from center
+  const gap   = 0.04;         // angular gap between sectors (radians)
+
+  const repoPos  = {};
+  const anchorPos = {};
+
+  TEAMS.forEach((team, i) => {
+    const sStart = -Math.PI/2 + i * (2*Math.PI/N);
+    const sEnd   = sStart + (2*Math.PI/N);
+    const sMid   = (sStart + sEnd) / 2;
+
+    anchorPos[team.id] = {
+      x: CX + teamAnchorR * Math.cos(sMid),
+      y: CY + teamAnchorR * Math.sin(sMid),
+    };
+
+    // Distribute repos in a 2-row arc inside the sector
+    const pad    = 0.22;
+    const usable = (sEnd - sStart) - 2*pad;
+    const n      = team.repos.length;
+    team.repos.forEach((repo, j) => {
+      const a = sStart + pad + (j + 0.5) * usable / n;
+      const r = (j % 2 === 0) ? 75 : 108;
+      repoPos[repo] = { x: CX + r*Math.cos(a), y: CY + r*Math.sin(a) };
+    });
+  });
+
+  // Sector fills + boundary lines
+  TEAMS.forEach((team, i) => {
+    const sStart = -Math.PI/2 + i*(2*Math.PI/N) + gap/2;
+    const sEnd   = sStart + (2*Math.PI/N) - gap;
+    const arcPath = d3.arc()
+      .innerRadius(innerR).outerRadius(outerR)
+      .startAngle(sStart + Math.PI/2)   // d3.arc uses 0=top,CW so offset by π/2
+      .endAngle(sEnd + Math.PI/2);
+
+    // Fill
+    svg.append('path')
+      .attr('d', arcPath())
+      .attr('transform', `translate(${CX},${CY})`)
+      .attr('fill', team.color + '1A');
+
+    // Dashed boundary arc (outer edge only — sector lines are the key boundary)
+    const arcStroke = d3.arc()
+      .innerRadius(outerR - 1).outerRadius(outerR + 1)
+      .startAngle(sStart + Math.PI/2).endAngle(sEnd + Math.PI/2);
+    svg.append('path')
+      .attr('d', arcStroke())
+      .attr('transform', `translate(${CX},${CY})`)
+      .attr('fill', team.color)
+      .attr('opacity', 0.5);
+
+    // Radial boundary lines (the real non-overlapping guarantee)
+    const lineAngles = [sStart, sEnd];
+    lineAngles.forEach(a => {
+      svg.append('line')
+        .attr('x1', CX + innerR*Math.cos(a)).attr('y1', CY + innerR*Math.sin(a))
+        .attr('x2', CX + outerR*Math.cos(a)).attr('y2', CY + outerR*Math.sin(a))
+        .attr('stroke', '#94a3b8').attr('stroke-width', 1.5)
+        .attr('stroke-dasharray','4 3');
+    });
+  });
+
+  // Arrow marker
+  const defs = svg.append('defs');
+  defs.append('marker').attr('id','arrowA')
+    .attr('viewBox','0 -4 8 8').attr('refX',8).attr('refY',0)
+    .attr('markerWidth',7).attr('markerHeight',7).attr('orient','auto')
+    .append('path').attr('d','M0,-4L8,0L0,4').attr('fill','#ef4444');
+
+  // Violation edges (behind nodes)
+  VIOLATIONS.forEach(v => {
+    const s = anchorPos[v.src], t = repoPos[v.tgt];
+    if (!s || !t) return;
+    svg.append('line')
+      .attr('x1',s.x).attr('y1',s.y).attr('x2',t.x).attr('y2',t.y)
+      .attr('stroke','#ef4444').attr('stroke-width',2)
+      .attr('stroke-dasharray','5 3').attr('opacity',0.85)
+      .attr('marker-end','url(#arrowA)');
+  });
+
+  // Repo squares
+  Object.entries(repoPos).forEach(([repo, pos]) => {
+    const team = repoOwner(repo);
+    const g = svg.append('g').attr('transform',`translate(${pos.x},${pos.y})`);
+    g.append('rect').attr('x',-10).attr('y',-10).attr('width',20).attr('height',20)
+      .attr('rx',3).attr('fill', team.color)
+      .attr('stroke','#fff').attr('stroke-width',2);
+    g.append('text').attr('text-anchor','middle').attr('dy','2.1em')
+      .attr('font-size','8px').attr('fill','#374151').attr('font-weight','600')
+      .text(repo);
+  });
+
+  // Team anchor pills
+  TEAMS.forEach(team => {
+    const pos = anchorPos[team.id];
+    const g = svg.append('g').attr('transform',`translate(${pos.x},${pos.y})`);
+    g.append('rect').attr('x',-34).attr('y',-13).attr('width',68).attr('height',26)
+      .attr('rx',13).attr('fill',team.color)
+      .attr('stroke','#fff').attr('stroke-width',2.5);
+    g.append('text').attr('text-anchor','middle').attr('dy','0.38em')
+      .attr('fill','#fff').attr('font-size','10px').attr('font-weight','700')
+      .text(team.name);
+  });
+})();
+
+// ── OPTION B: Orbit / satellite layout ────────────────────────────────────
+(function() {
+  const svg      = d3.select('#b');
+  const N        = TEAMS.length;
+  const teamRing = 138;   // team anchors on this radius
+  const orbitR   = 68;    // repos orbit at this distance from anchor
+  const boundR   = 84;    // boundary circle radius
+
+  const repoPos   = {};
+  const anchorPos = {};
+
+  TEAMS.forEach((team, i) => {
+    const angle = -Math.PI/2 + i * (2*Math.PI/N);
+    anchorPos[team.id] = {
+      x: CX + teamRing*Math.cos(angle),
+      y: CY + teamRing*Math.sin(angle),
+      angle,
+    };
+
+    // Fan repos outward from anchor (in the direction away from center)
+    const n       = team.repos.length;
+    const arcSpan = Math.PI * 0.65;
+    team.repos.forEach((repo, j) => {
+      const repoAngle = angle + arcSpan * (j/(Math.max(n-1,1)) - 0.5);
+      repoPos[repo] = {
+        x: anchorPos[team.id].x + orbitR * Math.cos(repoAngle),
+        y: anchorPos[team.id].y + orbitR * Math.sin(repoAngle),
+      };
+    });
+  });
+
+  // Arrow marker
+  const defs = svg.append('defs');
+  defs.append('marker').attr('id','arrowB')
+    .attr('viewBox','0 -4 8 8').attr('refX',8).attr('refY',0)
+    .attr('markerWidth',7).attr('markerHeight',7).attr('orient','auto')
+    .append('path').attr('d','M0,-4L8,0L0,4').attr('fill','#ef4444');
+
+  // Boundary circles
+  TEAMS.forEach(team => {
+    const pos = anchorPos[team.id];
+    svg.append('circle')
+      .attr('cx',pos.x).attr('cy',pos.y).attr('r',boundR)
+      .attr('fill', team.color + '1A')
+      .attr('stroke', team.color).attr('stroke-width',2)
+      .attr('stroke-dasharray','6 3');
+  });
+
+  // Violation edges
+  VIOLATIONS.forEach(v => {
+    const s = anchorPos[v.src], t = repoPos[v.tgt];
+    if (!s || !t) return;
+    svg.append('line')
+      .attr('x1',s.x).attr('y1',s.y).attr('x2',t.x).attr('y2',t.y)
+      .attr('stroke','#ef4444').attr('stroke-width',2)
+      .attr('stroke-dasharray','5 3').attr('opacity',0.85)
+      .attr('marker-end','url(#arrowB)');
+  });
+
+  // Repo squares
+  Object.entries(repoPos).forEach(([repo, pos]) => {
+    const team = repoOwner(repo);
+    const g = svg.append('g').attr('transform',`translate(${pos.x},${pos.y})`);
+    g.append('rect').attr('x',-10).attr('y',-10).attr('width',20).attr('height',20)
+      .attr('rx',3).attr('fill', team.color)
+      .attr('stroke','#fff').attr('stroke-width',2);
+    g.append('text').attr('text-anchor','middle').attr('dy','2.1em')
+      .attr('font-size','8px').attr('fill','#374151').attr('font-weight','600')
+      .text(repo);
+  });
+
+  // Team anchor pills
+  TEAMS.forEach(team => {
+    const pos = anchorPos[team.id];
+    const g = svg.append('g').attr('transform',`translate(${pos.x},${pos.y})`);
+    g.append('rect').attr('x',-34).attr('y',-13).attr('width',68).attr('height',26)
+      .attr('rx',13).attr('fill',team.color)
+      .attr('stroke','#fff').attr('stroke-width',2.5);
+    g.append('text').attr('text-anchor','middle').attr('dy','0.38em')
+      .attr('fill','#fff').attr('font-size','10px').attr('font-weight','700')
+      .text(team.name);
+  });
+})();
+</script>
+</body>
+</html>
