@@ -82,6 +82,15 @@
         <template v-else>
           <div class="tt-name">{{ tooltipName }}</div>
           <div class="tt-detail">{{ tooltipDetail }}</div>
+          <ul v-if="tooltip.type === 'repo' && tooltipContributions.length" class="tt-contribs">
+            <li v-for="c in tooltipContributions" :key="c.teamId"
+                :class="{ 'tt-contrib-owner': c.teamId === tooltip.owningTeamId }">
+              <span class="tt-contrib-dot" :style="{ background: c.teamColor }"></span>
+              <span class="tt-contrib-name">{{ c.teamName }}</span>
+              <span class="tt-contrib-pct">{{ c.pct }}%</span>
+              <span class="tt-contrib-count">{{ c.commits.toLocaleString() }}</span>
+            </li>
+          </ul>
           <div v-if="tooltip.action" class="tt-action">{{ tooltip.action }}</div>
         </template>
       </div>
@@ -120,6 +129,7 @@ const tooltip = reactive({
   name: '', type: '', commits: 0,
   teamName: '', repoCount: 0, authorCount: 0,
   source: '', target: '', action: '',
+  contributions: [], owningTeamId: null,
 });
 
 const tooltipName = computed(() => {
@@ -132,6 +142,19 @@ const tooltipDetail = computed(() => {
   if (tooltip.type === 'team')
     return `Team · ${tooltip.repoCount} ${tooltip.repoCount === 1 ? 'repo' : 'repos'} · ${tooltip.authorCount} ${tooltip.authorCount === 1 ? 'dev' : 'devs'} · ${c} commits`;
   return `Bounded Context · ${c} commits`;
+});
+
+const tooltipContributions = computed(() => {
+  if (tooltip.type !== 'repo') return [];
+  const total = tooltip.commits || 0;
+  if (!total) return [];
+  return tooltip.contributions.map(c => ({
+    teamId: c.teamId,
+    teamColor: c.teamColor,
+    teamName: effectiveTeams.value.find(t => t.id === c.teamId)?.name ?? c.teamId,
+    commits: c.commits,
+    pct: ((c.commits / total) * 100).toFixed(1).replace(/\.0$/, ''),
+  }));
 });
 
 function displayNodeName(id) {
@@ -154,6 +177,8 @@ const renderer = useSwimlaneGraph({
       name: d.id, type: d.type, commits: d.commits,
       teamName: d.name ?? '', repoCount: d.repoCount ?? 0, authorCount: d.authorCount ?? 0,
       action: '',
+      contributions: d.contributions ?? [],
+      owningTeamId: d.owningTeamId ?? null,
     });
   },
   onShowLinkTooltip: (d, x, y) => {
@@ -274,6 +299,23 @@ onMounted(() => {
 .tt-name   { @apply font-bold text-brand-gray text-base; }
 .tt-detail { @apply text-gray-500 text-xs mt-0.5; }
 .tt-action { @apply text-brand-blue text-xs mt-1 font-medium; }
+.tt-contribs {
+  margin: 6px 0 0; padding: 0; list-style: none;
+  border-top: 1px solid #e2e8f0; padding-top: 6px;
+}
+.tt-contribs li {
+  display: grid;
+  grid-template-columns: 10px 1fr auto auto;
+  align-items: center; gap: 8px;
+  font-size: 11px; line-height: 1.6;
+  color: #374151;
+}
+.tt-contrib-dot  { width: 10px; height: 10px; border-radius: 2px; }
+.tt-contrib-name { font-weight: 600; white-space: nowrap; }
+.tt-contrib-pct  { font-family: 'JetBrains Mono', monospace; color: #225EA9; font-weight: 700; }
+.tt-contrib-count{ font-family: 'JetBrains Mono', monospace; color: #94a3b8; font-size: 10px; }
+.tt-contrib-owner .tt-contrib-name { color: #088F9B; }
+.tt-contrib-owner .tt-contrib-name::after { content: ' · owner'; font-weight: 500; font-size: 9px; color: #94a3b8; }
 
 /* ── Visualization dropdown ── */
 .viz-dropdown-wrap  { position: relative; }
