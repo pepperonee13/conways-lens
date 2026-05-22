@@ -45,6 +45,9 @@
               <div class="viz-divider"></div>
             </template>
 
+            <div class="viz-row">
+              <button class="viz-reset-btn" @click="resetVizDefaults">Reset to defaults</button>
+            </div>
           </div>
         </div>
       </div>
@@ -128,10 +131,18 @@ const containerRef = ref(null);
 const vizDropRef   = ref(null);
 const dims         = reactive({ w: 900, h: 600 });
 
+const VIZ_DEFAULTS = { edgeWeight: true, violationThreshold: 10, violatingOnly: true };
+
 const vizOpen            = ref(false);
-const edgeWeight         = ref(true);
-const violationThreshold = ref(10);
-const violatingOnly      = ref(false);
+const edgeWeight         = ref(VIZ_DEFAULTS.edgeWeight);
+const violationThreshold = ref(VIZ_DEFAULTS.violationThreshold);
+const violatingOnly      = ref(VIZ_DEFAULTS.violatingOnly);
+
+function resetVizDefaults() {
+  edgeWeight.value         = VIZ_DEFAULTS.edgeWeight;
+  violationThreshold.value = VIZ_DEFAULTS.violationThreshold;
+  violatingOnly.value      = VIZ_DEFAULTS.violatingOnly;
+}
 
 const tooltip = reactive({
   show: false, x: 0, y: 0,
@@ -354,4 +365,13 @@ onMounted(() => {
   height: 4px; border-radius: 2px; appearance: none; cursor: pointer;
   accent-color: #088F9B;
 }
+.viz-reset-btn {
+  width: 100%; margin-top: 2px;
+  font-size: 11px; font-weight: 600;
+  padding: 5px 10px; border-radius: 8px;
+  background: transparent; color: #64748b;
+  border: 1.5px solid #cbd5e1; cursor: pointer;
+  transition: all 0.15s;
+}
+.viz-reset-btn:hover { border-color: #225EA9; color: #225EA9; }
 </style>

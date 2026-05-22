@@ -61,8 +61,8 @@ export function useSwimlaneGraph({
 
   function updateNodeColors() {
     if (!nodeEls) return;
-    nodeEls.filter(d => d.type === 'repo').select('rect.repo-fill')
-      .attr('stroke', d => d.color);
+    nodeEls.filter(d => d.type === 'repo').select('circle.repo-fill')
+      .attr('fill', d => d.color);
   }
 
   // ── Highlight ─────────────────────────────────────────────────────────────
@@ -103,19 +103,41 @@ export function useSwimlaneGraph({
     const arcGen = d3.arc();
 
     nodeEls.filter(d => d.type === 'repo').each(function(d) {
-      d3.select(this).selectAll('.violation-arc').remove();
+      const node = d3.select(this);
+      node.selectAll('.violation-arc').remove();
       if (!d.contributions || d.commits === 0) return;
 
-      const outside = d.contributions.filter(c =>
-        c.teamId !== d.owningTeamId && (c.commits / d.commits) * 100 >= threshold
-      );
-      if (!outside.length) return;
+      // Above-threshold outside teams render as their own arcs.
+      // Owner share absorbs both its real commits and any below-threshold
+      // outside contributions, so the ring always closes into a full circle.
+      const above = [];
+      let ownerCommits = 0;
+      for (const c of d.contributions) {
+        if (c.teamId === d.owningTeamId) {
+          ownerCommits += c.commits;
+        } else if ((c.commits / d.commits) * 100 >= threshold) {
+          above.push(c);
+        } else {
+          ownerCommits += c.commits;
+        }
+      }
 
-      const innerR = d.r + 3, outerR = d.r + 8;
+      const innerR = d.r + 2, outerR = d.r + 8;
       let startAngle = -Math.PI / 2;
-      for (const c of outside) {
+
+      const ownerColor = d.color || '#9CA3AF';
+      if (ownerCommits > 0) {
+        const endAngle = startAngle + (ownerCommits / d.commits) * 2 * Math.PI;
+        node.append('path')
+          .attr('class', 'violation-arc')
+          .attr('d', arcGen({ innerRadius: innerR, outerRadius: outerR, startAngle, endAngle }))
+          .attr('fill', ownerColor).attr('opacity', 0.95)
+          .attr('pointer-events', 'none');
+        startAngle = endAngle;
+      }
+      for (const c of above) {
         const endAngle = startAngle + (c.commits / d.commits) * 2 * Math.PI;
-        d3.select(this).append('path')
+        node.append('path')
           .attr('class', 'violation-arc')
           .attr('d', arcGen({ innerRadius: innerR, outerRadius: outerR, startAngle, endAngle }))
           .attr('fill', c.teamColor).attr('opacity', 0.95)
@@ -383,15 +405,13 @@ export function useSwimlaneGraph({
       .attr('pointer-events', 'none')
       .text(d => `${d.repoCount} ${d.repoCount === 1 ? 'repo' : 'repos'} · ${d.authorCount} ${d.authorCount === 1 ? 'dev' : 'devs'} · ${(d.commits || 0).toLocaleString()} commits`);
 
-    // Repo squares: white fill, team-colored border
+    // Repo circles filled with owner team color
     const repoG = nodeEls.filter(d => d.type === 'repo');
-    repoG.append('rect')
+    repoG.append('circle')
       .attr('class', 'repo-fill')
-      .attr('x', d => -d.r).attr('y', d => -d.r)
-      .attr('width', d => d.r * 2).attr('height', d => d.r * 2)
-      .attr('rx', 4)
-      .attr('fill', '#ffffff')
-      .attr('stroke', d => d.color || '#9CA3AF').attr('stroke-width', 2.5);
+      .attr('r', d => d.r)
+      .attr('fill', d => d.color || '#9CA3AF')
+      .attr('stroke', '#ffffff').attr('stroke-width', 1.5);
 
     repoG.append('text')
       .attr('text-anchor', 'middle').attr('dy', d => d.r + 12)
