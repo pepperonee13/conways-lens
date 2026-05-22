@@ -375,6 +375,30 @@ export function useConwayGraph({
       }
     }
 
+    // Push repo nodes away from team anchors they don't belong to.
+    // This prevents one team's repos from drifting inside another team's hull.
+    function crossTeamRepulsion(alpha) {
+      const teamAnchors = nodes.filter(n => n.type === 'team' && n.x != null);
+
+      for (const n of nodes) {
+        if (n.type !== 'repo' || n.x == null) continue;
+
+        for (const t of teamAnchors) {
+          if (t.teamId === n.owningTeamId) continue;
+
+          const dx = n.x - t.x;
+          const dy = n.y - t.y;
+          const distSq = Math.max(dx * dx + dy * dy, 1);
+          const dist   = Math.sqrt(distSq);
+
+          // Inverse-square repulsion, strength proportional to both node sizes
+          const force = (8000 * (n.r + t.r) * alpha) / distSq;
+          n.vx = (n.vx ?? 0) + (dx / dist) * force;
+          n.vy = (n.vy ?? 0) + (dy / dist) * force;
+        }
+      }
+    }
+
     sim = d3.forceSimulation(nodes)
       .force('link',   d3.forceLink(links).id(d => d.id)
         .distance(d => d.target.type === 'repo' ? cfg.linkDistance : cfg.teamLinkDistance)
@@ -393,7 +417,8 @@ export function useConwayGraph({
       .force('collide', d3.forceCollide(
         d => d.r + (d.type === 'team' ? cfg.teamCollide : cfg.collide)
       ))
-      .force('teamGravity', teamGravity);
+      .force('teamGravity',       teamGravity)
+      .force('crossTeamRepulsion', crossTeamRepulsion);
 
     sim.on('tick', () => {
       nodes.forEach(n => { if (n.x != null) savedPositions[n.id] = { x: n.x, y: n.y }; });
