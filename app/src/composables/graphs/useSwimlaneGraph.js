@@ -405,12 +405,13 @@ export function useSwimlaneGraph({
       .attr('pointer-events', 'none')
       .text(d => `${d.repoCount} ${d.repoCount === 1 ? 'repo' : 'repos'} · ${d.authorCount} ${d.authorCount === 1 ? 'dev' : 'devs'} · ${(d.commits || 0).toLocaleString()} commits`);
 
-    // Repo circles filled with owner team color
+    // Repo circles filled with owner team color (softened so the ring pops)
     const repoG = nodeEls.filter(d => d.type === 'repo');
     repoG.append('circle')
       .attr('class', 'repo-fill')
       .attr('r', d => d.r)
       .attr('fill', d => d.color || '#9CA3AF')
+      .attr('fill-opacity', 0.45)
       .attr('stroke', '#ffffff').attr('stroke-width', 1.5);
 
     repoG.append('text')
