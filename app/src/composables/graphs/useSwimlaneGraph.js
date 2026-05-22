@@ -33,7 +33,7 @@ export function useSwimlaneGraph({
   const LANE_PAD_Y   = 18;
   const REPO_SIZE    = 20;       // half-width — node spans (REPO_SIZE * 2) px
   const RING_PAD     = 12;       // extra space around node for violation ring + label
-  const REPO_SLOT_W  = 100;      // wider than node so labels don't collide
+  const REPO_SLOT_W  = 140;      // wider than node to fit full repo-name labels
   const REPO_SLOT_H  = REPO_SIZE * 2 + RING_PAD * 2 + 18; // room for label below
   const MIN_LANE_H   = REPO_SLOT_H + LANE_PAD_Y * 2;
 
@@ -386,16 +386,9 @@ export function useSwimlaneGraph({
       .attr('text-anchor', 'middle').attr('dy', d => d.r + 12)
       .attr('fill', '#374151').attr('font-size', '10px').attr('font-weight', '600')
       .attr('pointer-events', 'none')
-      .text(d => shortLabel(d.id));
+      .text(d => d.id);
 
     drawRings();
-  }
-
-  function shortLabel(id) {
-    if (!id) return '';
-    const s = String(id);
-    const last = s.split(/[\/.]/).pop();
-    return last.length > 14 ? last.slice(0, 13) + '…' : last;
   }
 
   function teardown() {
