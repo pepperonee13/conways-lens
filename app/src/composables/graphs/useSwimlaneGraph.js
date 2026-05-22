@@ -124,7 +124,18 @@ export function useSwimlaneGraph({
     });
   }
 
-  function drawOverlays() { drawRings(); }
+  function edgeMeetsThreshold(d) {
+    const total = d.target?.commits || 0;
+    if (!total) return false;
+    return (d.commits / total) * 100 >= violationThreshold.value;
+  }
+
+  function updateEdgeVisibility() {
+    if (!linkEls) return;
+    linkEls.attr('display', d => edgeMeetsThreshold(d) ? null : 'none');
+  }
+
+  function drawOverlays() { drawRings(); updateEdgeVisibility(); }
 
   // ── Layout ────────────────────────────────────────────────────────────────
 
@@ -325,6 +336,7 @@ export function useSwimlaneGraph({
       .on('mouseleave', () => { resetHighlight(); onHideTooltip(); });
 
     updateEdgeStyles();
+    updateEdgeVisibility();
 
     // Nodes
     nodeEls = root.append('g')

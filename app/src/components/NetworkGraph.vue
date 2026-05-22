@@ -32,7 +32,7 @@
               </div>
               <input type="range" class="viz-slider" min="1" max="50" step="1"
                      v-model.number="violationThreshold" />
-              <p class="viz-desc">Min outside-team % to show a violation ring</p>
+              <p class="viz-desc">Min outside-team % to show a violation ring or edge</p>
               <div class="viz-divider"></div>
             </template>
 
