@@ -277,6 +277,147 @@ export const useLensStore = defineStore('lens', () => {
     return { nodes, links };
   });
 
+  // ── Ownership graph data ─────────────────────────────────────────────────────
+  // Team-level cross-boundary view. Authors are never nodes — only teams and repos.
+  // Every edge source is a team node; edges only cross team boundaries.
+  const ownershipGraphData = computed(() => {
+    const empty = { nodes: [], links: [] };
+    if (teams.value.length === 0) return empty;
+
+    const since = activeRange.value.since;
+    const until = activeRange.value.until;
+
+    const syntheticT = syntheticTeam.value;
+    const allTeams   = syntheticT ? [...teams.value, syntheticT] : [...teams.value];
+
+    // Build membership lookups
+    const authorToTeamId = {}; // normalizedAuthor → teamId (first assignment wins)
+    const repoToTeamId   = {}; // repoId → teamId
+
+    for (const t of allTeams) {
+      for (const a of (t.authors ?? [])) {
+        if (!(a in authorToTeamId)) authorToTeamId[a] = t.id;
+      }
+      for (const r of (t.repos ?? [])) repoToTeamId[r] = t.id;
+    }
+
+    // edge accumulation: `srcTeamId\x00targetId` → total commits (number)
+    const edgeMap = {}; // key → commit count
+
+    // Per-team total commit counting (for node sizing)
+    const teamTotalCommits = {}; // teamId → commit count (unique SHAs)
+    const teamTotalShas    = {}; // teamId → Set<sha>
+
+    // Per-repo commit counting
+    const repoTotalShas          = {}; // repoId → Set<sha>
+    const repoContribShas        = {}; // `${repoId}\x00${teamId}` → Set<sha>
+
+    for (const row of timelineData.value) {
+      if (!row.Author || !row.Product || !row.ChangesetId) continue;
+      if (since && row.Date < since) continue;
+      if (until && row.Date > until) continue;
+
+      const author     = normalizeAuthor(row.Author);
+      if (ignoredSet.value.has(author)) continue;
+
+      const repoId     = row.Product;
+      const authorTeam = authorToTeamId[author];
+      const owningTeam = repoToTeamId[repoId];
+      const sha        = row.ChangesetId;
+
+      // Accumulate total commits per team (author's team)
+      if (authorTeam) {
+        (teamTotalShas[authorTeam] ??= new Set()).add(sha);
+      }
+
+      // Accumulate per-repo totals and per-(repo,team) contributions
+      (repoTotalShas[repoId] ??= new Set()).add(sha);
+      if (authorTeam) {
+        (repoContribShas[`${repoId}\x00${authorTeam}`] ??= new Set()).add(sha);
+      }
+
+      // Only cross-team edges: author team must differ from owning team
+      if (!authorTeam) continue;                  // author has no team — skip
+      if (authorTeam === owningTeam) continue;     // within-team — skip
+
+      // Determine target: collapsed owning team node, or repo directly if expanded
+      let targetId;
+      if (owningTeam && !expandedTeams.value.has(owningTeam)) {
+        targetId = `team:${owningTeam}`;
+      } else {
+        targetId = repoId;
+      }
+
+      const key = `${authorTeam}\x00${targetId}`;
+      (edgeMap[key] ??= new Set()).add(sha);
+    }
+
+    // Convert teamTotalShas → counts
+    for (const tid in teamTotalShas) {
+      teamTotalCommits[tid] = teamTotalShas[tid].size;
+    }
+
+    // Build links
+    const links = Object.entries(edgeMap).map(([key, shas]) => {
+      const sep    = key.indexOf('\x00');
+      const srcTid = key.slice(0, sep);
+      const tgt    = key.slice(sep + 1);
+      return { source: `team:${srcTid}`, target: tgt, commits: shas.size };
+    });
+
+    // Collect which repos are referenced as link targets (expanded owning team or unowned)
+    const repoTargetIds = new Set(
+      links.map(l => l.target).filter(t => !t.startsWith('team:'))
+    );
+
+    // Build nodes
+    const teamNodes = allTeams.map(t => ({
+      id:         `team:${t.id}`,
+      type:       'team',
+      teamId:     t.id,
+      name:       t.name,
+      color:      t.color,
+      commits:    teamTotalCommits[t.id] ?? 0,
+      repoCount:  (t.repos    ?? []).length,
+      authorCount:(t.authors  ?? []).length,
+      isExpanded: expandedTeams.value.has(t.id),
+    }));
+
+    // Repo nodes: repos of expanded teams + unowned repos referenced in links
+    const repoNodeIds = new Set();
+    for (const t of allTeams) {
+      if (expandedTeams.value.has(t.id)) {
+        for (const r of (t.repos ?? [])) repoNodeIds.add(r);
+      }
+    }
+    for (const rid of repoTargetIds) repoNodeIds.add(rid);
+
+    const repoNodes = [...repoNodeIds].map(repoId => {
+      const owningTeamId  = repoToTeamId[repoId] ?? null;
+      const owningTeam    = owningTeamId ? allTeams.find(t => t.id === owningTeamId) : null;
+      const totalCommits  = repoTotalShas[repoId]?.size ?? 0;
+
+      // Build contributions array sorted desc by commits
+      const contributions = [];
+      for (const t of allTeams) {
+        const cnt = repoContribShas[`${repoId}\x00${t.id}`]?.size ?? 0;
+        if (cnt > 0) contributions.push({ teamId: t.id, teamColor: t.color, commits: cnt });
+      }
+      contributions.sort((a, b) => b.commits - a.commits);
+
+      return {
+        id:           repoId,
+        type:         'repo',
+        owningTeamId,
+        color:        owningTeam?.color ?? '#9CA3AF',
+        commits:      totalCommits,
+        contributions,
+      };
+    });
+
+    return { nodes: [...teamNodes, ...repoNodes], links };
+  });
+
   // Lookup map: `${type}:${id}` → team hex color (for author/repo coloring)
   const nodeColors = computed(() => {
     const map = {};
@@ -399,7 +540,7 @@ export const useLensStore = defineStore('lens', () => {
     crossTeamOnly,
     expandedTeams,
     allRawAuthors, allAuthors, allRepos,
-    graphData, nodeColors, getNodeColor,
+    graphData, ownershipGraphData, nodeColors, getNodeColor,
     loadTimelineData, loadSimulatedData, clearData,
     addTeam, removeTeam,
     setNormalization, removeNormalization,
