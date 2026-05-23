@@ -156,7 +156,7 @@ export function useAuthorContributionGraph({
     });
     linkEls
       .attr('stroke',  l => (l.source.id === d.id || l.target.id === d.id)
-        ? EDGE.HL_COLOR
+        ? (l.source?.color ?? EDGE.HL_COLOR)
         : (edgeWeight.value ? edgeSrcColor(l) : EDGE.COLOR))
       .attr('opacity', l => (l.source.id === d.id || l.target.id === d.id) ? EDGE.HL_OPACITY : EDGE.DIM_OPACITY);
   }
@@ -164,7 +164,7 @@ export function useAuthorContributionGraph({
   function highlightLink(d) {
     linkEls
       .attr('stroke',  l => l === d
-        ? EDGE.HL_COLOR
+        ? (l.source?.color ?? EDGE.HL_COLOR)
         : (edgeWeight.value ? edgeSrcColor(l) : EDGE.COLOR))
       .attr('opacity', l => l === d ? EDGE.HL_OPACITY : EDGE.DIM_OPACITY);
   }

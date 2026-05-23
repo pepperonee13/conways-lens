@@ -208,14 +208,14 @@ export function useConwayGraph({
       }
     });
     linkEls
-      .attr('stroke',  l => (l.source.id === d.id || l.target.id === d.id) ? EDGE.HL_COLOR : edgeStroke(l))
+      .attr('stroke',  l => (l.source.id === d.id || l.target.id === d.id) ? (l.source?.color ?? EDGE.HL_COLOR) : edgeStroke(l))
       .attr('opacity', l => (l.source.id === d.id || l.target.id === d.id) ? EDGE.HL_OPACITY : EDGE.DIM_OPACITY);
   }
 
   function highlightLink(d) {
     if (!nodeEls || !linkEls) return;
     linkEls
-      .attr('stroke',  l => l === d ? EDGE.HL_COLOR : edgeStroke(l))
+      .attr('stroke',  l => l === d ? (l.source?.color ?? EDGE.HL_COLOR) : edgeStroke(l))
       .attr('opacity', l => l === d ? EDGE.HL_OPACITY : EDGE.DIM_OPACITY);
   }
 
