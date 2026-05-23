@@ -258,7 +258,7 @@ export function useSwimlaneGraph({
     const dx = tx - sx, dy = ty - sy;
     // Endpoint offsets: clear the source anchor (rectangular) and the target ring.
     const srcOff = 14; // anchor right edge approximation
-    const tgtR = d.target.r + 10;
+    const tgtR = d.target.r + VIOLATION_ARC.OUTER_PAD + ARROW.REF_X;
     const len = Math.sqrt(dx*dx + dy*dy) || 1;
     const ux = dx / len, uy = dy / len;
     const x1 = sx + ux * srcOff;
@@ -343,7 +343,7 @@ export function useSwimlaneGraph({
 
     const defs = svg.append('defs');
     defs.append('marker').attr('id', 'arrow-swim')
-      .attr('viewBox', ARROW.VIEWBOX).attr('refX', ARROW.REF_X).attr('refY', ARROW.REF_Y)
+      .attr('viewBox', ARROW.VIEWBOX).attr('refX', 0).attr('refY', ARROW.REF_Y)
       .attr('markerWidth', ARROW.SIZE).attr('markerHeight', ARROW.SIZE)
       .attr('markerUnits', 'userSpaceOnUse').attr('orient', 'auto')
       .append('path').attr('d', 'M0,-5L10,0L0,5').attr('fill', 'context-stroke');

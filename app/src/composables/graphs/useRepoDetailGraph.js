@@ -18,6 +18,7 @@ export function useRepoDetailGraph({
 }) {
   let nodeEls = null;
   let linkEls = null;
+  let linkLabelEls = null;
 
   function edgeStroke(d) {
     return edgeWeight.value ? (d.authorColor ?? EDGE.COLOR) : EDGE.COLOR;
@@ -34,6 +35,7 @@ export function useRepoDetailGraph({
       .attr('stroke-width', d => edgeWidth(d))
       .attr('display',      null)
       .attr('opacity',      EDGE.HL_OPACITY);
+    if (linkLabelEls) linkLabelEls.attr('display', 'none');
   }
 
   function highlightNode(d) {
@@ -42,6 +44,7 @@ export function useRepoDetailGraph({
       .attr('stroke',  l => l.authorId === d.id ? (l.authorColor ?? EDGE.HL_COLOR) : edgeStroke(l))
       .attr('display', l => l.authorId === d.id ? null : 'none')
       .attr('opacity', EDGE.HL_OPACITY);
+    if (linkLabelEls) linkLabelEls.attr('display', l => l.authorId === d.id ? null : 'none');
   }
 
   function resetHighlight() {
@@ -122,7 +125,7 @@ export function useRepoDetailGraph({
 
     const defs = svg.append('defs');
     defs.append('marker').attr('id', 'arrow-detail')
-      .attr('viewBox', ARROW.VIEWBOX).attr('refX', ARROW.REF_X).attr('refY', ARROW.REF_Y)
+      .attr('viewBox', ARROW.VIEWBOX).attr('refX', 0).attr('refY', ARROW.REF_Y)
       .attr('markerWidth', ARROW.SIZE).attr('markerHeight', ARROW.SIZE)
       .attr('markerUnits', 'userSpaceOnUse').attr('orient', 'auto')
       .append('path').attr('d', 'M0,-5L10,0L0,5').attr('fill', 'context-stroke');
@@ -148,12 +151,35 @@ export function useRepoDetailGraph({
       angle += arcSize + GAP_FRAC * 2 * Math.PI;
     }
 
+    // Helper: compute edge endpoint stopped at repo square boundary + arrow length
+    // Repo is a square half-size repoR; distance from center to boundary varies by angle
+    function edgeEnd(authorId) {
+      const pos = positions[authorId];
+      if (!pos) return { x2: cx, y2: cy };
+      const dx = cx - pos.x;
+      const dy = cy - pos.y;
+      const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+      const ux = dx / dist; // unit vector toward center
+      const uy = dy / dist;
+      // Distance from center to square boundary along this direction
+      const absDx = Math.abs(ux), absDy = Math.abs(uy);
+      const squareDist = absDx > absDy
+        ? repoR / absDx
+        : repoR / absDy;
+      const stop = squareDist + 16;
+      return {
+        lx2: cx - ux * stop,
+        ly2: cy - uy * stop,
+      };
+    }
+
     // Edges
     linkEls = root.append('g')
       .selectAll('line').data(links).join('line')
       .attr('x1', d => positions[d.authorId]?.x ?? cx)
       .attr('y1', d => positions[d.authorId]?.y ?? cy)
-      .attr('x2', cx).attr('y2', cy)
+      .attr('x2', d => edgeEnd(d.authorId).lx2)
+      .attr('y2', d => edgeEnd(d.authorId).ly2)
       .attr('fill', 'none')
       .attr('marker-end', 'url(#arrow-detail)')
       .style('cursor', 'default')
@@ -162,6 +188,36 @@ export function useRepoDetailGraph({
       })
       .on('mousemove', e => onMoveTooltip(e.clientX + TOOLTIP_OFFSET.x, e.clientY + TOOLTIP_OFFSET.y))
       .on('mouseleave', () => { resetHighlight(); onHideTooltip(); });
+
+    // Edge commit-count labels (shown only on author hover)
+    linkLabelEls = root.append('g')
+      .selectAll('g').data(links).join('g')
+      .attr('transform', d => {
+        const pos = positions[d.authorId];
+        if (!pos) return `translate(${cx},${cy})`;
+        const end = edgeEnd(d.authorId);
+        return `translate(${(pos.x + end.lx2) / 2},${(pos.y + end.ly2) / 2})`;
+      })
+      .attr('pointer-events', 'none')
+      .attr('display', 'none')
+      .each(function(d) {
+        const g = d3.select(this);
+        const label = String(d.commits);
+        const r = Math.max(9, label.length * 4.5);
+        const fs = label.length <= 3 ? 10 : label.length <= 5 ? 8 : 7;
+        g.append('circle')
+          .attr('r', r)
+          .attr('fill', '#fff')
+          .attr('stroke', d.authorColor ?? EDGE.HL_COLOR)
+          .attr('stroke-width', 2);
+        g.append('text')
+          .attr('text-anchor', 'middle')
+          .attr('dy', '0.35em')
+          .attr('fill', d.authorColor ?? EDGE.HL_COLOR)
+          .attr('font-size', `${fs}px`)
+          .attr('font-weight', '700')
+          .text(label);
+      });
 
     updateEdgeStyles();
 
@@ -218,6 +274,7 @@ export function useRepoDetailGraph({
   function teardown() {
     nodeEls = null;
     linkEls = null;
+    linkLabelEls = null;
   }
 
   function updateNodeColors() {}
