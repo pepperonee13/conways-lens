@@ -101,7 +101,7 @@
            :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }">
         <template v-if="tooltip.isLink">
           <div class="tt-name">{{ displayNodeName(tooltip.source) }} → {{ displayNodeName(tooltip.target) }}</div>
-          <div class="tt-detail">{{ tooltip.commits.toLocaleString() }} commits</div>
+          <div class="tt-detail">{{ tooltip.pct != null ? tooltip.pct + '%' : tooltip.commits.toLocaleString() + ' commits' }}</div>
         </template>
         <template v-else>
           <div class="tt-name">{{ tooltipName }}</div>
@@ -112,7 +112,12 @@
               <span class="tt-contrib-dot" :style="{ background: c.teamColor }"></span>
               <span class="tt-contrib-name">{{ c.teamName }}</span>
               <span class="tt-contrib-pct">{{ c.pct }}%</span>
-              <span class="tt-contrib-count">{{ c.commits.toLocaleString() }}</span>
+            </li>
+          </ul>
+          <ul v-if="tooltip.authorContributions?.length" class="tt-contribs tt-contribs--authors">
+            <li v-for="a in tooltip.authorContributions" :key="a.authorId">
+              <span class="tt-contrib-name">{{ anonymize(a.authorId) }}</span>
+              <span class="tt-contrib-pct">{{ a.pct }}%</span>
             </li>
           </ul>
           <div v-if="tooltip.action" class="tt-action">{{ tooltip.action }}</div>
@@ -163,14 +168,15 @@ function resetVizDefaults() {
 const tooltip = reactive({
   show: false, x: 0, y: 0,
   isLink: false,
-  name: '', type: '', commits: 0,
+  name: '', type: '', commits: 0, pct: null,
   teamName: '', repoCount: 0, authorCount: 0,
   source: '', target: '', action: '',
   contributions: [], owningTeamId: null,
+  authorContributions: null,
 });
 
 const tooltipName = computed(() => {
-  if (tooltip.type === 'team') return tooltip.teamName;
+  if (tooltip.type === 'team' || tooltip.type === 'team-collapsed') return tooltip.teamName;
   return tooltip.name;
 });
 
@@ -178,7 +184,13 @@ const tooltipDetail = computed(() => {
   const c = tooltip.commits.toLocaleString();
   if (tooltip.type === 'team')
     return `Team · ${tooltip.repoCount} ${tooltip.repoCount === 1 ? 'repo' : 'repos'} · ${tooltip.authorCount} ${tooltip.authorCount === 1 ? 'dev' : 'devs'} · ${c} commits`;
-  return `Bounded Context · ${c} commits`;
+  if (tooltip.type === 'team-collapsed') {
+    const devs = tooltip.authorCount;
+    return `${devs} ${devs === 1 ? 'dev' : 'devs'} · ${c} commits · click to expand`;
+  }
+  const team = tooltip.teamName ? ` · ${tooltip.teamName}` : '';
+  const pctStr = tooltip.pct != null ? `${tooltip.pct}%` : c;
+  return `${pctStr}${team}`;
 });
 
 const tooltipContributions = computed(() => {
@@ -240,19 +252,21 @@ const detailRenderer = useRepoDetailGraph({
   effectiveTeams,
   getNodeColor: store.getNodeColor,
   anonymize,
+  violationThreshold,
   onShowNodeTooltip: (d, x, y) => {
     Object.assign(tooltip, {
       show: true, x, y, isLink: false,
-      name: d.id, type: d.type, commits: d.commits,
-      teamName: d.teamName ?? '', repoCount: 0, authorCount: 0,
-      action: '', contributions: [], owningTeamId: null,
+      name: d.id, type: d.type, commits: d.commits, pct: d.pct ?? null,
+      teamName: d.teamName ?? '', repoCount: 0, authorCount: d.authors?.length ?? 0,
+      action: '', contributions: d.contributions ?? [], owningTeamId: d.owningTeamId ?? null,
+      authorContributions: d.authorContributions ?? null,
     });
   },
   onShowLinkTooltip: (d, x, y) => {
     Object.assign(tooltip, {
       show: true, x, y, isLink: true,
       source: d.authorId, target: typeof d.target === 'object' ? d.target.id : d.target,
-      commits: d.commits,
+      commits: d.commits, pct: d.pct ?? null,
     });
   },
   onMoveTooltip: (x, y) => { tooltip.x = x; tooltip.y = y; },
@@ -282,7 +296,11 @@ watch(ownershipGraphData, () => redraw(), { deep: true, flush: 'post' });
 watch(dims,               () => redraw(), { flush: 'post' });
 watch(edgeWeight,         () => renderer.updateEdgeStyles());
 watch(nodeColors,         () => renderer.updateNodeColors());
-watch(violationThreshold, () => violatingOnly.value ? redraw() : renderer.drawOverlays());
+watch(violationThreshold, () => {
+  if (detailRepoId.value) openDetail(detailRepoId.value);
+  else if (violatingOnly.value) redraw();
+  else renderer.drawOverlays();
+});
 watch(violatingOnly,      () => redraw());
 
 // ── Resize ────────────────────────────────────────────────────────────────
@@ -405,6 +423,8 @@ onMounted(() => {
 .tt-contrib-pct  { font-family: 'JetBrains Mono', monospace; color: #225EA9; font-weight: 700; }
 .tt-contrib-count{ font-family: 'JetBrains Mono', monospace; color: #94a3b8; font-size: 10px; }
 .tt-contrib-owner .tt-contrib-name { color: #088F9B; }
+.tt-contribs--authors li { grid-template-columns: 1fr auto; }
+.tt-contribs--authors .tt-contrib-pct { text-align: right; }
 .tt-contrib-owner .tt-contrib-name::after { content: ' · owner'; font-weight: 500; font-size: 9px; color: #94a3b8; }
 
 /* ── Visualization dropdown ── */
