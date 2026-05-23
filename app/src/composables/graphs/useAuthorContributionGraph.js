@@ -1,5 +1,6 @@
 import * as d3 from 'd3';
 import { EDGE, NODE, ARROW, TOOLTIP_OFFSET, TEAM_PILL_PAD } from './graphConstants.js';
+import { calcEdgeWidth } from './graphUtils.js';
 
 /**
  * Factory that encapsulates all D3 drawing logic for the author-contribution
@@ -123,7 +124,7 @@ export function useAuthorContributionGraph({
   }
 
   function edgeStrokeWidth(link) {
-    return edgeWeight.value ? Math.max(1, 1 + Math.log1p(link.commits) * EDGE.WIDTH_LOG_K) : EDGE.WIDTH;
+    return calcEdgeWidth(link.commits, edgeWeight.value);
   }
 
   function edgeStrokeOpacity(_link) {

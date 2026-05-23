@@ -1,5 +1,6 @@
 import * as d3 from 'd3';
 import { EDGE, NODE, ARROW, TOOLTIP_OFFSET, VIOLATION_ARC } from './graphConstants.js';
+import { calcEdgeWidth } from './graphUtils.js';
 
 /**
  * Conway's Law violation renderer — Swimlane Layout.
@@ -46,7 +47,7 @@ export function useSwimlaneGraph({
   }
 
   function edgeWidth(d) {
-    return edgeWeight.value ? Math.max(1, 1 + Math.log1p(d.commits) * EDGE.WIDTH_LOG_K) : EDGE.WIDTH;
+    return calcEdgeWidth(d.commits, edgeWeight.value);
   }
 
   function updateEdgeStyles() {

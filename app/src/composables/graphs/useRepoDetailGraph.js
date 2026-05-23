@@ -1,5 +1,6 @@
 import * as d3 from 'd3';
 import { EDGE, NODE, ARROW, TOOLTIP_OFFSET, NODE_LABEL_OFFSET, REPO_DETAIL } from './graphConstants.js';
+import { calcEdgeWidth, toPct } from './graphUtils.js';
 
 /**
  * Radial repo-detail graph: one repo at center, contributing authors around it.
@@ -28,11 +29,11 @@ export function useRepoDetailGraph({
   let savedTransform = null;
 
   function edgeStroke(d) {
-    return edgeWeight.value ? (d.authorColor ?? EDGE.COLOR) : EDGE.COLOR;
+    return d.authorColor ?? EDGE.COLOR;
   }
 
   function edgeWidth(d) {
-    return edgeWeight.value ? Math.max(1, 1 + Math.log1p(d.commits) * EDGE.WIDTH_LOG_K) : EDGE.WIDTH;
+    return calcEdgeWidth(d.commits, edgeWeight.value);
   }
 
   function updateEdgeStyles() {
@@ -70,9 +71,6 @@ export function useRepoDetailGraph({
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    function toPct(commits, total) {
-      return ((commits / total) * 100).toFixed(1).replace(/\.0$/, '');
-    }
 
     // Split name into ≤2 lines at a word boundary, ~13 chars per line
     function pillLines(name) {
@@ -166,6 +164,7 @@ export function useRepoDetailGraph({
     const positions = {};
     let angle = -Math.PI / 2;
     const ringNodes = [];
+    const groupArcMid = new Map(); // team.id → midAngle of that group's arc
 
     for (const g of groups) {
       const collapsed = g.team && !expandedTeams.has(g.team.id);
@@ -178,6 +177,7 @@ export function useRepoDetailGraph({
           color: g.team.color,
           teamName: g.team.name,
         };
+        if (g.team) groupArcMid.set(g.team.id, theta);
         ringNodes.push({
           id: nodeId, type: 'team-collapsed',
           commits: g.totalCommits,
@@ -188,6 +188,7 @@ export function useRepoDetailGraph({
         angle += arcPerSlot + gapArc;
       } else {
         g.authors.sort((a, b) => b.commits - a.commits);
+        const arcStart = angle;
         for (let i = 0; i < g.authors.length; i++) {
           const a     = g.authors[i];
           const theta = angle + arcPerSlot * (i + 0.5);
@@ -205,7 +206,9 @@ export function useRepoDetailGraph({
             teamName: g.team?.name ?? 'Unassigned',
           });
         }
-        angle += arcPerSlot * g.authors.length + gapArc;
+        const arcEnd = angle + arcPerSlot * g.authors.length;
+        if (g.team) groupArcMid.set(g.team.id, (arcStart + arcEnd) / 2);
+        angle = arcEnd + gapArc;
       }
     }
 
@@ -411,11 +414,9 @@ export function useRepoDetailGraph({
 
     for (const g of groups) {
       if (!g.team || !expandedTeams.has(g.team.id)) continue;
-      const authorPositions = g.authors.map(a => positions[a.id]).filter(Boolean);
-      if (!authorPositions.length) continue;
-      const angles   = authorPositions.map(p => Math.atan2(p.y - cy, p.x - cx));
-      const midAngle = (Math.min(...angles) + Math.max(...angles)) / 2;
-      const btnR     = R + AUTHOR_R_MAX + NODE_LABEL_OFFSET + 50;
+      if (!g.authors.length) continue;
+      const midAngle = groupArcMid.get(g.team.id) ?? 0;
+      const btnR     = R + AUTHOR_R_MAX + NODE_LABEL_OFFSET + 28;
       const btn      = root.append('g')
         .attr('transform', `translate(${cx + Math.cos(midAngle) * btnR},${cy + Math.sin(midAngle) * btnR})`)
         .style('cursor', 'pointer')

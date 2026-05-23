@@ -294,7 +294,7 @@ function redraw() {
 
 watch(ownershipGraphData, () => redraw(), { deep: true, flush: 'post' });
 watch(dims,               () => redraw(), { flush: 'post' });
-watch(edgeWeight,         () => renderer.updateEdgeStyles());
+watch(edgeWeight,         () => (detailRepoId.value ? detailRenderer : renderer).updateEdgeStyles());
 watch(nodeColors,         () => renderer.updateNodeColors());
 watch(violationThreshold, () => {
   if (detailRepoId.value) openDetail(detailRepoId.value);
