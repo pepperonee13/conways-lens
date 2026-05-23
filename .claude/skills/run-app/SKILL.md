@@ -16,14 +16,14 @@ Or the production build preview:
 cd app && npx vite build && npx vite preview --port 5174 &
 ```
 
-Playwright is installed at `/opt/node22/lib/node_modules/playwright`.
+Playwright is available via `npx playwright`. Scripts must use `@playwright/test` or the standalone `playwright` package via npx.
 
 ## Page Object Model
 
 All Playwright automation uses the `LensPage` class at `playwright/lens-page.mjs`.
 
 ```js
-import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright';
 import { LensPage }  from './playwright/lens-page.mjs';
 
 const browser = await chromium.launch({ args: ['--no-sandbox'] });
@@ -44,7 +44,7 @@ const lens    = await LensPage.open(browser);          // opens http://localhost
 ### Full example
 
 ```js
-import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright';
 import { LensPage }  from './playwright/lens-page.mjs';
 
 const browser = await chromium.launch({ args: ['--no-sandbox'] });
