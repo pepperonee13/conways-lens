@@ -1,4 +1,5 @@
 ---
+name: run-app
 description: Run the ConwayLens app and interact with it via Playwright using the LensPage page object model
 ---
 
