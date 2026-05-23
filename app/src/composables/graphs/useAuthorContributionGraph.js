@@ -1,9 +1,5 @@
 import * as d3 from 'd3';
-
-const EDGE_COLOR    = '#94a3b8';
-const EDGE_OPACITY  = 0.5;
-const EDGE_HL_COLOR = '#225EA9';
-const DIM_OPACITY   = 0.08;
+import { EDGE, NODE, ARROW, TOOLTIP_OFFSET, TEAM_PILL_PAD } from './graphConstants.js';
 
 /**
  * Factory that encapsulates all D3 drawing logic for the author-contribution
@@ -122,28 +118,32 @@ export function useAuthorContributionGraph({
     const srcTeam = nodeTeamId[link.source.id];
     const tgtTeam = nodeTeamId[link.target.id];
     if (srcTeam && tgtTeam && srcTeam !== tgtTeam)
-      return nodeTeamColor[link.source.id] ?? EDGE_COLOR;
-    return EDGE_COLOR;
+      return nodeTeamColor[link.source.id] ?? EDGE.COLOR;
+    return EDGE.COLOR;
   }
 
   function edgeStrokeWidth(link) {
-    return edgeWeight.value ? Math.max(1, 1 + Math.log1p(link.commits) * 0.9) : 1.5;
+    return edgeWeight.value ? Math.max(1, 1 + Math.log1p(link.commits) * EDGE.WIDTH_LOG_K) : EDGE.WIDTH;
   }
 
-  function edgeStrokeOpacity(link) {
-    if (!edgeWeight.value) return EDGE_OPACITY;
+  function edgeStrokeOpacity(_link) {
+    return EDGE.OPACITY;
+  }
+
+  function edgeStrokeOpacityHighlight(link) {
+    if (!edgeWeight.value) return EDGE.CROSS_OPACITY;
     const srcTeam = nodeTeamId[link.source.id];
     const tgtTeam = nodeTeamId[link.target.id];
-    if (!srcTeam || !tgtTeam) return EDGE_OPACITY;
-    return (srcTeam !== tgtTeam) ? 0.75 : 0.18;
+    if (!srcTeam || !tgtTeam) return EDGE.CROSS_OPACITY;
+    return (srcTeam !== tgtTeam) ? EDGE.CROSS_OPACITY : EDGE.SAME_OPACITY;
   }
 
   function updateEdgeStyles() {
     if (!linkEls) return;
     linkEls
-      .attr('stroke',         d => edgeWeight.value ? edgeSrcColor(d)        : EDGE_COLOR)
-      .attr('stroke-width',   d => edgeStrokeWidth(d))
-      .attr('stroke-opacity', d => edgeStrokeOpacity(d));
+      .attr('stroke',       d => edgeWeight.value ? edgeSrcColor(d) : EDGE.COLOR)
+      .attr('stroke-width', d => edgeStrokeWidth(d))
+      .attr('opacity',      d => edgeStrokeOpacity(d));
   }
 
   // ── Highlight helpers ──────────────────────────────────────────────────────
@@ -154,27 +154,23 @@ export function useAuthorContributionGraph({
       const s = l.source.id, t = l.target.id;
       if (s === d.id || t === d.id) { connected.add(s); connected.add(t); }
     });
-    nodeEls.attr('opacity', n => connected.has(n.id) ? 1 : DIM_OPACITY);
     linkEls
-      .attr('stroke', l => (l.source.id === d.id || l.target.id === d.id)
-        ? EDGE_HL_COLOR
-        : (edgeWeight.value ? edgeSrcColor(l) : EDGE_COLOR))
-      .attr('stroke-opacity', l => (l.source.id === d.id || l.target.id === d.id) ? 0.9 : DIM_OPACITY);
+      .attr('stroke',  l => (l.source.id === d.id || l.target.id === d.id)
+        ? EDGE.HL_COLOR
+        : (edgeWeight.value ? edgeSrcColor(l) : EDGE.COLOR))
+      .attr('opacity', l => (l.source.id === d.id || l.target.id === d.id) ? EDGE.HL_OPACITY : EDGE.DIM_OPACITY);
   }
 
   function highlightLink(d) {
-    const s = d.source.id, t = d.target.id;
-    nodeEls.attr('opacity', n => (n.id === s || n.id === t) ? 1 : DIM_OPACITY);
     linkEls
-      .attr('stroke', l => l === d
-        ? EDGE_HL_COLOR
-        : (edgeWeight.value ? edgeSrcColor(l) : EDGE_COLOR))
-      .attr('stroke-opacity', l => l === d ? 0.9 : DIM_OPACITY);
+      .attr('stroke',  l => l === d
+        ? EDGE.HL_COLOR
+        : (edgeWeight.value ? edgeSrcColor(l) : EDGE.COLOR))
+      .attr('opacity', l => l === d ? EDGE.HL_OPACITY : EDGE.DIM_OPACITY);
   }
 
   function resetHighlight() {
-    if (!nodeEls || !linkEls) return;
-    nodeEls.attr('opacity', 1);
+    if (!linkEls) return;
     updateEdgeStyles();
   }
 
@@ -288,8 +284,8 @@ export function useAuthorContributionGraph({
 
     defs.append('marker')
       .attr('id', 'arrow')
-      .attr('viewBox', '0 -5 10 10').attr('refX', 10).attr('refY', 0)
-      .attr('markerWidth', 14).attr('markerHeight', 14)
+      .attr('viewBox', ARROW.VIEWBOX).attr('refX', ARROW.REF_X).attr('refY', ARROW.REF_Y)
+      .attr('markerWidth', ARROW.SIZE_LG).attr('markerHeight', ARROW.SIZE_LG)
       .attr('markerUnits', 'userSpaceOnUse').attr('orient', 'auto')
       .append('path').attr('d', 'M0,-5L10,0L0,5').attr('fill', 'context-stroke');
 
@@ -305,6 +301,10 @@ export function useAuthorContributionGraph({
 
     const root = svg.append('g');
     svg.call(d3.zoom().scaleExtent([0.2, 4]).on('zoom', e => root.attr('transform', e.transform)));
+
+    svg.append('text').attr('x', 12).attr('y', 20)
+      .attr('fill', '#94a3b8').attr('font-size', '11px').attr('font-weight', '600')
+      .attr('pointer-events', 'none').text('Author Contribution');
 
     // Build lookup: author → their teams (for gravity)
     const authorToTeamsMap = {};
@@ -380,9 +380,9 @@ export function useAuthorContributionGraph({
       .style('cursor', 'default')
       .on('mouseenter', (e, d) => {
         highlightLink(d);
-        onShowLinkTooltip(d, e.clientX + 14, e.clientY - 10);
+        onShowLinkTooltip(d, e.clientX + TOOLTIP_OFFSET.x, e.clientY + TOOLTIP_OFFSET.y);
       })
-      .on('mousemove',  e => { onMoveTooltip(e.clientX + 14, e.clientY - 10); })
+      .on('mousemove',  e => { onMoveTooltip(e.clientX + TOOLTIP_OFFSET.x, e.clientY + TOOLTIP_OFFSET.y); })
       .on('mouseleave', () => { resetHighlight(); onHideTooltip(); });
 
     updateEdgeStyles();
@@ -411,9 +411,9 @@ export function useAuthorContributionGraph({
       })
       .on('mouseenter', (e, d) => {
         highlightNode(d);
-        onShowNodeTooltip(d, e.clientX + 14, e.clientY - 10);
+        onShowNodeTooltip(d, e.clientX + TOOLTIP_OFFSET.x, e.clientY + TOOLTIP_OFFSET.y);
       })
-      .on('mousemove',  e => { onMoveTooltip(e.clientX + 14, e.clientY - 10); })
+      .on('mousemove',  e => { onMoveTooltip(e.clientX + TOOLTIP_OFFSET.x, e.clientY + TOOLTIP_OFFSET.y); })
       .on('mouseleave', () => { resetHighlight(); onHideTooltip(); });
 
     // Author nodes — circles
@@ -421,7 +421,7 @@ export function useAuthorContributionGraph({
       .append('circle')
       .attr('r', d => d.r)
       .attr('fill', d => getNodeColor(d.id, 'author'))
-      .attr('stroke', '#fff').attr('stroke-width', 2.5).attr('opacity', 0.92);
+      .attr('stroke', NODE.STROKE).attr('stroke-width', NODE.STROKE_WIDTH).attr('opacity', NODE.OPACITY);
 
     // Repo nodes — squares
     nodeEls.filter(d => d.type === 'repo')
@@ -430,23 +430,23 @@ export function useAuthorContributionGraph({
       .attr('width', d => d.r * 2).attr('height', d => d.r * 2)
       .attr('rx', 4)
       .attr('fill', d => getNodeColor(d.id, 'repo'))
-      .attr('stroke', '#fff').attr('stroke-width', 2.5).attr('opacity', 0.92);
+      .attr('stroke', NODE.STROKE).attr('stroke-width', NODE.STROKE_WIDTH).attr('opacity', NODE.OPACITY);
 
     // Team nodes — wide pill / rounded rectangle
     nodeEls.filter(d => d.type === 'team')
       .append('rect')
-      .attr('x', d => -(d.r + 14)).attr('y', d => -d.r)
-      .attr('width', d => (d.r + 14) * 2).attr('height', d => d.r * 2)
+      .attr('x', d => -(d.r + TEAM_PILL_PAD)).attr('y', d => -d.r)
+      .attr('width', d => (d.r + TEAM_PILL_PAD) * 2).attr('height', d => d.r * 2)
       .attr('rx', d => d.r)
       .attr('fill', d => d.color)
-      .attr('stroke', '#fff').attr('stroke-width', 3).attr('opacity', 0.95);
+      .attr('stroke', NODE.STROKE).attr('stroke-width', NODE.STROKE_WIDTH_TEAM).attr('opacity', NODE.OPACITY_TEAM);
 
     // Team node label (centered, white)
     nodeEls.filter(d => d.type === 'team')
       .append('text')
       .attr('text-anchor', 'middle')
       .attr('dy', '-0.15em')
-      .attr('fill', '#fff').attr('font-size', '13px').attr('font-weight', '700')
+      .attr('fill', NODE.STROKE).attr('font-size', '13px').attr('font-weight', '700')
       .attr('pointer-events', 'none')
       .text(d => d.name);
 
@@ -483,7 +483,7 @@ export function useAuthorContributionGraph({
       .append('text')
       .attr('text-anchor', 'middle')
       .attr('dy', d => d.r + 13)
-      .attr('fill', '#374151').attr('font-size', '11px').attr('font-weight', '600')
+      .attr('fill', NODE.LABEL_COLOR).attr('font-size', NODE.LABEL_SIZE).attr('font-weight', '600')
       .attr('pointer-events', 'none')
       .text(d => d.type === 'author' ? anonymize(d.id) : d.id);
 

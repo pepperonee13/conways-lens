@@ -1,4 +1,5 @@
 import * as d3 from 'd3';
+import { EDGE, NODE, ARROW, TOOLTIP_OFFSET, VIOLATION_ARC, TEAM_TEAM_PILL_PAD } from './graphConstants.js';
 
 /**
  * Conway's Law violation renderer — Sector Layout.
@@ -22,9 +23,13 @@ export function useConwayGraph({
   edgeWeight,
   violationThreshold,
 }) {
-  const EDGE_OPACITY  = 0.55;
-  const EDGE_HL_COLOR = '#225EA9';
-  const DIM_OPACITY   = 0.08;
+  // Conway-specific layout constants
+  const PILL_OUTER_R    = 38;   // radial distance beyond outerR for team pills
+  const SECTOR_GAP      = 0.024;
+  const SECTOR_MIN_R    = 24;
+  const REPO_SLOT       = 44;   // angular slot size for repo placement
+  const SECTOR_INNER_PAD = 12;  // repo band inner margin (from SECTOR_MIN_R)
+  const SECTOR_OUTER_PAD = 24;  // repo band outer margin (from outerR)
 
   let nodeEls = null;
   let linkEls = null;
@@ -38,7 +43,7 @@ export function useConwayGraph({
   }
 
   function pillHalfDims(d) {
-    return { hw: d.r + 14, hh: d.r };
+    return { hw: d.r + TEAM_PILL_PAD, hh: d.r };
   }
 
   function sectorArcPath(cx, cy, r0, r1, a0, a1) {
@@ -82,10 +87,10 @@ export function useConwayGraph({
     const N = effectiveTeams.value.length;
     // Outer ring: leave room for team pills outside.
     const outerR = Math.min(w, h) * 0.40;
-    const innerR = 24;
-    const pillR  = outerR + 38;
+    const innerR = SECTOR_MIN_R;
+    const pillR  = outerR + PILL_OUTER_R;
     const sectorAngle = N > 0 ? (2 * Math.PI) / N : 0;
-    const gap = N > 1 ? 0.024 : 0;
+    const gap = N > 1 ? SECTOR_GAP : 0;
     return { cx, cy, outerR, innerR, pillR, sectorAngle, gap, N };
   }
 
@@ -112,7 +117,7 @@ export function useConwayGraph({
       };
       const repos = team.repos ?? [];
       Object.assign(positions, layoutReposInSector(
-        repos, sStart, sEnd, g.cx, g.cy, g.innerR + 12, g.outerR - 24
+        repos, sStart, sEnd, g.cx, g.cy, g.innerR + SECTOR_INNER_PAD, g.outerR - SECTOR_OUTER_PAD
       ));
     });
     return positions;
@@ -125,7 +130,7 @@ export function useConwayGraph({
     const angPad = Math.min(0.18, sectorAngle * 0.10);
     const usable = sectorAngle - 2 * angPad;
     const midR = (rMin + rMax) * 0.5;
-    const slotSize = 44;
+    const slotSize = REPO_SLOT;
     const maxPerRing = Math.max(1, Math.floor((midR * usable) / slotSize));
     const nRings = Math.ceil(n / maxPerRing);
     const perRing = Math.ceil(n / nRings);
@@ -171,19 +176,19 @@ export function useConwayGraph({
   // ── Edge styling ──────────────────────────────────────────────────────────
 
   function edgeStroke(d) {
-    return edgeWeight.value ? (d.source?.color ?? '#94a3b8') : '#94a3b8';
+    return edgeWeight.value ? (d.source?.color ?? EDGE.COLOR) : EDGE.COLOR;
   }
 
   function edgeWidth(d) {
-    return edgeWeight.value ? Math.max(1, 1 + Math.log1p(d.commits) * 0.9) : 1.5;
+    return edgeWeight.value ? Math.max(1, 1 + Math.log1p(d.commits) * EDGE.WIDTH_LOG_K) : EDGE.WIDTH;
   }
 
   function updateEdgeStyles() {
     if (!linkEls) return;
     linkEls
-      .attr('stroke',         d => edgeStroke(d))
-      .attr('stroke-width',   d => edgeWidth(d))
-      .attr('stroke-opacity', EDGE_OPACITY);
+      .attr('stroke',       d => edgeStroke(d))
+      .attr('stroke-width', d => edgeWidth(d))
+      .attr('opacity',      EDGE.OPACITY);
   }
 
   function updateNodeColors() {
@@ -202,23 +207,20 @@ export function useConwayGraph({
         connected.add(l.source.id); connected.add(l.target.id);
       }
     });
-    nodeEls.attr('opacity', n => connected.has(n.id) ? 1 : DIM_OPACITY);
     linkEls
-      .attr('stroke', l => (l.source.id === d.id || l.target.id === d.id) ? EDGE_HL_COLOR : edgeStroke(l))
-      .attr('stroke-opacity', l => (l.source.id === d.id || l.target.id === d.id) ? 0.9 : DIM_OPACITY);
+      .attr('stroke',  l => (l.source.id === d.id || l.target.id === d.id) ? EDGE.HL_COLOR : edgeStroke(l))
+      .attr('opacity', l => (l.source.id === d.id || l.target.id === d.id) ? EDGE.HL_OPACITY : EDGE.DIM_OPACITY);
   }
 
   function highlightLink(d) {
     if (!nodeEls || !linkEls) return;
-    nodeEls.attr('opacity', n => (n.id === d.source.id || n.id === d.target.id) ? 1 : DIM_OPACITY);
     linkEls
-      .attr('stroke', l => l === d ? EDGE_HL_COLOR : edgeStroke(l))
-      .attr('stroke-opacity', l => l === d ? 0.9 : DIM_OPACITY);
+      .attr('stroke',  l => l === d ? EDGE.HL_COLOR : edgeStroke(l))
+      .attr('opacity', l => l === d ? EDGE.HL_OPACITY : EDGE.DIM_OPACITY);
   }
 
   function resetHighlight() {
-    if (!nodeEls || !linkEls) return;
-    nodeEls.attr('opacity', 1);
+    if (!linkEls) return;
     updateEdgeStyles();
   }
 
@@ -238,7 +240,7 @@ export function useConwayGraph({
       );
       if (!outside.length) return;
 
-      const innerR = d.r + 3, outerR = d.r + 9;
+      const innerR = d.r + VIOLATION_ARC.INNER_PAD, outerR = d.r + VIOLATION_ARC.OUTER_PAD;
       let startAngle = -Math.PI / 2;
       for (const c of outside) {
         const endAngle = startAngle + (c.commits / d.commits) * 2 * Math.PI;
@@ -287,13 +289,17 @@ export function useConwayGraph({
 
     const defs = svg.append('defs');
     defs.append('marker').attr('id', 'arrow-conway')
-      .attr('viewBox', '0 -5 10 10').attr('refX', 10).attr('refY', 0)
-      .attr('markerWidth', 12).attr('markerHeight', 12)
+      .attr('viewBox', ARROW.VIEWBOX).attr('refX', ARROW.REF_X).attr('refY', ARROW.REF_Y)
+      .attr('markerWidth', ARROW.SIZE).attr('markerHeight', ARROW.SIZE)
       .attr('markerUnits', 'userSpaceOnUse').attr('orient', 'auto')
       .append('path').attr('d', 'M0,-5L10,0L0,5').attr('fill', 'context-stroke');
 
     const root = svg.append('g');
     svg.call(d3.zoom().scaleExtent([0.5, 4]).on('zoom', e => root.attr('transform', e.transform)));
+
+    svg.append('text').attr('x', 12).attr('y', 20)
+      .attr('fill', '#94a3b8').attr('font-size', '11px').attr('font-weight', '600')
+      .attr('pointer-events', 'none').text('Conway / Sector');
 
     drawSectors(root, dims);
 
@@ -306,9 +312,9 @@ export function useConwayGraph({
       .style('cursor', 'default')
       .on('mouseenter', (e, d) => {
         highlightLink(d);
-        onShowLinkTooltip(d, e.clientX + 14, e.clientY - 10);
+        onShowLinkTooltip(d, e.clientX + TOOLTIP_OFFSET.x, e.clientY + TOOLTIP_OFFSET.y);
       })
-      .on('mousemove',  e => onMoveTooltip(e.clientX + 14, e.clientY - 10))
+      .on('mousemove',  e => onMoveTooltip(e.clientX + TOOLTIP_OFFSET.x, e.clientY + TOOLTIP_OFFSET.y))
       .on('mouseleave', () => { resetHighlight(); onHideTooltip(); });
 
     updateEdgeStyles();
@@ -320,25 +326,25 @@ export function useConwayGraph({
       .style('cursor', 'default')
       .on('mouseenter', (e, d) => {
         highlightNode(d);
-        onShowNodeTooltip(d, e.clientX + 14, e.clientY - 10);
+        onShowNodeTooltip(d, e.clientX + TOOLTIP_OFFSET.x, e.clientY + TOOLTIP_OFFSET.y);
       })
-      .on('mousemove',  e => onMoveTooltip(e.clientX + 14, e.clientY - 10))
+      .on('mousemove',  e => onMoveTooltip(e.clientX + TOOLTIP_OFFSET.x, e.clientY + TOOLTIP_OFFSET.y))
       .on('mouseleave', () => { resetHighlight(); onHideTooltip(); });
 
     // Team pill (single style — always shown outside the outer ring)
     nodeEls.filter(d => d.type === 'team')
       .append('rect')
-      .attr('x', d => -(d.r + 14)).attr('y', d => -d.r)
-      .attr('width', d => (d.r + 14) * 2).attr('height', d => d.r * 2)
+      .attr('x', d => -(d.r + TEAM_PILL_PAD)).attr('y', d => -d.r)
+      .attr('width', d => (d.r + TEAM_PILL_PAD) * 2).attr('height', d => d.r * 2)
       .attr('rx', d => d.r)
       .attr('fill', d => d.color)
-      .attr('stroke', '#fff').attr('stroke-width', 3)
-      .attr('opacity', 0.95);
+      .attr('stroke', NODE.STROKE).attr('stroke-width', NODE.STROKE_WIDTH_TEAM)
+      .attr('opacity', NODE.OPACITY_TEAM);
 
     nodeEls.filter(d => d.type === 'team')
       .append('text')
       .attr('text-anchor', 'middle').attr('dy', '-0.15em')
-      .attr('fill', '#fff').attr('font-size', '12px').attr('font-weight', '700')
+      .attr('fill', NODE.STROKE).attr('font-size', '12px').attr('font-weight', '700')
       .attr('pointer-events', 'none')
       .text(d => d.name);
 
@@ -357,14 +363,14 @@ export function useConwayGraph({
       .attr('width', d => d.r * 2).attr('height', d => d.r * 2)
       .attr('rx', 4)
       .attr('fill', '#ffffff')
-      .attr('stroke', d => d.color || '#9CA3AF').attr('stroke-width', 3)
+      .attr('stroke', d => d.color || '#9CA3AF').attr('stroke-width', NODE.STROKE_WIDTH_TEAM)
       .attr('opacity', 1);
 
     // Repo label — short id (last path segment) to reduce collisions
     nodeEls.filter(d => d.type === 'repo')
       .append('text')
-      .attr('text-anchor', 'middle').attr('dy', d => d.r + 12)
-      .attr('fill', '#374151').attr('font-size', '10px').attr('font-weight', '600')
+      .attr('text-anchor', 'middle').attr('dy', d => d.r + VIOLATION_ARC.OUTER_PAD + 22)
+      .attr('fill', NODE.LABEL_COLOR).attr('font-size', NODE.LABEL_SIZE_SM).attr('font-weight', '600')
       .attr('pointer-events', 'none')
       .text(d => shortLabel(d.id));
 

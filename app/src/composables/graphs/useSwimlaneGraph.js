@@ -1,4 +1,5 @@
 import * as d3 from 'd3';
+import { EDGE, NODE, ARROW, TOOLTIP_OFFSET, VIOLATION_ARC } from './graphConstants.js';
 
 /**
  * Conway's Law violation renderer — Swimlane Layout.
@@ -24,11 +25,7 @@ export function useSwimlaneGraph({
   violationThreshold,
   violatingOnly,
 }) {
-  const EDGE_OPACITY  = 0.55;
-  const EDGE_HL_COLOR = '#225EA9';
-  const DIM_OPACITY   = 0.08;
-
-  // Layout constants
+  // Swimlane-specific layout constants
   const LANE_LABEL_W = 210;
   const LANE_GAP     = 4;
   const LANE_PAD_Y   = 18;
@@ -44,19 +41,19 @@ export function useSwimlaneGraph({
   // ── Edge styling ──────────────────────────────────────────────────────────
 
   function edgeStroke(d) {
-    return edgeWeight.value ? (d.source?.color ?? '#94a3b8') : '#94a3b8';
+    return edgeWeight.value ? (d.source?.color ?? EDGE.COLOR) : EDGE.COLOR;
   }
 
   function edgeWidth(d) {
-    return edgeWeight.value ? Math.max(1, 1 + Math.log1p(d.commits) * 0.9) : 1.5;
+    return edgeWeight.value ? Math.max(1, 1 + Math.log1p(d.commits) * EDGE.WIDTH_LOG_K) : EDGE.WIDTH;
   }
 
   function updateEdgeStyles() {
     if (!linkEls) return;
     linkEls
-      .attr('stroke',         d => edgeStroke(d))
-      .attr('stroke-width',   d => edgeWidth(d))
-      .attr('stroke-opacity', EDGE_OPACITY);
+      .attr('stroke',       d => edgeStroke(d))
+      .attr('stroke-width', d => edgeWidth(d))
+      .attr('opacity',      EDGE.OPACITY);
   }
 
   function updateNodeColors() {
@@ -75,23 +72,20 @@ export function useSwimlaneGraph({
         connected.add(l.source.id); connected.add(l.target.id);
       }
     });
-    nodeEls.attr('opacity', n => connected.has(n.id) ? 1 : DIM_OPACITY);
     linkEls
-      .attr('stroke', l => (l.source.id === d.id || l.target.id === d.id) ? EDGE_HL_COLOR : edgeStroke(l))
-      .attr('stroke-opacity', l => (l.source.id === d.id || l.target.id === d.id) ? 0.9 : DIM_OPACITY);
+      .attr('stroke',  l => (l.source.id === d.id || l.target.id === d.id) ? EDGE.HL_COLOR : edgeStroke(l))
+      .attr('opacity', l => (l.source.id === d.id || l.target.id === d.id) ? EDGE.HL_OPACITY : EDGE.DIM_OPACITY);
   }
 
   function highlightLink(d) {
     if (!nodeEls || !linkEls) return;
-    nodeEls.attr('opacity', n => (n.id === d.source.id || n.id === d.target.id) ? 1 : DIM_OPACITY);
     linkEls
-      .attr('stroke', l => l === d ? EDGE_HL_COLOR : edgeStroke(l))
-      .attr('stroke-opacity', l => l === d ? 0.9 : DIM_OPACITY);
+      .attr('stroke',  l => l === d ? EDGE.HL_COLOR : edgeStroke(l))
+      .attr('opacity', l => l === d ? EDGE.HL_OPACITY : EDGE.DIM_OPACITY);
   }
 
   function resetHighlight() {
-    if (!nodeEls || !linkEls) return;
-    nodeEls.attr('opacity', 1);
+    if (!linkEls) return;
     updateEdgeStyles();
   }
 
@@ -122,7 +116,7 @@ export function useSwimlaneGraph({
         }
       }
 
-      const innerR = d.r + 2, outerR = d.r + 8;
+      const innerR = d.r + VIOLATION_ARC.INNER_PAD, outerR = d.r + VIOLATION_ARC.OUTER_PAD;
       let startAngle = -Math.PI / 2;
 
       const ownerColor = d.color || '#9CA3AF';
@@ -235,7 +229,7 @@ export function useSwimlaneGraph({
         const col = i % cols;
         positions[r.id] = {
           x: gridLeft + 12 + col * REPO_SLOT_W + REPO_SLOT_W / 2,
-          y: y + LANE_PAD_Y + row * REPO_SLOT_H + REPO_SLOT_W / 2,
+          y: y + LANE_PAD_Y + row * REPO_SLOT_H + REPO_SLOT_H / 2,
         };
       });
 
@@ -344,13 +338,17 @@ export function useSwimlaneGraph({
 
     const defs = svg.append('defs');
     defs.append('marker').attr('id', 'arrow-swim')
-      .attr('viewBox', '0 -5 10 10').attr('refX', 10).attr('refY', 0)
-      .attr('markerWidth', 12).attr('markerHeight', 12)
+      .attr('viewBox', ARROW.VIEWBOX).attr('refX', ARROW.REF_X).attr('refY', ARROW.REF_Y)
+      .attr('markerWidth', ARROW.SIZE).attr('markerHeight', ARROW.SIZE)
       .attr('markerUnits', 'userSpaceOnUse').attr('orient', 'auto')
       .append('path').attr('d', 'M0,-5L10,0L0,5').attr('fill', 'context-stroke');
 
     const root = svg.append('g');
     svg.call(d3.zoom().scaleExtent([0.4, 4]).on('zoom', e => root.attr('transform', e.transform)));
+
+    svg.append('text').attr('x', 12).attr('y', 20)
+      .attr('fill', '#94a3b8').attr('font-size', '11px').attr('font-weight', '600')
+      .attr('pointer-events', 'none').text('Conway / Swimlane');
 
     drawLanes(root, lanes, W);
 
@@ -363,9 +361,9 @@ export function useSwimlaneGraph({
       .style('cursor', 'default')
       .on('mouseenter', (e, d) => {
         highlightLink(d);
-        onShowLinkTooltip(d, e.clientX + 14, e.clientY - 10);
+        onShowLinkTooltip(d, e.clientX + TOOLTIP_OFFSET.x, e.clientY + TOOLTIP_OFFSET.y);
       })
-      .on('mousemove',  e => onMoveTooltip(e.clientX + 14, e.clientY - 10))
+      .on('mousemove',  e => onMoveTooltip(e.clientX + TOOLTIP_OFFSET.x, e.clientY + TOOLTIP_OFFSET.y))
       .on('mouseleave', () => { resetHighlight(); onHideTooltip(); });
 
     updateEdgeStyles();
@@ -378,9 +376,9 @@ export function useSwimlaneGraph({
       .style('cursor', 'default')
       .on('mouseenter', (e, d) => {
         highlightNode(d);
-        onShowNodeTooltip(d, e.clientX + 14, e.clientY - 10);
+        onShowNodeTooltip(d, e.clientX + TOOLTIP_OFFSET.x, e.clientY + TOOLTIP_OFFSET.y);
       })
-      .on('mousemove',  e => onMoveTooltip(e.clientX + 14, e.clientY - 10))
+      .on('mousemove',  e => onMoveTooltip(e.clientX + TOOLTIP_OFFSET.x, e.clientY + TOOLTIP_OFFSET.y))
       .on('mouseleave', () => { resetHighlight(); onHideTooltip(); });
 
     // Team anchor: pill with name + sublabel
@@ -390,12 +388,12 @@ export function useSwimlaneGraph({
       .attr('width', 180).attr('height', 44)
       .attr('rx', 10)
       .attr('fill', d => d.color)
-      .attr('stroke', '#fff').attr('stroke-width', 2)
-      .attr('opacity', 0.95);
+      .attr('stroke', NODE.STROKE).attr('stroke-width', 2)
+      .attr('opacity', NODE.OPACITY_TEAM);
 
     teamG.append('text')
       .attr('text-anchor', 'middle').attr('dy', '-0.2em')
-      .attr('fill', '#fff').attr('font-size', '12px').attr('font-weight', '700')
+      .attr('fill', NODE.STROKE).attr('font-size', '12px').attr('font-weight', '700')
       .attr('pointer-events', 'none')
       .text(d => d.name);
 
@@ -412,11 +410,11 @@ export function useSwimlaneGraph({
       .attr('r', d => d.r)
       .attr('fill', d => d.color || '#9CA3AF')
       .attr('fill-opacity', 0.45)
-      .attr('stroke', '#ffffff').attr('stroke-width', 1.5);
+      .attr('stroke', NODE.STROKE).attr('stroke-width', EDGE.WIDTH);
 
     repoG.append('text')
-      .attr('text-anchor', 'middle').attr('dy', d => d.r + 12)
-      .attr('fill', '#374151').attr('font-size', '10px').attr('font-weight', '600')
+      .attr('text-anchor', 'middle').attr('dy', d => d.r + VIOLATION_ARC.OUTER_PAD + 13)
+      .attr('fill', NODE.LABEL_COLOR).attr('font-size', NODE.LABEL_SIZE_SM).attr('font-weight', '600')
       .attr('pointer-events', 'none')
       .text(d => d.id);
 
