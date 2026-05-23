@@ -24,6 +24,8 @@ export function useRepoDetailGraph({
 
   const expandedTeams = new Set();
   let lastDrawArgs = null;
+  let zoomBehavior = null;
+  let savedTransform = null;
 
   function edgeStroke(d) {
     return edgeWeight.value ? (d.authorColor ?? EDGE.COLOR) : EDGE.COLOR;
@@ -239,6 +241,8 @@ export function useRepoDetailGraph({
     // ── SVG setup ────────────────────────────────────────────────────────────
 
     const svg = d3.select(svgRef.value);
+    // Capture current transform before wiping so expand/collapse preserves pan+zoom
+    if (zoomBehavior) savedTransform = d3.zoomTransform(svgRef.value);
     svg.selectAll('*').remove();
     svg.attr('width', w).attr('height', h).attr('viewBox', `0 0 ${w} ${h}`);
 
@@ -256,7 +260,11 @@ export function useRepoDetailGraph({
     }
 
     const root = svg.append('g');
-    svg.call(d3.zoom().scaleExtent([0.4, 4]).on('zoom', e => root.attr('transform', e.transform)));
+    zoomBehavior = d3.zoom().scaleExtent([0.4, 4]).on('zoom', e => root.attr('transform', e.transform));
+    svg.call(zoomBehavior);
+    if (savedTransform) {
+      svg.call(zoomBehavior.transform, savedTransform);
+    }
 
     // ── Edge endpoint helper ─────────────────────────────────────────────────
 
@@ -463,6 +471,8 @@ export function useRepoDetailGraph({
     linkLabelEls = null;
     expandedTeams.clear();
     lastDrawArgs = null;
+    zoomBehavior = null;
+    savedTransform = null;
   }
 
   function updateNodeColors() {}
