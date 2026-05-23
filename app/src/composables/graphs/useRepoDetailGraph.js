@@ -277,8 +277,7 @@ export function useRepoDetailGraph({
       const dx = cx - pos.x, dy = cy - pos.y;
       const dist = Math.sqrt(dx * dx + dy * dy) || 1;
       const ux = dx / dist, uy = dy / dist;
-      const squareDist = Math.abs(ux) > Math.abs(uy) ? REPO_R / Math.abs(ux) : REPO_R / Math.abs(uy);
-      const stop = squareDist + EDGE_REPO_GAP;
+      const stop = REPO_R + EDGE_REPO_GAP;
       return { lx2: cx - ux * stop, ly2: cy - uy * stop };
     }
 
@@ -451,10 +450,8 @@ export function useRepoDetailGraph({
         .on('mousemove',  e => onMoveTooltip(e.clientX + TOOLTIP_OFFSET.x, e.clientY + TOOLTIP_OFFSET.y))
         .on('mouseleave', () => onHideTooltip());
 
-      repoG.append('rect')
-        .attr('x', -REPO_R).attr('y', -REPO_R)
-        .attr('width', REPO_R * 2).attr('height', REPO_R * 2)
-        .attr('rx', 4)
+      repoG.append('circle')
+        .attr('r', REPO_R)
         .attr('fill', getNodeColor(repoNode.id, 'repo') ?? '#9CA3AF')
         .attr('fill-opacity', 0.45)
         .attr('stroke', NODE.STROKE).attr('stroke-width', EDGE.WIDTH);

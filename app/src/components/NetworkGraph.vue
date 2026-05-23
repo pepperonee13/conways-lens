@@ -1,13 +1,19 @@
 <template>
-  <div class="graph-wrap" ref="containerRef">
+  <div :class="['graph-wrap', { 'graph-wrap--fullscreen': isFullscreen }]" ref="containerRef">
     <div class="graph-header">
-      <h3 class="graph-title">Conway's Law Violation Graph</h3>
+      <h3 v-if="!isFullscreen" class="graph-title">Conway's Law Violation Graph</h3>
       <div class="graph-desc-row">
-        <p class="graph-desc">
+        <p v-if="!isFullscreen && !detailRepoId" class="graph-desc">
           <span class="legend"><span class="legend-team"></span>Team lane</span>
-          <span class="legend"><span class="legend-square"></span>Bounded Context</span>
+          <span class="legend"><span class="legend-repo"></span>Bounded Context</span>
           <span class="legend"><span class="legend-ring"></span>Violation ring</span>
           &nbsp;·&nbsp; Lanes sorted by violation severity &nbsp;·&nbsp; Edge crossing a lane = cross-team contribution
+        </p>
+        <p v-if="!isFullscreen && detailRepoId" class="graph-desc">
+          <span class="legend"><span class="legend-detail-repo"></span>Bounded Context</span>
+          <span class="legend"><span class="legend-detail-team"></span>Team (click to expand)</span>
+          <span class="legend"><span class="legend-detail-author"></span>Author</span>
+          &nbsp;·&nbsp; Edge width = commit volume &nbsp;·&nbsp; Edge color = author's team
         </p>
         <div class="viz-dropdown-wrap" ref="vizDropRef">
           <button :class="['cross-team-btn', { active: edgeWeight }]" @click="vizOpen = !vizOpen">
@@ -50,6 +56,10 @@
             </div>
           </div>
         </div>
+        <button class="maximize-btn" @click="toggleFullscreen" :title="isFullscreen ? 'Exit fullscreen' : 'Fullscreen'">
+          <Minimize2 v-if="isFullscreen" :size="14" />
+          <Maximize2 v-else :size="14" />
+        </button>
       </div>
 
       <div v-if="dateBounds" class="date-filter-row">
@@ -83,13 +93,13 @@
           <button class="back-btn" @click="closeDetail">← Back to overview</button>
           <span class="detail-title">Contributors to <strong>{{ detailRepoId }}</strong></span>
         </div>
-        <p class="hint">Scroll to zoom · Hover nodes or edges to inspect</p>
+        <p v-if="!isFullscreen" class="hint">Scroll to zoom · Hover nodes or edges to inspect</p>
         <div class="svg-wrap">
           <svg ref="detailSvgRef" class="graph-svg"></svg>
         </div>
       </template>
       <template v-else>
-        <p class="hint">Scroll to zoom · Hover nodes or edges to inspect · Click a repo for author details</p>
+        <p v-if="!isFullscreen" class="hint">Scroll to zoom · Hover nodes or edges to inspect · Click a repo for author details</p>
         <div class="svg-wrap">
           <svg ref="svgRef" class="graph-svg"></svg>
         </div>
@@ -130,6 +140,7 @@
 <script setup>
 import { ref, computed, watch, reactive, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { storeToRefs } from 'pinia';
+import { Maximize2, Minimize2 } from 'lucide-vue-next';
 import { useLensStore } from '../stores/useLensStore';
 import { useSwimlaneGraph } from '../composables/graphs/useSwimlaneGraph.js';
 import { useRepoDetailGraph } from '../composables/graphs/useRepoDetailGraph.js';
@@ -155,9 +166,15 @@ const detailRepoId  = ref(null);
 const VIZ_DEFAULTS = { edgeWeight: true, violationThreshold: 10, violatingOnly: true };
 
 const vizOpen            = ref(false);
+const isFullscreen       = ref(false);
 const edgeWeight         = ref(VIZ_DEFAULTS.edgeWeight);
 const violationThreshold = ref(VIZ_DEFAULTS.violationThreshold);
 const violatingOnly      = ref(VIZ_DEFAULTS.violatingOnly);
+
+function toggleFullscreen() {
+  isFullscreen.value = !isFullscreen.value;
+  nextTick(() => updateSize());
+}
 
 function resetVizDefaults() {
   edgeWeight.value         = VIZ_DEFAULTS.edgeWeight;
@@ -189,7 +206,7 @@ const tooltipDetail = computed(() => {
     return `${devs} ${devs === 1 ? 'dev' : 'devs'} · ${c} commits · click to expand`;
   }
   const team = tooltip.teamName ? ` · ${tooltip.teamName}` : '';
-  const pctStr = tooltip.pct != null ? `${tooltip.pct}%` : c;
+  const pctStr = tooltip.pct != null ? `${tooltip.pct}%` : `${c} commits`;
   return `${pctStr}${team}`;
 });
 
@@ -203,7 +220,12 @@ const tooltipContributions = computed(() => {
     teamName: effectiveTeams.value.find(t => t.id === c.teamId)?.name ?? c.teamId,
     commits: c.commits,
     pct: ((c.commits / total) * 100).toFixed(1).replace(/\.0$/, ''),
-  }));
+  })).sort((a, b) => {
+    const aOwner = a.teamId === tooltip.owningTeamId ? 1 : 0;
+    const bOwner = b.teamId === tooltip.owningTeamId ? 1 : 0;
+    if (aOwner !== bOwner) return bOwner - aOwner;
+    return b.commits - a.commits;
+  });
 });
 
 function displayNodeName(id) {
@@ -308,6 +330,11 @@ watch(violatingOnly,      () => redraw());
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 
 function updateSize() {
+  if (isFullscreen.value) {
+    dims.w = window.innerWidth - 48;
+    dims.h = window.innerHeight - 120;
+    return;
+  }
   if (!containerRef.value) return;
   const r = containerRef.value.getBoundingClientRect();
   dims.w = Math.max(500, r.width - 48);
@@ -319,14 +346,23 @@ function handleDocClick(e) {
     vizOpen.value = false;
 }
 
+function handleKeyDown(e) {
+  if (e.key === 'Escape' && isFullscreen.value) {
+    isFullscreen.value = false;
+    nextTick(() => updateSize());
+  }
+}
+
 onMounted(() => {
   updateSize();
   const onResize = debounce(updateSize, 150);
   window.addEventListener('resize', onResize);
   document.addEventListener('mousedown', handleDocClick);
+  document.addEventListener('keydown', handleKeyDown);
   onBeforeUnmount(() => {
     window.removeEventListener('resize', onResize);
     document.removeEventListener('mousedown', handleDocClick);
+    document.removeEventListener('keydown', handleKeyDown);
     renderer.teardown();
     detailRenderer.teardown();
   });
@@ -338,6 +374,17 @@ onMounted(() => {
   @apply relative bg-white rounded-xl shadow-lg border-2 border-gray-100 p-6
          transition-all duration-300 hover:shadow-xl hover:border-brand-blue/30;
   animation: slideUp 0.4s ease-out;
+}
+.graph-wrap--fullscreen {
+  position: fixed !important;
+  inset: 0;
+  z-index: 1000;
+  border-radius: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 16px 24px !important;
+  overflow: auto;
+  animation: none;
 }
 @keyframes slideUp {
   from { opacity: 0; transform: translateY(20px); }
@@ -360,11 +407,15 @@ onMounted(() => {
 }
 .legend        { @apply flex items-center gap-1.5 font-medium; }
 .legend-square { display: inline-block; width: 12px; height: 12px; border-radius: 2px; background: #088F9B; }
+.legend-repo   { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: #088F9B; opacity: 0.65; border: 1.5px solid #2F3944; }
 .legend-team   { display: inline-block; width: 22px; height: 12px; border-radius: 6px; background: #F08223; }
 .legend-ring   {
   display: inline-block; width: 14px; height: 14px; border-radius: 50%;
   background: #fff; border: 3px solid #F08223; opacity: 0.85;
 }
+.legend-detail-repo   { display: inline-block; width: 14px; height: 14px; border-radius: 50%; background: #088F9B; opacity: 0.65; border: 1.5px solid #2F3944; }
+.legend-detail-team   { display: inline-block; width: 26px; height: 14px; border-radius: 5px; background: #F08223; opacity: 0.85; }
+.legend-detail-author { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #225EA9; }
 .date-filter-row {
   @apply flex items-center justify-center gap-2 mt-3 flex-wrap;
 }
@@ -461,4 +512,14 @@ onMounted(() => {
   transition: all 0.15s;
 }
 .viz-reset-btn:hover { border-color: #225EA9; color: #225EA9; }
+
+/* ── Maximize button ── */
+.maximize-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 6px;
+  border: 1.5px solid #cbd5e1; color: #64748b; background: transparent;
+  cursor: pointer; transition: all 0.15s; flex-shrink: 0;
+  margin-left: 4px;
+}
+.maximize-btn:hover { border-color: #225EA9; color: #225EA9; }
 </style>
