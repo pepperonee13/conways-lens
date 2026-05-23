@@ -3,11 +3,9 @@
 export const EDGE = {
   COLOR:            '#94a3b8',
   HL_COLOR:         '#225EA9',
-  OPACITY:          0,
   HL_OPACITY:       0.9,
-  CROSS_OPACITY:    0.75,  // cross-team edge opacity on hover (author-contribution graph)
-  SAME_OPACITY:     0.18,  // same-team edge opacity on hover  (author-contribution graph)
-  DIM_OPACITY:      0,  // non-highlighted edges on hover
+  CROSS_OPACITY:    0.75,  // cross-team edge opacity (author-contribution graph)
+  SAME_OPACITY:     0.18,  // same-team edge opacity  (author-contribution graph)
   WIDTH:            1.5,
   WIDTH_LOG_K:      0.9,
 };

@@ -514,6 +514,31 @@ export const useLensStore = defineStore('lens', () => {
       ignoredAuthors.value = data.ignoredAuthors;
   }
 
+  // Returns {nodes, links} for a single repo: all contributing authors regardless of team.
+  function repoContributorsData(repoId) {
+    const since = activeRange.value.since;
+    const until = activeRange.value.until;
+    const edgeMap = {}; // author → commits (Set<sha>)
+    for (const row of timelineData.value) {
+      if (!row.Author || !row.Product || !row.ChangesetId) continue;
+      if (row.Product !== repoId) continue;
+      if (since && row.Date < since) continue;
+      if (until && row.Date > until) continue;
+      const author = normalizeAuthor(row.Author);
+      if (ignoredSet.value.has(author)) continue;
+      (edgeMap[author] ??= new Set()).add(row.ChangesetId);
+    }
+    const links = Object.entries(edgeMap).map(([author, shas]) => ({
+      source: author, target: repoId, commits: shas.size,
+    }));
+    const repoCommits = links.reduce((s, l) => s + l.commits, 0);
+    const nodes = [
+      { id: repoId, type: 'repo', commits: repoCommits },
+      ...links.map(l => ({ id: l.source, type: 'author', commits: l.commits })),
+    ];
+    return { nodes, links };
+  }
+
   return {
     timelineData, dataLoaded, dataError, dateInfo,
     teams, syntheticTeam, authorNormalizations, ignoredAuthors,
@@ -522,6 +547,7 @@ export const useLensStore = defineStore('lens', () => {
     expandedTeams,
     allRawAuthors, allAuthors, allRepos,
     graphData, ownershipGraphData, nodeColors, getNodeColor,
+    repoContributorsData,
     loadTimelineData, loadSimulatedData, clearData,
     addTeam, removeTeam,
     setNormalization, removeNormalization,

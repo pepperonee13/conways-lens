@@ -188,7 +188,8 @@ export function useConwayGraph({
     linkEls
       .attr('stroke',       d => edgeStroke(d))
       .attr('stroke-width', d => edgeWidth(d))
-      .attr('opacity',      EDGE.OPACITY);
+      .attr('display',      'none')
+      .attr('opacity',      EDGE.HL_OPACITY);
   }
 
   function updateNodeColors() {
@@ -209,14 +210,16 @@ export function useConwayGraph({
     });
     linkEls
       .attr('stroke',  l => (l.source.id === d.id || l.target.id === d.id) ? (l.source?.color ?? EDGE.HL_COLOR) : edgeStroke(l))
-      .attr('opacity', l => (l.source.id === d.id || l.target.id === d.id) ? EDGE.HL_OPACITY : EDGE.DIM_OPACITY);
+      .attr('display', l => (l.source.id === d.id || l.target.id === d.id) ? null : 'none')
+      .attr('opacity', EDGE.HL_OPACITY);
   }
 
   function highlightLink(d) {
     if (!nodeEls || !linkEls) return;
     linkEls
       .attr('stroke',  l => l === d ? (l.source?.color ?? EDGE.HL_COLOR) : edgeStroke(l))
-      .attr('opacity', l => l === d ? EDGE.HL_OPACITY : EDGE.DIM_OPACITY);
+      .attr('display', l => l === d ? null : 'none')
+      .attr('opacity', EDGE.HL_OPACITY);
   }
 
   function resetHighlight() {

@@ -127,7 +127,7 @@ export function useAuthorContributionGraph({
   }
 
   function edgeStrokeOpacity(_link) {
-    return EDGE.OPACITY;
+    return EDGE.CROSS_OPACITY;
   }
 
   function edgeStrokeOpacityHighlight(link) {
@@ -143,6 +143,7 @@ export function useAuthorContributionGraph({
     linkEls
       .attr('stroke',       d => edgeWeight.value ? edgeSrcColor(d) : EDGE.COLOR)
       .attr('stroke-width', d => edgeStrokeWidth(d))
+      .attr('display',      null)
       .attr('opacity',      d => edgeStrokeOpacity(d));
   }
 
@@ -158,7 +159,8 @@ export function useAuthorContributionGraph({
       .attr('stroke',  l => (l.source.id === d.id || l.target.id === d.id)
         ? (l.source?.color ?? EDGE.HL_COLOR)
         : (edgeWeight.value ? edgeSrcColor(l) : EDGE.COLOR))
-      .attr('opacity', l => (l.source.id === d.id || l.target.id === d.id) ? EDGE.HL_OPACITY : EDGE.DIM_OPACITY);
+      .attr('display', l => (l.source.id === d.id || l.target.id === d.id) ? null : 'none')
+      .attr('opacity', EDGE.HL_OPACITY);
   }
 
   function highlightLink(d) {
@@ -166,7 +168,8 @@ export function useAuthorContributionGraph({
       .attr('stroke',  l => l === d
         ? (l.source?.color ?? EDGE.HL_COLOR)
         : (edgeWeight.value ? edgeSrcColor(l) : EDGE.COLOR))
-      .attr('opacity', l => l === d ? EDGE.HL_OPACITY : EDGE.DIM_OPACITY);
+      .attr('display', l => l === d ? null : 'none')
+      .attr('opacity', EDGE.HL_OPACITY);
   }
 
   function resetHighlight() {
@@ -246,13 +249,27 @@ export function useAuthorContributionGraph({
     const otherScale = d3.scaleSqrt().domain([0, nonAuthMax]).range([14, 40]);
     const teamScale  = d3.scaleSqrt().domain([0, nonAuthMax]).range([28, 55]);
 
-    const nodes = rawNodes.map(n => {
+    const authorNodes  = rawNodes.filter(n => n.type === 'author');
+    const nonAuthCount = rawNodes.filter(n => n.type !== 'author').length;
+    let authorIdx = 0;
+    const nodes = rawNodes.map((n, i) => {
       const saved = savedPositions[n.id];
       let r;
       if (n.type === 'author') r = aScale(n.commits);
       else if (n.type === 'team') r = teamScale(n.commits);
       else r = otherScale(n.commits);
-      return { ...n, r, x: saved?.x, y: saved?.y };
+      let x, y;
+      if (saved) {
+        x = saved.x; y = saved.y;
+      } else if (n.type === 'repo' && cfg.repoRadius === 0) {
+        x = w / 2; y = h / 2;
+      } else {
+        const angle = (i / rawNodes.length) * 2 * Math.PI;
+        const spread = Math.min(w, h) * 0.25;
+        x = w / 2 + Math.cos(angle) * spread;
+        y = h / 2 + Math.sin(angle) * spread;
+      }
+      return { ...n, r, x, y };
     });
     const links = rawLinks.map(l => ({ ...l }));
 
@@ -356,6 +373,9 @@ export function useAuthorContributionGraph({
     const R = Math.min(w, h) * cfg.ringScale + nodes.length * cfg.nodeSpacing;
     const hasIndividuals = nodes.some(n => n.type === 'author' || n.type === 'repo');
 
+    const repoR   = cfg.repoRadius   != null ? R * cfg.repoRadius   : R * 0.65;
+    const authorR = cfg.authorRadius != null ? R * cfg.authorRadius : R * 0.35;
+
     sim = d3.forceSimulation(nodes)
       .force('link',    d3.forceLink(links).id(d => d.id)
         .distance(d => (d.source.type === 'team' || d.target.type === 'team') ? cfg.teamLinkDistance : cfg.linkDistance)
@@ -364,8 +384,8 @@ export function useAuthorContributionGraph({
       .force('center',  d3.forceCenter(w / 2, h / 2).strength(0.08))
       .force('radial',  d3.forceRadial(d => {
         if (d.type === 'team')   return hasIndividuals ? R : R * 0.75;
-        if (d.type === 'author') return R * 0.35;
-        return R * 0.65;
+        if (d.type === 'author') return authorR;
+        return repoR;
       }, w / 2, h / 2).strength(cfg.radialStrength))
       .force('collide', d3.forceCollide(d => d.r + (d.type === 'team' ? cfg.teamCollide : cfg.collide)))
       .force('teamGravity', teamGravity);

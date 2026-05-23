@@ -78,10 +78,22 @@
     </div>
 
     <template v-else>
-      <p class="hint">Scroll to zoom · Hover nodes or edges to inspect</p>
-      <div class="svg-wrap">
-        <svg ref="svgRef" class="graph-svg"></svg>
-      </div>
+      <template v-if="detailRepoId">
+        <div class="detail-header">
+          <button class="back-btn" @click="closeDetail">← Back to overview</button>
+          <span class="detail-title">Contributors to <strong>{{ detailRepoId }}</strong></span>
+        </div>
+        <p class="hint">Scroll to zoom · Hover nodes or edges to inspect</p>
+        <div class="svg-wrap">
+          <svg ref="detailSvgRef" class="graph-svg"></svg>
+        </div>
+      </template>
+      <template v-else>
+        <p class="hint">Scroll to zoom · Hover nodes or edges to inspect · Click a repo for author details</p>
+        <div class="svg-wrap">
+          <svg ref="svgRef" class="graph-svg"></svg>
+        </div>
+      </template>
     </template>
 
     <teleport to="body">
@@ -111,10 +123,12 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, reactive, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, watch, reactive, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useLensStore } from '../stores/useLensStore';
 import { useSwimlaneGraph } from '../composables/graphs/useSwimlaneGraph.js';
+import { useRepoDetailGraph } from '../composables/graphs/useRepoDetailGraph.js';
+import { useAnonymize } from '../composables/useAnonymize.js';
 
 const store = useLensStore();
 const {
@@ -126,10 +140,12 @@ const effectiveTeams = computed(() =>
   syntheticTeam.value ? [...store.teams, syntheticTeam.value] : store.teams
 );
 
-const svgRef       = ref(null);
-const containerRef = ref(null);
-const vizDropRef   = ref(null);
-const dims         = reactive({ w: 900, h: 600 });
+const svgRef        = ref(null);
+const detailSvgRef  = ref(null);
+const containerRef  = ref(null);
+const vizDropRef    = ref(null);
+const dims          = reactive({ w: 900, h: 600 });
+const detailRepoId  = ref(null);
 
 const VIZ_DEFAULTS = { edgeWeight: true, violationThreshold: 10, violatingOnly: true };
 
@@ -187,6 +203,8 @@ function displayNodeName(id) {
   return id;
 }
 
+const { anonymize } = useAnonymize();
+
 // ── Renderer ──────────────────────────────────────────────────────────────
 const renderer = useSwimlaneGraph({
   svgRef,
@@ -197,7 +215,7 @@ const renderer = useSwimlaneGraph({
       show: true, x, y, isLink: false,
       name: d.id, type: d.type, commits: d.commits,
       teamName: d.name ?? '', repoCount: d.repoCount ?? 0, authorCount: d.authorCount ?? 0,
-      action: '',
+      action: d.type === 'repo' ? 'Click to see author contributions' : '',
       contributions: d.contributions ?? [],
       owningTeamId: d.owningTeamId ?? null,
     });
@@ -210,10 +228,51 @@ const renderer = useSwimlaneGraph({
   },
   onMoveTooltip: (x, y) => { tooltip.x = x; tooltip.y = y; },
   onHideTooltip: () => { tooltip.show = false; },
+  onNodeClick: (d) => openDetail(d.id),
   edgeWeight,
   violationThreshold,
   violatingOnly,
 });
+
+// ── Detail (repo contributor radial) renderer ────────────────────────────
+const detailRenderer = useRepoDetailGraph({
+  svgRef: detailSvgRef,
+  effectiveTeams,
+  getNodeColor: store.getNodeColor,
+  anonymize,
+  onShowNodeTooltip: (d, x, y) => {
+    Object.assign(tooltip, {
+      show: true, x, y, isLink: false,
+      name: d.id, type: d.type, commits: d.commits,
+      teamName: d.teamName ?? '', repoCount: 0, authorCount: 0,
+      action: '', contributions: [], owningTeamId: null,
+    });
+  },
+  onShowLinkTooltip: (d, x, y) => {
+    Object.assign(tooltip, {
+      show: true, x, y, isLink: true,
+      source: d.authorId, target: typeof d.target === 'object' ? d.target.id : d.target,
+      commits: d.commits,
+    });
+  },
+  onMoveTooltip: (x, y) => { tooltip.x = x; tooltip.y = y; },
+  onHideTooltip: () => { tooltip.show = false; },
+  edgeWeight,
+});
+
+function openDetail(repoId) {
+  detailRepoId.value = repoId;
+  nextTick(() => {
+    const data = store.repoContributorsData(repoId);
+    detailRenderer.draw({ dims, data });
+  });
+}
+
+function closeDetail() {
+  detailRenderer.teardown();
+  detailRepoId.value = null;
+  nextTick(() => redraw());
+}
 
 function redraw() {
   renderer.draw({ dims, data: ownershipGraphData.value });
@@ -251,6 +310,7 @@ onMounted(() => {
     window.removeEventListener('resize', onResize);
     document.removeEventListener('mousedown', handleDocClick);
     renderer.teardown();
+    detailRenderer.teardown();
   });
 });
 </script>
@@ -307,6 +367,13 @@ onMounted(() => {
 }
 .date-bounds-hint  { @apply text-xs text-gray-300 font-mono ml-1; }
 .hint              { @apply text-xs text-gray-400 italic text-center mb-2; }
+.detail-header     { @apply flex items-center gap-3 mb-3; }
+.back-btn {
+  @apply flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border
+         border-gray-200 text-gray-500 bg-white hover:border-brand-blue hover:text-brand-blue
+         transition-all duration-150 cursor-pointer;
+}
+.detail-title      { @apply text-sm text-gray-500; }
 .svg-wrap          { overflow: auto; border-radius: 8px; scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
 .graph-svg         { display: block; }
 .empty-state       { @apply flex items-center justify-center py-16 text-gray-400 text-base; }

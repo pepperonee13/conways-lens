@@ -21,6 +21,7 @@ export function useSwimlaneGraph({
   onShowLinkTooltip,
   onMoveTooltip,
   onHideTooltip,
+  onNodeClick,
   edgeWeight,
   violationThreshold,
   violatingOnly,
@@ -53,7 +54,8 @@ export function useSwimlaneGraph({
     linkEls
       .attr('stroke',       d => edgeStroke(d))
       .attr('stroke-width', d => edgeWidth(d))
-      .attr('opacity',      EDGE.OPACITY);
+      .attr('display',      'none')
+      .attr('opacity',      EDGE.HL_OPACITY);
   }
 
   function updateNodeColors() {
@@ -73,20 +75,23 @@ export function useSwimlaneGraph({
       }
     });
     linkEls
-      .attr('stroke',  l => (l.source.id === d.id || l.target.id === d.id) ? (l.source?.color ?? EDGE.HL_COLOR) : edgeStroke(l))
-      .attr('opacity', l => (l.source.id === d.id || l.target.id === d.id) ? EDGE.HL_OPACITY : EDGE.DIM_OPACITY);
+      .attr('stroke',   l => (l.source.id === d.id || l.target.id === d.id) ? (l.source?.color ?? EDGE.HL_COLOR) : edgeStroke(l))
+      .attr('display',  l => (l.source.id === d.id || l.target.id === d.id) && edgeMeetsThreshold(l) ? null : 'none')
+      .attr('opacity',  EDGE.HL_OPACITY);
   }
 
   function highlightLink(d) {
     if (!nodeEls || !linkEls) return;
     linkEls
       .attr('stroke',  l => l === d ? (l.source?.color ?? EDGE.HL_COLOR) : edgeStroke(l))
-      .attr('opacity', l => l === d ? EDGE.HL_OPACITY : EDGE.DIM_OPACITY);
+      .attr('display', l => l === d ? null : 'none')
+      .attr('opacity', EDGE.HL_OPACITY);
   }
 
   function resetHighlight() {
     if (!linkEls) return;
     updateEdgeStyles();
+    updateEdgeVisibility();
   }
 
   // ── Violation rings ───────────────────────────────────────────────────────
@@ -149,7 +154,7 @@ export function useSwimlaneGraph({
 
   function updateEdgeVisibility() {
     if (!linkEls) return;
-    linkEls.attr('display', d => edgeMeetsThreshold(d) ? null : 'none');
+    linkEls.filter(d => !edgeMeetsThreshold(d)).attr('display', 'none');
   }
 
   function drawOverlays() { drawRings(); updateEdgeVisibility(); }
@@ -373,13 +378,14 @@ export function useSwimlaneGraph({
     nodeEls = root.append('g')
       .selectAll('g').data(nodes).join('g')
       .attr('transform', d => `translate(${d.x},${d.y})`)
-      .style('cursor', 'default')
+      .style('cursor', d => (onNodeClick && d.type === 'repo') ? 'pointer' : 'default')
       .on('mouseenter', (e, d) => {
         highlightNode(d);
         onShowNodeTooltip(d, e.clientX + TOOLTIP_OFFSET.x, e.clientY + TOOLTIP_OFFSET.y);
       })
       .on('mousemove',  e => onMoveTooltip(e.clientX + TOOLTIP_OFFSET.x, e.clientY + TOOLTIP_OFFSET.y))
-      .on('mouseleave', () => { resetHighlight(); onHideTooltip(); });
+      .on('mouseleave', () => { resetHighlight(); onHideTooltip(); })
+      .on('click', (e, d) => { if (onNodeClick && d.type === 'repo') { onHideTooltip(); onNodeClick(d); } });
 
     // Team anchor: pill with name + sublabel
     const teamG = nodeEls.filter(d => d.type === 'team');
