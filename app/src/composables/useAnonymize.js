@@ -38,16 +38,37 @@ export function useAnonymize() {
   const store = useLensStore()
 
   const canonicalMap = computed(() => {
+    const baseFor = (name) => fakeNameFor(name)
+
+    // Two-pass: identify base aliases shared by >1 canonical name. Those names
+    // get a deterministic numeric suffix derived only from their own hash, so
+    // collision resolution is independent of iteration order. Authors whose
+    // base alias is unique keep it as-is.
+    const baseCounts = {}
+    store.allAuthors.forEach((name) => {
+      const b = baseFor(name)
+      baseCounts[b] = (baseCounts[b] ?? 0) + 1
+    })
+
     const map = {}
     const used = new Set()
     store.allAuthors.forEach((name) => {
-      let fake = fakeNameFor(name)
-      let salt = 1
-      while (used.has(fake)) {
-        fake = fakeNameFor(name + ':' + salt++)
+      let fake = baseFor(name)
+      if (baseCounts[fake] > 1) {
+        // Deterministic disambiguator from name only.
+        const disc = hash(name, 0xcafebabe) % 9973
+        fake = `${fake} ${disc}`
       }
-      used.add(fake)
-      map[name] = fake
+      // Final safety net: if a residual collision remains (extremely rare —
+      // requires both base alias and disc-hash to collide), append a bounded
+      // counter to guarantee termination. Order-dependent only for these.
+      let suffix = 1
+      let candidate = fake
+      while (used.has(candidate) && suffix < 1000) {
+        candidate = `${fake}-${suffix++}`
+      }
+      used.add(candidate)
+      map[name] = candidate
     })
     return map
   })
