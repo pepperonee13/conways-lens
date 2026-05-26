@@ -11,7 +11,7 @@
 //   node analysis/analyse-repositories.mjs --concurrency 8 --workdir /tmp/repos
 
 import { spawn } from 'node:child_process';
-import { mkdir, writeFile, access } from 'node:fs/promises';
+import { mkdir, writeFile, access, readdir, rm } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname, resolve, basename } from 'node:path';
@@ -74,7 +74,28 @@ await mkdir(workDir, { recursive: true });
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-function git(args, opts = {}) {
+const COLORS = {
+  reset:  '\x1b[0m',
+  cyan:   '\x1b[36m',
+  gray:   '\x1b[90m',
+  green:  '\x1b[32m',
+  yellow: '\x1b[33m',
+  red:    '\x1b[31m',
+};
+const useColor = process.stdout.isTTY;
+const c = (color, s) => (useColor ? `${COLORS[color]}${s}${COLORS.reset}` : s);
+
+// Per-repo output buffer — flushed as a block when the repo finishes, so
+// parallel runs don't interleave the multi-line log groups.
+function makeLogger() {
+  const lines = [];
+  return {
+    line: (s = '') => lines.push(s),
+    flush: () => { if (lines.length) console.log(lines.join('\n')); },
+  };
+}
+
+function gitRaw(args, opts = {}) {
   return new Promise((resolveP, rejectP) => {
     const proc = spawn('git', args, { cwd: opts.cwd, env: process.env });
     let stdout = '';
@@ -84,9 +105,68 @@ function git(args, opts = {}) {
     proc.on('error', rejectP);
     proc.on('close', code => {
       if (code === 0) resolveP({ stdout, stderr });
-      else rejectP(new Error(`git ${args.join(' ')} failed (${code}): ${stderr.trim()}`));
+      else {
+        const err = new Error(`git ${args.join(' ')} failed (${code}): ${stderr.trim()}`);
+        err.stderr = stderr;
+        err.code   = code;
+        rejectP(err);
+      }
     });
   });
+}
+
+const STALE_LOCK_PATTERNS = [
+  /Unable to create.*\.lock['"]?: File exists/i,
+  /index\.lock.*exists/i,
+  /Another git process seems to be running/i,
+];
+
+async function clearStaleLocks(repoDir) {
+  const gitDir = join(repoDir, '.git');
+  const cleared = [];
+  if (!existsSync(gitDir)) return cleared;
+  try {
+    const entries = await readdir(gitDir);
+    for (const name of entries) {
+      if (name.endsWith('.lock')) {
+        await rm(join(gitDir, name), { force: true });
+        cleared.push(name);
+      }
+    }
+  } catch { /* ignore */ }
+  return cleared;
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// Run a git command with retries. On stale-lock errors, clear *.lock files
+// in .git/ between attempts. Uses exponential backoff (500ms, 1s, 2s, …).
+async function git(args, opts = {}) {
+  const { cwd, log, attempts = 4, label } = opts;
+  let lastErr;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await gitRaw(args, { cwd });
+    } catch (err) {
+      lastErr = err;
+      const isLock = STALE_LOCK_PATTERNS.some(re => re.test(err.stderr ?? ''));
+      const willRetry = attempt < attempts;
+      if (log) {
+        const what = label ?? `git ${args[0]}`;
+        const reason = isLock ? 'stale lock file' : `exit ${err.code}`;
+        log.line(c('yellow', `    ${what} failed (${reason}) — attempt ${attempt}/${attempts}${willRetry ? ', retrying...' : ''}`));
+      }
+      if (!willRetry) break;
+      if (isLock && cwd) {
+        const cleared = await clearStaleLocks(cwd);
+        if (cleared.length && log) {
+          log.line(c('gray',   `    Removed stale lock(s): ${cleared.join(', ')}`));
+        }
+      }
+      await sleep(500 * 2 ** (attempt - 1));
+    }
+  }
+  throw lastErr;
 }
 
 const STATUS_MAP = { M: 'edit', A: 'add', D: 'delete', R: 'rename', C: 'copy' };
@@ -104,21 +184,28 @@ async function processRepo(repo) {
   const repoUrl  = repo.url;
   const branch   = repo.branch || 'main';
   const local    = join(workDir, repoName);
-  const tag      = `[${repoName}]`;
   const rows     = [];
+  const log      = makeLogger();
+
+  log.line('');
+  log.line(c('cyan', `=== ${repoName} ===`));
+  log.line(`    URL   : ${repoUrl}`);
+  log.line(`    Branch: ${branch}`);
+  log.line(`    Local : ${local}`);
 
   try {
     const hasGit = await access(join(local, '.git')).then(() => true, () => false);
     if (hasGit) {
-      console.log(`${tag} updating...`);
-      await git(['fetch', 'origin', branch, '--quiet'], { cwd: local });
-      await git(['checkout', branch, '--quiet'], { cwd: local });
-      await git(['reset', '--hard', `origin/${branch}`, '--quiet'], { cwd: local });
+      log.line(c('gray', '    Pulling latest changes...'));
+      await git(['fetch', 'origin', branch, '--quiet'], { cwd: local, log, label: 'git fetch' });
+      await git(['checkout', branch, '--quiet'],         { cwd: local, log, label: 'git checkout' });
+      await git(['reset', '--hard', `origin/${branch}`, '--quiet'], { cwd: local, log, label: 'git reset' });
     } else {
-      console.log(`${tag} cloning...`);
-      await git(['clone', '--branch', branch, '--single-branch', repoUrl, local]);
+      log.line(c('gray', '    Cloning...'));
+      await git(['clone', '--branch', branch, '--single-branch', repoUrl, local], { log, label: 'git clone' });
     }
 
+    log.line(c('gray', `    Extracting history since ${since}...`));
     const { stdout } = await git([
       'log', branch,
       `--since=${since}`,
@@ -126,7 +213,7 @@ async function processRepo(repo) {
       '--date=iso',
       '--pretty=format:COMMIT|%H|%an|%ad|%s',
       '--name-status',
-    ], { cwd: local });
+    ], { cwd: local, log, label: 'git log' });
 
     let cur = null;
     for (const rawLine of stdout.split('\n')) {
@@ -160,10 +247,12 @@ async function processRepo(repo) {
       }
     }
 
-    console.log(`${tag} done — ${rows.length} file-commit rows.`);
+    log.line(c('green', `    Done — ${rows.length} file-commit rows extracted.`));
+    log.flush();
     return rows;
   } catch (err) {
-    console.warn(`${tag} skipped: ${err.message}`);
+    log.line(c('red', `    Skipping ${repoName} — ${err.message}`));
+    log.flush();
     return [];
   }
 }
