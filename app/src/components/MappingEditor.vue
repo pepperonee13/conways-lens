@@ -39,7 +39,14 @@
           <button class="add-team-btn" @click="addTeam()">+ Add Team</button>
 
           <div class="teams-list">
-            <div v-for="(team, idx) in teams" :key="team.id" class="team-card">
+            <div
+              v-for="(team, idx) in teams"
+              :key="team.id"
+              :class="['team-card', { 'team-card--drop-target': dropTargetTeamId === team.id }]"
+              @dragover.prevent="onTeamDragOver(team.id)"
+              @dragleave="onTeamDragLeave(team.id, $event)"
+              @drop.prevent="onTeamDrop(team)"
+            >
               <div class="team-card-header">
                 <button class="team-toggle" @click="toggleTeam(team.id)" :title="isExpanded(team.id) ? 'Collapse' : 'Expand'">
                   <span class="chevron" :class="{ rotated: isExpanded(team.id) }">›</span>
@@ -109,8 +116,15 @@
           <div v-if="teams.length && (unassignedAuthors.length || unassignedRepos.length)" class="unassigned-section">
             <div class="unassigned-title">⚠ Unassigned</div>
             <div v-if="unassignedAuthors.length" class="unassigned-group">
-              <span class="unassigned-label">Authors not in any team:</span>
-              <span v-for="a in unassignedAuthors" :key="a" class="unassigned-chip">{{ anonymize(a) }}</span>
+              <span class="unassigned-label">Authors not in any team (drag onto a team to assign):</span>
+              <span
+                v-for="a in unassignedAuthors"
+                :key="a"
+                :class="['unassigned-chip', 'unassigned-chip--draggable', { 'unassigned-chip--dragging': unassignedDragAuthor === a }]"
+                draggable="true"
+                @dragstart="onUnassignedDragStart(a, $event)"
+                @dragend="onUnassignedDragEnd"
+              >{{ anonymize(a) }}</span>
             </div>
             <div v-if="unassignedRepos.length" class="unassigned-group">
               <span class="unassigned-label">Repositories not in any team:</span>
@@ -260,6 +274,35 @@ const unassignedRepos = computed(() => {
   const assigned = new Set(teams.value.flatMap(t => t.repos));
   return allRepos.value.filter(r => !assigned.has(r));
 });
+
+// ── Drag unassigned author → team ──
+const unassignedDragAuthor = ref(null);
+const dropTargetTeamId = ref(null);
+
+function onUnassignedDragStart(author, e) {
+  unassignedDragAuthor.value = author;
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', author);
+  }
+}
+function onUnassignedDragEnd() {
+  unassignedDragAuthor.value = null;
+  dropTargetTeamId.value = null;
+}
+function onTeamDragOver(teamId) {
+  if (unassignedDragAuthor.value) dropTargetTeamId.value = teamId;
+}
+function onTeamDragLeave(teamId, e) {
+  if (e.currentTarget.contains(e.relatedTarget)) return;
+  if (dropTargetTeamId.value === teamId) dropTargetTeamId.value = null;
+}
+function onTeamDrop(team) {
+  const author = unassignedDragAuthor.value;
+  if (author) addTo(team, 'authors', author);
+  unassignedDragAuthor.value = null;
+  dropTargetTeamId.value = null;
+}
 
 // ── Author Aliases ──
 const dragSource = ref(null);
@@ -427,6 +470,14 @@ async function handleImport(e) {
 .unassigned-group { @apply mb-2 flex flex-wrap items-center gap-2; }
 .unassigned-label { @apply text-xs text-amber-600 font-medium; }
 .unassigned-chip { @apply px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-800 border border-amber-300; }
+.unassigned-chip--draggable { @apply cursor-grab select-none; }
+.unassigned-chip--draggable:active { @apply cursor-grabbing; }
+.unassigned-chip--dragging { @apply opacity-40; }
+.team-card { @apply transition-all duration-150; }
+.team-card--drop-target {
+  @apply ring-2 ring-brand-orange ring-offset-1 bg-orange-50 border-brand-orange;
+}
+.team-card--drop-target * { pointer-events: none; }
 
 /* ── Team body transition ── */
 .team-body-enter-active { transition: max-height 0.25s ease, opacity 0.2s ease; }
