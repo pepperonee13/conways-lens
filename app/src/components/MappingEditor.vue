@@ -581,14 +581,19 @@ async function handleImport(e) {
 }
 .no-teams { @apply text-center text-gray-500 py-10 space-y-2; }
 .hint-text { @apply text-xs text-gray-400; }
-.unassigned-section { @apply mt-6 p-4 bg-amber-50 border border-amber-200 rounded-xl; }
+.unassigned-section { @apply mt-6 mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl; }
 .unassigned-title { @apply text-sm font-bold text-amber-700 mb-1; }
 .unassigned-hint { @apply text-xs text-amber-600/80 italic mb-3 flex items-center gap-1; }
 .unassigned-hint::before { content: '✋'; font-style: normal; }
 .unassigned-group { @apply mb-3; }
 .unassigned-label { @apply block text-xs text-amber-600 font-medium mb-1.5; }
 .unassigned-chips { @apply flex flex-wrap gap-1.5; }
-.unassigned-chip { @apply px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-800 border border-amber-300; }
+.unassigned-chip {
+  @apply px-3 py-1 rounded-full text-xs font-semibold;
+  background-color: rgba(156, 163, 175, 0.18);
+  color: #4B5563;
+  border: 1px dashed #9CA3AF;
+}
 .unassigned-chip--draggable { @apply cursor-grab select-none; }
 .unassigned-chip--draggable:active { @apply cursor-grabbing; }
 .unassigned-chip--dragging { @apply opacity-40; }
