@@ -1,5 +1,6 @@
 import { computed } from 'vue'
 import { useLensStore } from '../stores/useLensStore.js'
+import { ANONYMIZE_AUTHORS } from '../config.js'
 
 const FIRST = [
   'Alice', 'Bob', 'Carol', 'David', 'Emma', 'Frank', 'Grace', 'Henry',
@@ -17,21 +18,58 @@ const LAST = [
   'Hayes', 'Ito', 'Jensen', 'Khan', 'Lee', 'Moore', 'Nash', 'Ortiz',
 ]
 
-// 40 × 40 = 1600 unique combinations
-function fakeNameForIndex(i) {
-  return `${FIRST[i % FIRST.length]} ${LAST[Math.floor(i / FIRST.length) % LAST.length]}`
+function hash(str, seed) {
+  let h = seed
+  for (let i = 0; i < str.length; i++) {
+    h = Math.imul(h ^ str.charCodeAt(i), 0x01000193) >>> 0
+  }
+  return h
+}
+
+function fakeNameFor(canonical) {
+  const first = FIRST[hash(canonical, 0x811c9dc5) % FIRST.length]
+  const last = LAST[hash(canonical, 0xdeadbeef) % LAST.length]
+  return `${first} ${last}`
 }
 
 export function useAnonymize() {
-  const enabled = import.meta.env.VITE_ANONYMIZE_AUTHORS === 'true'
-  if (!enabled) return { anonymize: n => n, enabled: false }
+  if (!ANONYMIZE_AUTHORS) return { anonymize: n => n, enabled: false }
 
   const store = useLensStore()
 
-  // Stable map: canonical name → fake name (sorted alphabetically so index is deterministic)
   const canonicalMap = computed(() => {
+    const baseFor = (name) => fakeNameFor(name)
+
+    // Two-pass: identify base aliases shared by >1 canonical name. Those names
+    // get a deterministic numeric suffix derived only from their own hash, so
+    // collision resolution is independent of iteration order. Authors whose
+    // base alias is unique keep it as-is.
+    const baseCounts = {}
+    store.allAuthors.forEach((name) => {
+      const b = baseFor(name)
+      baseCounts[b] = (baseCounts[b] ?? 0) + 1
+    })
+
     const map = {}
-    store.allAuthors.forEach((name, i) => { map[name] = fakeNameForIndex(i) })
+    const used = new Set()
+    store.allAuthors.forEach((name) => {
+      let fake = baseFor(name)
+      if (baseCounts[fake] > 1) {
+        // Deterministic disambiguator from name only.
+        const disc = hash(name, 0xcafebabe) % 9973
+        fake = `${fake} ${disc}`
+      }
+      // Final safety net: if a residual collision remains (extremely rare —
+      // requires both base alias and disc-hash to collide), append a bounded
+      // counter to guarantee termination. Order-dependent only for these.
+      let suffix = 1
+      let candidate = fake
+      while (used.has(candidate) && suffix < 1000) {
+        candidate = `${fake}-${suffix++}`
+      }
+      used.add(candidate)
+      map[name] = candidate
+    })
     return map
   })
 
@@ -41,5 +79,5 @@ export function useAnonymize() {
     return canonicalMap.value[canonical] ?? canonicalMap.value[name] ?? name
   }
 
-  return { anonymize, enabled }
+  return { anonymize, enabled: true }
 }

@@ -7,7 +7,18 @@
           <span class="legend"><span class="legend-team"></span>Team lane</span>
           <span class="legend"><span class="legend-repo"></span>Bounded Context</span>
           <span class="legend"><span class="legend-ring"></span>Violation ring</span>
-          &nbsp;·&nbsp; Lanes sorted by violation severity &nbsp;·&nbsp; Edge crossing a lane = cross-team contribution
+          &nbsp;·&nbsp;
+          <span class="info-wrap">
+            Lanes sorted by violation severity
+            <span class="info-icon" tabindex="0" aria-label="What is severity?">i</span>
+            <span class="info-tooltip" role="tooltip">
+              <strong>Severity</strong> = total cross-team commits touching a team, in both directions:
+              <span class="info-line"><em>Inbound</em> — commits made by other teams into repos this team owns.</span>
+              <span class="info-line"><em>Outbound</em> — commits made by this team into repos other teams own.</span>
+              Lanes are ordered by inbound + outbound, descending. The threshold setting does not affect ordering.
+            </span>
+          </span>
+          &nbsp;·&nbsp; Edge crossing a lane = cross-team contribution
         </p>
         <p v-if="!isFullscreen && detailRepoId" class="graph-desc">
           <span class="legend"><span class="legend-detail-repo"></span>Bounded Context</span>
@@ -52,6 +63,15 @@
             </template>
 
             <div class="viz-row">
+              <span class="viz-row-label">Display authors</span>
+              <button :class="['viz-toggle-btn', { active: displayAuthors }]" @click="displayAuthors = !displayAuthors">
+                {{ displayAuthors ? 'On' : 'Off' }}
+              </button>
+            </div>
+            <p class="viz-desc">Show contributing author list in repo tooltips</p>
+            <div class="viz-divider"></div>
+
+            <div class="viz-row">
               <button class="viz-reset-btn" @click="resetVizDefaults">Reset to defaults</button>
             </div>
           </div>
@@ -88,6 +108,12 @@
     </div>
 
     <template v-else>
+      <div v-if="!detailRepoId && violationSummary.violating > 0" class="violation-banner">
+        <strong>{{ violationSummary.violating }}</strong> out of
+        <strong>{{ violationSummary.total }}</strong>
+        {{ violationSummary.total === 1 ? 'repository violates' : 'repositories violate' }}
+        the <strong>{{ violationThreshold }}%</strong> threshold
+      </div>
       <template v-if="detailRepoId">
         <div class="detail-header">
           <button class="back-btn" @click="closeDetail">← Back to overview</button>
@@ -126,6 +152,7 @@
           </ul>
           <ul v-if="tooltip.authorContributions?.length" class="tt-contribs tt-contribs--authors">
             <li v-for="a in tooltip.authorContributions" :key="a.authorId">
+              <span class="tt-contrib-dot" :style="{ background: a.teamColor || '#9CA3AF' }"></span>
               <span class="tt-contrib-name">{{ anonymize(a.authorId) }}</span>
               <span class="tt-contrib-pct">{{ a.pct }}%</span>
             </li>
@@ -145,6 +172,7 @@ import { useLensStore } from '../stores/useLensStore';
 import { useSwimlaneGraph } from '../composables/graphs/useSwimlaneGraph.js';
 import { useRepoDetailGraph } from '../composables/graphs/useRepoDetailGraph.js';
 import { useAnonymize } from '../composables/useAnonymize.js';
+import { DEFAULT_VIOLATION_THRESHOLD, DEFAULT_DISPLAY_AUTHORS } from '../config.js';
 
 const store = useLensStore();
 const {
@@ -163,13 +191,30 @@ const vizDropRef    = ref(null);
 const dims          = reactive({ w: 900, h: 600 });
 const detailRepoId  = ref(null);
 
-const VIZ_DEFAULTS = { edgeWeight: true, violationThreshold: 10, violatingOnly: true };
+const VIZ_DEFAULTS = {
+  edgeWeight: true,
+  violationThreshold: DEFAULT_VIOLATION_THRESHOLD,
+  violatingOnly: true,
+  displayAuthors: DEFAULT_DISPLAY_AUTHORS,
+};
 
 const vizOpen            = ref(false);
 const isFullscreen       = ref(false);
 const edgeWeight         = ref(VIZ_DEFAULTS.edgeWeight);
 const violationThreshold = ref(VIZ_DEFAULTS.violationThreshold);
 const violatingOnly      = ref(VIZ_DEFAULTS.violatingOnly);
+const displayAuthors     = ref(VIZ_DEFAULTS.displayAuthors);
+
+const violationSummary = computed(() => {
+  const threshold = violationThreshold.value;
+  const repos = ownershipGraphData.value.nodes.filter(n => n.type === 'repo');
+  const violating = repos.filter(r =>
+    r.commits && r.contributions?.some(c =>
+      c.teamId !== r.owningTeamId && (c.commits / r.commits) * 100 >= threshold
+    )
+  ).length;
+  return { violating, total: repos.length };
+});
 
 function toggleFullscreen() {
   isFullscreen.value = !isFullscreen.value;
@@ -180,6 +225,7 @@ function resetVizDefaults() {
   edgeWeight.value         = VIZ_DEFAULTS.edgeWeight;
   violationThreshold.value = VIZ_DEFAULTS.violationThreshold;
   violatingOnly.value      = VIZ_DEFAULTS.violatingOnly;
+  displayAuthors.value     = VIZ_DEFAULTS.displayAuthors;
 }
 
 const tooltip = reactive({
@@ -252,6 +298,7 @@ const renderer = useSwimlaneGraph({
       action: d.type === 'repo' ? 'Click to see author contributions' : '',
       contributions: d.contributions ?? [],
       owningTeamId: d.owningTeamId ?? null,
+      authorContributions: displayAuthors.value && (d.type === 'repo' || d.type === 'team') ? d.authorContributions ?? null : null,
     });
   },
   onShowLinkTooltip: (d, x, y) => {
@@ -436,6 +483,40 @@ onMounted(() => {
 }
 .date-bounds-hint  { @apply text-xs text-gray-300 font-mono ml-1; }
 .hint              { @apply text-xs text-gray-400 italic text-center mb-2; }
+.violation-banner {
+  @apply text-sm text-center mb-2 px-4 py-2 rounded-lg;
+  background: rgba(240, 130, 35, 0.10);
+  border: 1px solid rgba(240, 130, 35, 0.35);
+  color: #B85A14;
+}
+.violation-banner strong { color: #F08223; font-weight: 700; }
+
+.info-wrap { position: relative; display: inline-flex; align-items: center; gap: 4px; }
+.info-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: #225EA9; color: #fff;
+  font-size: 9px; font-weight: 700; font-family: 'JetBrains Mono', monospace;
+  font-style: normal; line-height: 1;
+  cursor: help; user-select: none;
+}
+.info-icon:focus { outline: 2px solid #088F9B; outline-offset: 1px; }
+.info-tooltip {
+  position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+  width: 280px; padding: 10px 12px;
+  background: #fff; color: #374151;
+  border: 1.5px solid #225EA9; border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  font-size: 11px; line-height: 1.5; font-style: normal; text-align: left;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.12s;
+  z-index: 300;
+}
+.info-tooltip strong { color: #225EA9; }
+.info-tooltip em { color: #088F9B; font-style: normal; font-weight: 600; }
+.info-line { display: block; margin-top: 4px; }
+.info-icon:hover + .info-tooltip,
+.info-icon:focus + .info-tooltip { opacity: 1; }
 .detail-header     { @apply flex items-center gap-3 mb-3; }
 .back-btn {
   @apply flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border
@@ -474,7 +555,7 @@ onMounted(() => {
 .tt-contrib-pct  { font-family: 'JetBrains Mono', monospace; color: #225EA9; font-weight: 700; }
 .tt-contrib-count{ font-family: 'JetBrains Mono', monospace; color: #94a3b8; font-size: 10px; }
 .tt-contrib-owner .tt-contrib-name { color: #088F9B; }
-.tt-contribs--authors li { grid-template-columns: 1fr auto; }
+.tt-contribs--authors li { grid-template-columns: 10px 1fr auto; }
 .tt-contribs--authors .tt-contrib-pct { text-align: right; }
 .tt-contrib-owner .tt-contrib-name::after { content: ' · owner'; font-weight: 500; font-size: 9px; color: #94a3b8; }
 
