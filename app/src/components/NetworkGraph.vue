@@ -1,7 +1,7 @@
 <template>
   <div :class="['graph-wrap', { 'graph-wrap--fullscreen': isFullscreen }]" ref="containerRef">
     <div class="graph-header">
-      <h3 v-if="!isFullscreen" class="graph-title">Bounded context violation graph</h3>
+      <h3 v-if="!isFullscreen" class="graph-title">Team ownership lens</h3>
       <div class="graph-desc-row">
         <p v-if="!isFullscreen && !detailRepoId" class="graph-desc">
           <span class="legend"><span class="legend-team"></span>Team lane</span>
