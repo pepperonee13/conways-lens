@@ -50,20 +50,23 @@ Open http://localhost:5174 in your browser.
 
 ### 4. Define team mappings
 
-Click **Mapping** (bottom right) to open the mapping panel:
+Click **Mapping** (bottom right) to open the mapping panel. It has three tabs:
 
-- Add teams and give each a name and colour.
-- Assign **authors** (discovered from git log) and **repositories** to each team.
-- Changes are saved automatically in your browser's localStorage.
-- Use **Export** to save your mappings as JSON and **Import** to restore them.
+- **Teams** — Add teams (name + colour) and assign authors and repositories. Drag any badge from the *Unassigned* section onto a team card to assign it, or use the inline "+" pills inside a team.
+- **Author Aliases** — Merge multiple git identities of the same person by dragging one author pill onto another. The drop target becomes the canonical name. Pill colours reflect the assigned team.
+- **Ignored** — Click an author pill to ignore them (removed from the graph entirely); click again to restore.
+
+Mappings persist automatically in your browser's localStorage. Use **Export** to save them as JSON and **Import** to restore.
 
 ### 5. Explore the graph
 
-The network graph is a force-directed bipartite layout — authors on the left, repositories on the right. Node size scales with commit volume. Hover any node or edge to highlight its connections.
+The main view is a force-directed graph that groups contributors and repositories by team. Node size scales with commit volume; hover any node or edge to highlight its connections.
 
 When teams are configured, each team's nodes are enclosed in a colour-coded hull so boundaries are immediately visible, and nodes cluster toward their team's centre of gravity.
 
 Toggle **Cross-team only** (in the graph header) to filter the graph down to just the edges where the author's team differs from the repository's team — the exact signal Conway's Law predicts.
+
+**Drill down**: click a repository to open a radial detail view of all its contributors, grouped by team. Edge percentages (each author's share of the repo's commits) are shown directly on the edges.
 
 ## Output
 
