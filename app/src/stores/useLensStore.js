@@ -686,6 +686,7 @@ export const useLensStore = defineStore('lens', () => {
     // segment → author → Set<sha>, and whether segment has deeper paths
     const segmentAuthorShas = {};
     const segmentHasChildren = {};
+    const segmentLastDate = {};
 
     for (const row of timelineData.value) {
       if (!row.Author || !row.Product || !row.ChangesetId) continue;
@@ -713,6 +714,9 @@ export const useLensStore = defineStore('lens', () => {
       if (!segment) continue;
 
       ((segmentAuthorShas[segment] ??= {})[author] ??= new Set()).add(row.ChangesetId);
+      if (row.Date && (!segmentLastDate[segment] || row.Date > segmentLastDate[segment])) {
+        segmentLastDate[segment] = row.Date;
+      }
     }
 
     const folderNodes = [];
@@ -729,7 +733,7 @@ export const useLensStore = defineStore('lens', () => {
         shas.forEach(s => authorTotalShas[author].add(s));
       }
       const fullPath = folderPrefix ? `${folderPrefix}/${segment}` : segment;
-      folderNodes.push({ id: segment, type: 'folder', commits: folderShas.size, hasChildren: segmentHasChildren[segment] ?? false, fullPath });
+      folderNodes.push({ id: segment, type: 'folder', commits: folderShas.size, hasChildren: segmentHasChildren[segment] ?? false, fullPath, lastCommit: segmentLastDate[segment] ?? null });
     }
 
     const owningTeamId = allTeams.find(t => (t.repos ?? []).includes(repoId))?.id ?? null;

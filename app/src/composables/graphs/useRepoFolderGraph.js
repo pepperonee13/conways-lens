@@ -295,21 +295,37 @@ export function useRepoFolderGraph({
         onFolderClick?.(d.id);
       });
 
+    const FILE_H = 48; // taller rect for leaf (file-level) nodes to fit stats
+
     folderEls.append('rect')
-      .attr('x', -FOLDER_HALF_W).attr('y', -FOLDER_H / 2)
-      .attr('width', FOLDER_HALF_W * 2).attr('height', FOLDER_H)
+      .attr('x', -FOLDER_HALF_W)
+      .attr('y', d => -(d.hasChildren ? FOLDER_H : FILE_H) / 2)
+      .attr('width', FOLDER_HALF_W * 2)
+      .attr('height', d => d.hasChildren ? FOLDER_H : FILE_H)
       .attr('rx', FOLDER_RX)
       .attr('fill', repoColor).attr('fill-opacity', 0.45)
       .attr('stroke', NODE.STROKE).attr('stroke-width', NODE.STROKE_WIDTH);
 
-    // Name inside the rect; shift left to leave room for › when drillable
+    // Name inside the rect; shift left for › on drillable, shift up for file nodes to make room for stats
     folderEls.append('text')
       .attr('text-anchor', 'middle')
       .attr('x', d => d.hasChildren ? -10 : 0)
+      .attr('y', d => d.hasChildren ? 0 : -9)
       .attr('dy', '0.35em')
       .attr('fill', NODE.STROKE).attr('font-size', '11px').attr('font-weight', '600')
       .attr('pointer-events', 'none')
       .text(d => d.id.length > 20 ? d.id.slice(0, 18) + '…' : d.id);
+
+    // Stats line for leaf (file-level) nodes: commit count + last commit date
+    folderEls.filter(d => !d.hasChildren).append('text')
+      .attr('text-anchor', 'middle').attr('x', 0).attr('y', 9).attr('dy', '0.35em')
+      .attr('fill', 'rgba(255,255,255,0.72)').attr('font-size', '9px')
+      .attr('pointer-events', 'none')
+      .text(d => {
+        const parts = [`${d.commits} commit${d.commits === 1 ? '' : 's'}`];
+        if (d.lastCommit) parts.push(d.lastCommit);
+        return parts.join(' · ');
+      });
 
     // › at right edge for drillable folders
     folderEls.filter(d => d.hasChildren).append('text')
