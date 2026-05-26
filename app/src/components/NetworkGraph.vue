@@ -163,7 +163,12 @@ const vizDropRef    = ref(null);
 const dims          = reactive({ w: 900, h: 600 });
 const detailRepoId  = ref(null);
 
-const VIZ_DEFAULTS = { edgeWeight: true, violationThreshold: 10, violatingOnly: true };
+const DEFAULT_VIOLATION_THRESHOLD = (() => {
+  const raw = Number(import.meta.env.VITE_MIN_VIOLATION_PCT);
+  return Number.isFinite(raw) && raw >= 0 && raw <= 100 ? raw : 10;
+})();
+
+const VIZ_DEFAULTS = { edgeWeight: true, violationThreshold: DEFAULT_VIOLATION_THRESHOLD, violatingOnly: true };
 
 const vizOpen            = ref(false);
 const isFullscreen       = ref(false);
