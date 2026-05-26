@@ -341,7 +341,13 @@ export function useRepoDetailGraph({
       .on('mousemove',  e => onMoveTooltip(e.clientX + TOOLTIP_OFFSET.x, e.clientY + TOOLTIP_OFFSET.y))
       .on('mouseleave', () => { resetHighlight(); onHideTooltip(); });
 
-    // Edge pct badge (always visible)
+    // Edge pct badge (always visible) — radius proportional to percentage value,
+    // but always large enough so the label has PCT_TEXT_PAD px clearance from the edge.
+    const PCT_R_MIN    = 10;
+    const PCT_R_MAX    = 18;
+    const PCT_TEXT_PAD = 5;
+    const pctBadgeScale = d3.scaleSqrt().domain([0, 100]).range([PCT_R_MIN, PCT_R_MAX]).clamp(true);
+
     linkLabelEls = root.append('g')
       .selectAll('g').data(links).join('g')
       .attr('transform', d => {
@@ -352,16 +358,21 @@ export function useRepoDetailGraph({
       })
       .attr('pointer-events', 'none')
       .each(function(d) {
-        const g     = d3.select(this);
-        const label = `${d.pct}%`;
-        const r     = Math.max(9, label.length * 4.5);
-        const fs    = label.length <= 4 ? 10 : 8;
-        g.append('circle').attr('r', r).attr('fill', '#fff')
-          .attr('stroke', d.authorColor ?? EDGE.HL_COLOR).attr('stroke-width', 2);
-        g.append('text').attr('text-anchor', 'middle').attr('dy', '0.35em')
+        const g      = d3.select(this);
+        const label  = `${d.pct}%`;
+        const pctR   = Math.max(PCT_R_MIN, pctBadgeScale(parseFloat(d.pct) || 0));
+        const fs     = pctR >= 14 ? 10 : 8;
+        // Append text first so getBBox() gives the actual rendered dimensions.
+        const textEl = g.append('text')
+          .attr('text-anchor', 'middle').attr('dy', '0.35em')
           .attr('fill', d.authorColor ?? EDGE.HL_COLOR)
           .attr('font-size', `${fs}px`).attr('font-weight', '700')
           .text(label);
+        const bbox = textEl.node().getBBox();
+        const r = Math.max(pctR, Math.ceil(Math.max(bbox.width, bbox.height) / 2) + PCT_TEXT_PAD);
+        // Insert circle behind the text.
+        g.insert('circle', 'text').attr('r', r).attr('fill', '#fff')
+          .attr('stroke', d.authorColor ?? EDGE.HL_COLOR).attr('stroke-width', 2);
       });
 
     updateEdgeStyles();

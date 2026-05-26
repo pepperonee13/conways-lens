@@ -134,6 +134,7 @@
 
     <teleport to="body">
       <div v-if="tooltip.show" class="graph-tooltip"
+           :class="{ 'graph-tooltip--anchor-right': tooltip.anchorRight }"
            :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }">
         <template v-if="tooltip.isLink">
           <div class="tt-name">{{ displayNodeName(tooltip.source) }} → {{ displayNodeName(tooltip.target) }}</div>
@@ -229,7 +230,7 @@ function resetVizDefaults() {
 }
 
 const tooltip = reactive({
-  show: false, x: 0, y: 0,
+  show: false, x: 0, y: 0, anchorRight: false,
   isLink: false,
   name: '', type: '', commits: 0, pct: null,
   teamName: '', repoCount: 0, authorCount: 0,
@@ -311,6 +312,7 @@ const renderer = useSwimlaneGraph({
   onShowNodeTooltip: (d, x, y) => {
     Object.assign(tooltip, {
       show: true, x, y, isLink: false,
+      anchorRight: d.type === 'team',
       name: d.id, type: d.type, commits: d.commits,
       teamName: d.name ?? '', repoCount: d.repoCount ?? 0, authorCount: d.authorCount ?? 0,
       action: d.type === 'repo' ? 'Click to see author contributions' : '',
@@ -321,12 +323,12 @@ const renderer = useSwimlaneGraph({
   },
   onShowLinkTooltip: (d, x, y) => {
     Object.assign(tooltip, {
-      show: true, x, y, isLink: true,
+      show: true, x, y, isLink: true, anchorRight: false,
       source: d.source.id, target: d.target.id, commits: d.commits,
     });
   },
   onMoveTooltip: (x, y) => { tooltip.x = x; tooltip.y = y; },
-  onHideTooltip: () => { tooltip.show = false; },
+  onHideTooltip: () => { tooltip.show = false; tooltip.anchorRight = false; },
   onNodeClick: (d) => openDetail(d.id),
   edgeWeight,
   violationThreshold,
@@ -548,11 +550,18 @@ onMounted(() => {
 .graph-tooltip {
   @apply fixed pointer-events-none bg-white rounded-xl shadow-2xl border-2 px-4 py-2.5 text-sm;
   border-color: #225EA9; z-index: 9999; min-width: 160px;
-  animation: fadeIn 0.12s ease-out;
+  animation: fadeIn 0.12s ease-out forwards;
+}
+.graph-tooltip--anchor-right {
+  animation: fadeInRight 0.12s ease-out forwards;
 }
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(-4px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeInRight {
+  from { opacity: 0; transform: translateX(-100%) translateY(-4px); }
+  to   { opacity: 1; transform: translateX(-100%) translateY(0); }
 }
 .tt-name   { @apply font-bold text-brand-gray text-base; }
 .tt-detail { @apply text-gray-500 text-xs mt-0.5; }

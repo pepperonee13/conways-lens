@@ -2,6 +2,19 @@ import * as d3 from 'd3';
 import { EDGE, NODE, ARROW, TOOLTIP_OFFSET, VIOLATION_ARC } from './graphConstants.js';
 import { calcEdgeWidth } from './graphUtils.js';
 
+// Canvas-based text measurer for accurate truncation of SVG labels.
+const _canvas = typeof document !== 'undefined' ? document.createElement('canvas') : null;
+const _ctx    = _canvas?.getContext('2d');
+
+function truncateLabel(text, maxPx, font = '600 10px Inter, sans-serif') {
+  if (!_ctx) return text;
+  _ctx.font = font;
+  if (_ctx.measureText(text).width <= maxPx) return text;
+  let t = text;
+  while (t.length > 0 && _ctx.measureText(t + '…').width > maxPx) t = t.slice(0, -1);
+  return t + '…';
+}
+
 /**
  * Conway's Law violation renderer — Swimlane Layout.
  *
@@ -318,8 +331,11 @@ export function useSwimlaneGraph({
   function draw({ dims, data }) {
     if (!svgRef.value || !data.nodes.length) return;
 
+    const INITIAL_X = 180;
     const W = dims.w;
-    const { positions, lanes, totalH } = computeLayout(dims, data);
+    // Layout within the visible viewport width (W minus the initial pan offset) so
+    // rightmost nodes don't render off-canvas after the translate is applied.
+    const { positions, lanes, totalH } = computeLayout({ ...dims, w: W - INITIAL_X }, data);
     const H = Math.max(dims.h, totalH);
 
     // Node sizing: repos by commits, team anchors fixed.
@@ -354,7 +370,10 @@ export function useSwimlaneGraph({
       .append('path').attr('d', 'M0,-5L10,0L0,5').attr('fill', 'context-stroke');
 
     const root = svg.append('g');
-    svg.call(d3.zoom().scaleExtent([0.4, 4]).on('zoom', e => root.attr('transform', e.transform)));
+    const zoom = d3.zoom().scaleExtent([0.4, 4]).on('zoom', e => root.attr('transform', e.transform));
+    svg.call(zoom);
+    // Shift content right so the team-anchor tooltip (which opens left of cursor) stays in viewport.
+    zoom.transform(svg, d3.zoomIdentity.translate(INITIAL_X, 0));
 
     svg.append('text').attr('x', 12).attr('y', 20)
       .attr('fill', '#94a3b8').attr('font-size', '11px').attr('font-weight', '600')
@@ -386,9 +405,19 @@ export function useSwimlaneGraph({
       .style('cursor', d => (onNodeClick && d.type === 'repo') ? 'pointer' : 'default')
       .on('mouseenter', (e, d) => {
         highlightNode(d);
-        onShowNodeTooltip(d, e.clientX + TOOLTIP_OFFSET.x, e.clientY + TOOLTIP_OFFSET.y);
+        if (d.type === 'team') {
+          onShowNodeTooltip(d, e.clientX, e.clientY + 14);
+        } else {
+          onShowNodeTooltip(d, e.clientX + TOOLTIP_OFFSET.x, e.clientY + TOOLTIP_OFFSET.y);
+        }
       })
-      .on('mousemove',  e => onMoveTooltip(e.clientX + TOOLTIP_OFFSET.x, e.clientY + TOOLTIP_OFFSET.y))
+      .on('mousemove', (e, d) => {
+        if (d.type === 'team') {
+          onMoveTooltip(e.clientX, e.clientY + 14);
+        } else {
+          onMoveTooltip(e.clientX + TOOLTIP_OFFSET.x, e.clientY + TOOLTIP_OFFSET.y);
+        }
+      })
       .on('mouseleave', () => { resetHighlight(); onHideTooltip(); })
       .on('click', (e, d) => { if (onNodeClick && d.type === 'repo') { onHideTooltip(); onNodeClick(d); } });
 
@@ -427,7 +456,7 @@ export function useSwimlaneGraph({
       .attr('text-anchor', 'middle').attr('dy', d => d.r + VIOLATION_ARC.OUTER_PAD + 13)
       .attr('fill', NODE.LABEL_COLOR).attr('font-size', NODE.LABEL_SIZE_SM).attr('font-weight', '600')
       .attr('pointer-events', 'none')
-      .text(d => d.id);
+      .text(d => truncateLabel(d.id, REPO_SLOT_W - 20));
 
     drawRings();
   }

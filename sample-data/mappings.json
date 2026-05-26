@@ -6,7 +6,7 @@
       "name": "Backend",
       "color": "#225EA9",
       "authors": ["Alice", "Bob"],
-      "repos": ["backend-api"]
+      "repos": ["backend-api", "authentication-and-authorisation-service"]
     },
     {
       "id": "frontend",
