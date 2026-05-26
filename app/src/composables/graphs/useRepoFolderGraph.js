@@ -162,6 +162,10 @@ export function useRepoFolderGraph({
 
     // ── Build edges ───────────────────────────────────────────────────────────
 
+    // Denominator per edge = that folder's own commit total.
+    // This answers "who owns this folder?" consistently at every drill depth.
+    const folderCommits = Object.fromEntries(folderNodes.map(f => [f.id, f.commits || 1]));
+
     const edges = [];
     for (const g of groups) {
       const collapsed = g.team && !expandedTeams.has(g.team.id);
@@ -175,13 +179,13 @@ export function useRepoFolderGraph({
         }
         for (const [fid, cnt] of Object.entries(teamFolderCommits)) {
           if (!rightPositions[fid]) continue;
-          edges.push({ sourceId: nodeId, targetId: fid, displaySource: g.team.name, authorColor: g.team.color, commits: cnt, pct: toPct(cnt, repoTotal) });
+          edges.push({ sourceId: nodeId, targetId: fid, displaySource: g.team.name, authorColor: g.team.color, commits: cnt, pct: toPct(cnt, folderCommits[fid]) });
         }
       } else {
         for (const a of g.authors) {
           for (const [fid, cnt] of Object.entries(authorFolderMap[a.id] ?? {})) {
             if (!rightPositions[fid]) continue;
-            edges.push({ sourceId: a.id, targetId: fid, displaySource: anonMap.value[a.id] ?? a.id, authorColor: leftPositions[a.id]?.color, commits: cnt, pct: toPct(cnt, repoTotal) });
+            edges.push({ sourceId: a.id, targetId: fid, displaySource: anonMap.value[a.id] ?? a.id, authorColor: leftPositions[a.id]?.color, commits: cnt, pct: toPct(cnt, folderCommits[fid]) });
           }
         }
       }

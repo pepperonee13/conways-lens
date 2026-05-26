@@ -30,7 +30,7 @@
           <span class="legend"><span class="legend-detail-team"></span>Team (click to expand)</span>
           <span class="legend"><span class="legend-detail-author"></span>Author</span>
           <span class="legend"><span class="legend-folder"></span>Folder (› = drill in)</span>
-          &nbsp;·&nbsp; Edge color = team &nbsp;·&nbsp; Hover node to see connections
+          &nbsp;·&nbsp; % = share of that folder's commits &nbsp;·&nbsp; Hover to inspect
         </p>
         <div class="viz-dropdown-wrap" ref="vizDropRef">
           <button :class="['cross-team-btn', { active: edgeWeight }]" @click="vizOpen = !vizOpen">
@@ -165,7 +165,10 @@
            :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }">
         <template v-if="tooltip.isLink">
           <div class="tt-name">{{ displayNodeName(tooltip.source) }} → {{ displayNodeName(tooltip.target) }}</div>
-          <div class="tt-detail">{{ tooltip.pct != null ? tooltip.pct + '%' : tooltip.commits.toLocaleString() + ' commits' }}</div>
+          <div class="tt-detail">
+            {{ tooltip.commits.toLocaleString() }} commits
+            <template v-if="tooltip.pct != null"> · {{ tooltip.pct }}% of <em class="tt-of-folder">{{ displayNodeName(tooltip.target) }}</em></template>
+          </div>
         </template>
         <template v-else>
           <div class="tt-name">{{ tooltipName }}</div>
@@ -700,6 +703,7 @@ onMounted(() => {
 .tt-name   { @apply font-bold text-brand-gray text-base; }
 .tt-path   { @apply text-gray-400 text-xs font-mono mt-0.5; }
 .tt-detail { @apply text-gray-500 text-xs mt-0.5; }
+.tt-of-folder { font-style: normal; color: var(--brand-blue); font-weight: 600; }
 .tt-action { @apply text-brand-blue text-xs mt-1 font-medium; }
 .tt-contribs {
   margin: 6px 0 0; padding: 0; list-style: none;
