@@ -156,7 +156,9 @@
                 'pill-mapped':       isMapped(author),
                 'pill-dragging':     dragSource === author,
                 'pill-drop-target':  dragTarget === author,
+                'pill-teamed':       !isMapped(author) && !!aliasPillColor(author),
               }]"
+              :style="!isMapped(author) && aliasPillColor(author) ? { backgroundColor: aliasPillColor(author) } : null"
               draggable="true"
               @dragstart="dragSource = author"
               @dragend="dragSource = null; dragTarget = null"
@@ -198,6 +200,7 @@
                 v-for="a in ignoredAuthorsSorted"
                 :key="a"
                 class="author-pill author-pill--ignored"
+                :style="teamColor(a) ? { borderColor: teamColor(a), color: teamColor(a) } : null"
                 @click="store.unignoreAuthor(a)"
                 title="Click to unignore"
               >
@@ -214,7 +217,8 @@
             <button
               v-for="a in activeAuthors"
               :key="a"
-              class="author-pill author-pill--active"
+              :class="['author-pill', 'author-pill--active', { 'pill-teamed': !!teamColor(a) }]"
+              :style="teamColor(a) ? { backgroundColor: teamColor(a) } : null"
               @click="store.ignoreAuthor(a)"
               title="Click to ignore"
             >
@@ -247,7 +251,15 @@ import { useLensStore } from '../stores/useLensStore';
 import { useAnonymize } from '../composables/useAnonymize.js';
 
 const store = useLensStore();
-const { teams, authorNormalizations, ignoredAuthors, allRawAuthors, allAuthors, allRepos } = storeToRefs(store);
+const { teams, authorNormalizations, ignoredAuthors, allRawAuthors, allAuthors, allRepos, nodeColors } = storeToRefs(store);
+
+function teamColor(canonicalAuthor) {
+  return nodeColors.value[`author:${canonicalAuthor}`] ?? null;
+}
+function aliasPillColor(rawAuthor) {
+  const canonical = authorNormalizations.value[rawAuthor] ?? rawAuthor;
+  return nodeColors.value[`author:${canonical}`] ?? null;
+}
 const { anonymize } = useAnonymize();
 
 const open = ref(false);
