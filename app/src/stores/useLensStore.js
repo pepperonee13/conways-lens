@@ -551,6 +551,7 @@ export const useLensStore = defineStore('lens', () => {
     const since = activeRange.value.since;
     const until = activeRange.value.until;
     const edgeMap = {}; // author → commits (Set<sha>)
+    const repoShas = new Set();
     for (const row of timelineData.value) {
       if (!row.Author || !row.Product || !row.ChangesetId) continue;
       if (row.Product !== repoId) continue;
@@ -559,13 +560,14 @@ export const useLensStore = defineStore('lens', () => {
       const author = normalizeAuthor(row.Author);
       if (ignoredSet.value.has(author)) continue;
       (edgeMap[author] ??= new Set()).add(row.ChangesetId);
+      repoShas.add(row.ChangesetId);
     }
     const links = Object.entries(edgeMap).map(([author, shas]) => ({
       source: author, target: repoId, commits: shas.size,
     }));
-    const repoCommits = links.reduce((s, l) => s + l.commits, 0);
+    const owningTeamId = teams.value.find(t => (t.repos ?? []).includes(repoId))?.id ?? null;
     const nodes = [
-      { id: repoId, type: 'repo', commits: repoCommits },
+      { id: repoId, type: 'repo', commits: repoShas.size, owningTeamId },
       ...links.map(l => ({ id: l.source, type: 'author', commits: l.commits })),
     ];
     return { nodes, links };

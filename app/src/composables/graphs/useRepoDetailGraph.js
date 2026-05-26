@@ -136,8 +136,11 @@ export function useRepoDetailGraph({
       g.totalCommits = g.authors.reduce((s, a) => s + (a.commits ?? 0), 0);
     }
 
-    const repoOwningTeamId = Object.values(teamGroups)
-      .sort((a, b) => b.totalCommits - a.totalCommits)[0]?.team.id ?? null;
+    // Prefer the configured owning team (from team mappings). Fall back to the
+    // top contributor when the repo isn't assigned to any team.
+    const repoOwningTeamId = repoNode?.owningTeamId
+      ?? Object.values(teamGroups).sort((a, b) => b.totalCommits - a.totalCommits)[0]?.team.id
+      ?? null;
 
     const threshold = violationThreshold?.value ?? 0;
     const groups = Object.values(teamGroups).filter(g =>
