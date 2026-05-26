@@ -168,6 +168,7 @@
                     'pill-dragging':     dragSource === author,
                     'pill-drop-target':  dragTarget === author,
                     'pill-teamed':       !isMapped(author) && !!aliasPillColor(author),
+                    'pill-unassigned':   group.team.id === '__unassigned__',
                   }]"
                   :style="!isMapped(author) && aliasPillColor(author) ? { backgroundColor: aliasPillColor(author) } : null"
                   draggable="true"
@@ -237,7 +238,10 @@
                 <button
                   v-for="a in group.authors"
                   :key="a"
-                  :class="['author-pill', 'author-pill--active', { 'pill-teamed': !!teamColor(a) }]"
+                  :class="['author-pill', 'author-pill--active', {
+                    'pill-teamed':     !!teamColor(a),
+                    'pill-unassigned': group.team.id === '__unassigned__',
+                  }]"
                   :style="teamColor(a) ? { backgroundColor: teamColor(a) } : null"
                   @click="store.ignoreAuthor(a)"
                   title="Click to ignore"
@@ -658,4 +662,22 @@ async function handleImport(e) {
 }
 .author-pill--ignored .pill-name { @apply line-through; }
 .pill-x { @apply text-red-500 font-bold text-[10px]; }
+
+/* Unassigned authors — match the "Outside Contributors" team styling */
+.author-pill.pill-unassigned {
+  background-color: rgba(156, 163, 175, 0.18);
+  color: #4B5563;
+  border: 1px dashed #9CA3AF;
+  /* compensate for the added border so layout matches solid pills */
+  padding-top: calc(0.375rem - 1px);
+  padding-bottom: calc(0.375rem - 1px);
+}
+.author-pill.pill-unassigned:hover {
+  background-color: rgba(156, 163, 175, 0.3);
+}
+.author-pill--active.pill-unassigned:hover {
+  background-color: #ef4444;
+  color: #fff;
+  border-color: #ef4444;
+}
 </style>
