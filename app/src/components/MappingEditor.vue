@@ -118,25 +118,29 @@
             <div class="unassigned-hint">Tip: drag any item below onto a team card to assign it.</div>
             <div v-if="unassignedAuthors.length" class="unassigned-group">
               <span class="unassigned-label">Authors not in any team:</span>
-              <span
-                v-for="a in unassignedAuthors"
-                :key="a"
-                :class="['unassigned-chip', 'unassigned-chip--draggable', { 'unassigned-chip--dragging': unassignedDrag?.kind === 'authors' && unassignedDrag?.value === a }]"
-                draggable="true"
-                @dragstart="onUnassignedDragStart('authors', a, $event)"
-                @dragend="onUnassignedDragEnd"
-              >{{ anonymize(a) }}</span>
+              <div class="unassigned-chips">
+                <span
+                  v-for="a in unassignedAuthors"
+                  :key="a"
+                  :class="['unassigned-chip', 'unassigned-chip--draggable', { 'unassigned-chip--dragging': unassignedDrag?.kind === 'authors' && unassignedDrag?.value === a }]"
+                  draggable="true"
+                  @dragstart="onUnassignedDragStart('authors', a, $event)"
+                  @dragend="onUnassignedDragEnd"
+                >{{ anonymize(a) }}</span>
+              </div>
             </div>
             <div v-if="unassignedRepos.length" class="unassigned-group">
               <span class="unassigned-label">Repositories not in any team:</span>
-              <span
-                v-for="r in unassignedRepos"
-                :key="r"
-                :class="['unassigned-chip', 'unassigned-chip--draggable', { 'unassigned-chip--dragging': unassignedDrag?.kind === 'repos' && unassignedDrag?.value === r }]"
-                draggable="true"
-                @dragstart="onUnassignedDragStart('repos', r, $event)"
-                @dragend="onUnassignedDragEnd"
-              >{{ r }}</span>
+              <div class="unassigned-chips">
+                <span
+                  v-for="r in unassignedRepos"
+                  :key="r"
+                  :class="['unassigned-chip', 'unassigned-chip--draggable', { 'unassigned-chip--dragging': unassignedDrag?.kind === 'repos' && unassignedDrag?.value === r }]"
+                  draggable="true"
+                  @dragstart="onUnassignedDragStart('repos', r, $event)"
+                  @dragend="onUnassignedDragEnd"
+                >{{ r }}</span>
+              </div>
             </div>
           </div>
         </template>
@@ -515,8 +519,9 @@ async function handleImport(e) {
 .unassigned-title { @apply text-sm font-bold text-amber-700 mb-1; }
 .unassigned-hint { @apply text-xs text-amber-600/80 italic mb-3 flex items-center gap-1; }
 .unassigned-hint::before { content: '✋'; font-style: normal; }
-.unassigned-group { @apply mb-2 flex flex-wrap items-center gap-2; }
-.unassigned-label { @apply text-xs text-amber-600 font-medium; }
+.unassigned-group { @apply mb-3; }
+.unassigned-label { @apply block text-xs text-amber-600 font-medium mb-1.5; }
+.unassigned-chips { @apply flex flex-wrap gap-1.5; }
 .unassigned-chip { @apply px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-800 border border-amber-300; }
 .unassigned-chip--draggable { @apply cursor-grab select-none; }
 .unassigned-chip--draggable:active { @apply cursor-grabbing; }
