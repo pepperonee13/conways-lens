@@ -139,7 +139,7 @@
                         :checked="filterAuthorIds.has(author)"
                         @change="store.setFilterAuthor(author, $event.target.checked)"
                       />
-                      <span class="item-name" :title="anonymize(author)">{{ anonymize(author) }}</span>
+                      <span class="item-name" :title="anonMap[author]">{{ anonMap[author] }}</span>
                     </label>
                   </div>
                   <p v-else class="sub-empty">No authors assigned</p>
@@ -175,6 +175,15 @@ const store = useLensStore();
 const { teams, syntheticTeam, filterTeamIds, filterRepoIds, filterAuthorIds } = storeToRefs(store);
 const { anonymize } = useAnonymize();
 
+// Compute display names once so filter, sort, and template all reuse the same map.
+const anonMap = computed(() => {
+  const map = {};
+  for (const team of filterableTeams.value) {
+    for (const a of team.authors) map[a] = anonymize(a);
+  }
+  return map;
+});
+
 const open        = ref(false);
 const searchQuery = ref('');
 
@@ -192,8 +201,8 @@ const filteredTeams = computed(() => {
   return filterableTeams.value.flatMap(team => {
     const teamHit = !q || team.name.toLowerCase().includes(q);
     const repos   = (teamHit ? [...team.repos] : team.repos.filter(r => r.toLowerCase().includes(q))).sort();
-    const authors = (teamHit ? [...team.authors] : team.authors.filter(a => anonymize(a).toLowerCase().includes(q)))
-      .sort((a, b) => anonymize(a).localeCompare(anonymize(b)));
+    const authors = (teamHit ? [...team.authors] : team.authors.filter(a => anonMap.value[a]?.toLowerCase().includes(q)))
+      .sort((a, b) => (anonMap.value[a] ?? a).localeCompare(anonMap.value[b] ?? b));
 
     if (q && !teamHit && repos.length === 0 && authors.length === 0) return [];
 
