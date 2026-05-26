@@ -116,8 +116,12 @@ export function useRepoDetailGraph({
 
     const teams = effectiveTeams.value;
     const authorTeam = {};
+    // First assignment wins — must match the store's authorToTeamId logic so
+    // contribution percentages line up between the swimlane and detail views.
     for (const t of teams) {
-      for (const a of (t.authors ?? [])) authorTeam[a] = t;
+      for (const a of (t.authors ?? [])) {
+        if (!(a in authorTeam)) authorTeam[a] = t;
+      }
     }
 
     const teamGroups = {};
