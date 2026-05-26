@@ -52,6 +52,15 @@
             </template>
 
             <div class="viz-row">
+              <span class="viz-row-label">Display authors</span>
+              <button :class="['viz-toggle-btn', { active: displayAuthors }]" @click="displayAuthors = !displayAuthors">
+                {{ displayAuthors ? 'On' : 'Off' }}
+              </button>
+            </div>
+            <p class="viz-desc">Show contributing author list in repo tooltips</p>
+            <div class="viz-divider"></div>
+
+            <div class="viz-row">
               <button class="viz-reset-btn" @click="resetVizDefaults">Reset to defaults</button>
             </div>
           </div>
@@ -168,13 +177,14 @@ const DEFAULT_VIOLATION_THRESHOLD = (() => {
   return Number.isFinite(raw) && raw >= 0 && raw <= 100 ? raw : 10;
 })();
 
-const VIZ_DEFAULTS = { edgeWeight: true, violationThreshold: DEFAULT_VIOLATION_THRESHOLD, violatingOnly: true };
+const VIZ_DEFAULTS = { edgeWeight: true, violationThreshold: DEFAULT_VIOLATION_THRESHOLD, violatingOnly: true, displayAuthors: true };
 
 const vizOpen            = ref(false);
 const isFullscreen       = ref(false);
 const edgeWeight         = ref(VIZ_DEFAULTS.edgeWeight);
 const violationThreshold = ref(VIZ_DEFAULTS.violationThreshold);
 const violatingOnly      = ref(VIZ_DEFAULTS.violatingOnly);
+const displayAuthors     = ref(VIZ_DEFAULTS.displayAuthors);
 
 function toggleFullscreen() {
   isFullscreen.value = !isFullscreen.value;
@@ -185,6 +195,7 @@ function resetVizDefaults() {
   edgeWeight.value         = VIZ_DEFAULTS.edgeWeight;
   violationThreshold.value = VIZ_DEFAULTS.violationThreshold;
   violatingOnly.value      = VIZ_DEFAULTS.violatingOnly;
+  displayAuthors.value     = VIZ_DEFAULTS.displayAuthors;
 }
 
 const tooltip = reactive({
@@ -257,6 +268,7 @@ const renderer = useSwimlaneGraph({
       action: d.type === 'repo' ? 'Click to see author contributions' : '',
       contributions: d.contributions ?? [],
       owningTeamId: d.owningTeamId ?? null,
+      authorContributions: displayAuthors.value && d.type === 'repo' ? d.authorContributions ?? null : null,
     });
   },
   onShowLinkTooltip: (d, x, y) => {

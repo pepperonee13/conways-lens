@@ -311,6 +311,7 @@ export const useLensStore = defineStore('lens', () => {
     // Per-repo commit counting
     const repoTotalShas          = {}; // repoId → Set<sha>
     const repoContribShas        = {}; // `${repoId}\x00${teamId}` → Set<sha>
+    const repoAuthorShas         = {}; // `${repoId}\x00${author}` → Set<sha>
 
     for (const row of timelineData.value) {
       if (!row.Author || !row.Product || !row.ChangesetId) continue;
@@ -332,6 +333,7 @@ export const useLensStore = defineStore('lens', () => {
 
       // Accumulate per-repo totals and per-(repo,team) contributions
       (repoTotalShas[repoId] ??= new Set()).add(sha);
+      (repoAuthorShas[`${repoId}\x00${author}`] ??= new Set()).add(sha);
       if (authorTeam) {
         (repoContribShas[`${repoId}\x00${authorTeam}`] ??= new Set()).add(sha);
       }
@@ -386,6 +388,17 @@ export const useLensStore = defineStore('lens', () => {
       }
       contributions.sort((a, b) => b.commits - a.commits);
 
+      const authorContributions = [];
+      const repoPrefix = `${repoId}\x00`;
+      for (const key in repoAuthorShas) {
+        if (!key.startsWith(repoPrefix)) continue;
+        const author = key.slice(repoPrefix.length);
+        const cnt    = repoAuthorShas[key].size;
+        const pct    = totalCommits ? ((cnt / totalCommits) * 100).toFixed(1).replace(/\.0$/, '') : '0';
+        authorContributions.push({ authorId: author, commits: cnt, pct });
+      }
+      authorContributions.sort((a, b) => b.commits - a.commits);
+
       return {
         id:           repoId,
         type:         'repo',
@@ -393,6 +406,7 @@ export const useLensStore = defineStore('lens', () => {
         color:        owningTeam?.color ?? '#9CA3AF',
         commits:      totalCommits,
         contributions,
+        authorContributions,
       };
     });
 
