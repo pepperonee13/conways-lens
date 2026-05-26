@@ -17,9 +17,18 @@ const LAST = [
   'Hayes', 'Ito', 'Jensen', 'Khan', 'Lee', 'Moore', 'Nash', 'Ortiz',
 ]
 
-// 40 × 40 = 1600 unique combinations
-function fakeNameForIndex(i) {
-  return `${FIRST[i % FIRST.length]} ${LAST[Math.floor(i / FIRST.length) % LAST.length]}`
+function hash(str, seed) {
+  let h = seed
+  for (let i = 0; i < str.length; i++) {
+    h = Math.imul(h ^ str.charCodeAt(i), 0x01000193) >>> 0
+  }
+  return h
+}
+
+function fakeNameFor(canonical) {
+  const first = FIRST[hash(canonical, 0x811c9dc5) % FIRST.length]
+  const last = LAST[hash(canonical, 0xdeadbeef) % LAST.length]
+  return `${first} ${last}`
 }
 
 export function useAnonymize() {
@@ -28,10 +37,18 @@ export function useAnonymize() {
 
   const store = useLensStore()
 
-  // Stable map: canonical name → fake name (sorted alphabetically so index is deterministic)
   const canonicalMap = computed(() => {
     const map = {}
-    store.allAuthors.forEach((name, i) => { map[name] = fakeNameForIndex(i) })
+    const used = new Set()
+    store.allAuthors.forEach((name) => {
+      let fake = fakeNameFor(name)
+      let salt = 1
+      while (used.has(fake)) {
+        fake = fakeNameFor(name + ':' + salt++)
+      }
+      used.add(fake)
+      map[name] = fake
+    })
     return map
   })
 
