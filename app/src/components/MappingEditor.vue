@@ -37,34 +37,43 @@
           </p>
 
           <div v-if="teams.length && (unassignedAuthors.length || unassignedRepos.length)" class="unassigned-section">
-            <div class="unassigned-title"><AlertTriangle :size="14" /> Unassigned</div>
-            <div class="unassigned-hint">Tip: drag any item below onto a team card to assign it.</div>
-            <div v-if="unassignedAuthors.length" class="unassigned-group">
-              <span class="unassigned-label">Authors not in any team:</span>
-              <div class="unassigned-chips">
-                <span
-                  v-for="a in unassignedAuthors"
-                  :key="a"
-                  :class="['unassigned-chip', 'unassigned-chip--draggable', { 'unassigned-chip--dragging': unassignedDrag?.kind === 'authors' && unassignedDrag?.value === a }]"
-                  draggable="true"
-                  @dragstart="onUnassignedDragStart('authors', a, $event)"
-                  @dragend="onUnassignedDragEnd"
-                >{{ a }}</span>
+            <button class="unassigned-title" @click="unassignedExpanded = !unassignedExpanded">
+              <ChevronRight :size="14" class="chevron" :class="{ rotated: unassignedExpanded }" />
+              <AlertTriangle :size="14" />
+              Unassigned
+              <span class="unassigned-count">{{ unassignedAuthors.length + unassignedRepos.length }}</span>
+            </button>
+            <transition name="team-body">
+              <div v-if="unassignedExpanded">
+                <div class="unassigned-hint">Tip: drag any item below onto a team card to assign it.</div>
+                <div v-if="unassignedAuthors.length" class="unassigned-group">
+                  <span class="unassigned-label">Authors not in any team:</span>
+                  <div class="unassigned-chips">
+                    <span
+                      v-for="a in unassignedAuthors"
+                      :key="a"
+                      :class="['unassigned-chip', 'unassigned-chip--draggable', { 'unassigned-chip--dragging': unassignedDrag?.kind === 'authors' && unassignedDrag?.value === a }]"
+                      draggable="true"
+                      @dragstart="onUnassignedDragStart('authors', a, $event)"
+                      @dragend="onUnassignedDragEnd"
+                    >{{ a }}</span>
+                  </div>
+                </div>
+                <div v-if="unassignedRepos.length" class="unassigned-group">
+                  <span class="unassigned-label">Repositories not in any team:</span>
+                  <div class="unassigned-chips">
+                    <span
+                      v-for="r in unassignedRepos"
+                      :key="r"
+                      :class="['unassigned-chip', 'unassigned-chip--draggable', { 'unassigned-chip--dragging': unassignedDrag?.kind === 'repos' && unassignedDrag?.value === r }]"
+                      draggable="true"
+                      @dragstart="onUnassignedDragStart('repos', r, $event)"
+                      @dragend="onUnassignedDragEnd"
+                    >{{ r }}</span>
+                  </div>
+                </div>
               </div>
-            </div>
-            <div v-if="unassignedRepos.length" class="unassigned-group">
-              <span class="unassigned-label">Repositories not in any team:</span>
-              <div class="unassigned-chips">
-                <span
-                  v-for="r in unassignedRepos"
-                  :key="r"
-                  :class="['unassigned-chip', 'unassigned-chip--draggable', { 'unassigned-chip--dragging': unassignedDrag?.kind === 'repos' && unassignedDrag?.value === r }]"
-                  draggable="true"
-                  @dragstart="onUnassignedDragStart('repos', r, $event)"
-                  @dragend="onUnassignedDragEnd"
-                >{{ r }}</span>
-              </div>
-            </div>
+            </transition>
           </div>
 
           <button class="add-team-btn" @click="addTeam()">+ Add Team</button>
@@ -407,6 +416,8 @@ const unassignedRepos = computed(() => {
   return allRepos.value.filter(r => !assigned.has(r));
 });
 
+const unassignedExpanded = ref(true);
+
 // ── Drag unassigned author/repo → team ──
 const unassignedDrag = ref(null); // { kind: 'authors' | 'repos', value: string }
 const dropTargetTeamId = ref(null);
@@ -622,11 +633,18 @@ async function handleImport(e) {
 }
 .no-teams { @apply text-center text-gray-500 py-10 space-y-2; }
 .hint-text { @apply text-xs text-gray-400; }
-.unassigned-section { @apply mt-6 mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl; }
-.unassigned-title { @apply flex items-center gap-1.5 text-sm font-bold text-amber-700 mb-1; }
-.unassigned-hint { @apply text-xs text-amber-600/80 italic mb-3 flex items-center gap-1; }
+.unassigned-section { @apply mt-6 mb-6 bg-amber-50 border border-amber-200 rounded-xl overflow-hidden; }
+.unassigned-title {
+  @apply flex items-center gap-1.5 text-sm font-bold text-amber-700 w-full px-4 py-3
+         cursor-pointer hover:bg-amber-100/70 transition-colors duration-150;
+}
+.unassigned-count {
+  @apply ml-auto text-xs font-bold text-amber-600/70 bg-amber-200/60 px-2 py-0.5 rounded-full;
+}
+.unassigned-hint { @apply text-xs text-amber-600/80 italic mb-3 flex items-center gap-1 px-4; }
 .unassigned-hint::before { content: '✋'; font-style: normal; }
-.unassigned-group { @apply mb-3; }
+.unassigned-group { @apply mb-3 px-4; }
+.unassigned-group:last-child { @apply pb-3; }
 .unassigned-label { @apply block text-xs text-amber-600 font-medium mb-1.5; }
 .unassigned-chips { @apply flex flex-wrap gap-1.5; }
 .unassigned-chip {
