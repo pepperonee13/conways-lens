@@ -307,6 +307,7 @@ export const useLensStore = defineStore('lens', () => {
     // Per-team total commit counting (for node sizing)
     const teamTotalCommits = {}; // teamId → commit count (unique SHAs)
     const teamTotalShas    = {}; // teamId → Set<sha>
+    const teamAuthorShas   = {}; // `${teamId}\x00${author}` → Set<sha>
 
     // Per-repo commit counting
     const repoTotalShas          = {}; // repoId → Set<sha>
@@ -329,6 +330,7 @@ export const useLensStore = defineStore('lens', () => {
       // Accumulate total commits per team (author's team)
       if (authorTeam) {
         (teamTotalShas[authorTeam] ??= new Set()).add(sha);
+        (teamAuthorShas[`${authorTeam}\x00${author}`] ??= new Set()).add(sha);
       }
 
       // Accumulate per-repo totals and per-(repo,team) contributions
@@ -361,16 +363,30 @@ export const useLensStore = defineStore('lens', () => {
     });
 
     // Build nodes
-    const teamNodes = allTeams.map(t => ({
-      id:         `team:${t.id}`,
-      type:       'team',
-      teamId:     t.id,
-      name:       t.name,
-      color:      t.color,
-      commits:    teamTotalCommits[t.id] ?? 0,
-      repoCount:  (t.repos    ?? []).length,
-      authorCount:(t.authors  ?? []).length,
-    }));
+    const teamNodes = allTeams.map(t => {
+      const totalCommits = teamTotalCommits[t.id] ?? 0;
+      const teamPrefix = `${t.id}\x00`;
+      const authorContributions = [];
+      for (const key in teamAuthorShas) {
+        if (!key.startsWith(teamPrefix)) continue;
+        const author = key.slice(teamPrefix.length);
+        const cnt    = teamAuthorShas[key].size;
+        const pct    = totalCommits ? ((cnt / totalCommits) * 100).toFixed(1).replace(/\.0$/, '') : '0';
+        authorContributions.push({ authorId: author, commits: cnt, pct, teamColor: t.color });
+      }
+      authorContributions.sort((a, b) => b.commits - a.commits);
+      return {
+        id:         `team:${t.id}`,
+        type:       'team',
+        teamId:     t.id,
+        name:       t.name,
+        color:      t.color,
+        commits:    totalCommits,
+        repoCount:  (t.repos    ?? []).length,
+        authorCount:(t.authors  ?? []).length,
+        authorContributions,
+      };
+    });
 
     // Repo nodes: every repo that has commits in range (owned + unowned).
     const repoNodeIds = new Set(Object.keys(repoTotalShas));
@@ -392,10 +408,12 @@ export const useLensStore = defineStore('lens', () => {
       const repoPrefix = `${repoId}\x00`;
       for (const key in repoAuthorShas) {
         if (!key.startsWith(repoPrefix)) continue;
-        const author = key.slice(repoPrefix.length);
-        const cnt    = repoAuthorShas[key].size;
-        const pct    = totalCommits ? ((cnt / totalCommits) * 100).toFixed(1).replace(/\.0$/, '') : '0';
-        authorContributions.push({ authorId: author, commits: cnt, pct });
+        const author    = key.slice(repoPrefix.length);
+        const cnt       = repoAuthorShas[key].size;
+        const pct       = totalCommits ? ((cnt / totalCommits) * 100).toFixed(1).replace(/\.0$/, '') : '0';
+        const teamId    = authorToTeamId[author] ?? null;
+        const teamColor = teamId ? (allTeams.find(t => t.id === teamId)?.color ?? '#9CA3AF') : '#9CA3AF';
+        authorContributions.push({ authorId: author, commits: cnt, pct, teamColor, teamId });
       }
       authorContributions.sort((a, b) => b.commits - a.commits);
 

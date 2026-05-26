@@ -135,6 +135,7 @@
           </ul>
           <ul v-if="tooltip.authorContributions?.length" class="tt-contribs tt-contribs--authors">
             <li v-for="a in tooltip.authorContributions" :key="a.authorId">
+              <span class="tt-contrib-dot" :style="{ background: a.teamColor || '#9CA3AF' }"></span>
               <span class="tt-contrib-name">{{ anonymize(a.authorId) }}</span>
               <span class="tt-contrib-pct">{{ a.pct }}%</span>
             </li>
@@ -279,7 +280,7 @@ const renderer = useSwimlaneGraph({
       action: d.type === 'repo' ? 'Click to see author contributions' : '',
       contributions: d.contributions ?? [],
       owningTeamId: d.owningTeamId ?? null,
-      authorContributions: displayAuthors.value && d.type === 'repo' ? d.authorContributions ?? null : null,
+      authorContributions: displayAuthors.value && (d.type === 'repo' || d.type === 'team') ? d.authorContributions ?? null : null,
     });
   },
   onShowLinkTooltip: (d, x, y) => {
@@ -502,7 +503,7 @@ onMounted(() => {
 .tt-contrib-pct  { font-family: 'JetBrains Mono', monospace; color: #225EA9; font-weight: 700; }
 .tt-contrib-count{ font-family: 'JetBrains Mono', monospace; color: #94a3b8; font-size: 10px; }
 .tt-contrib-owner .tt-contrib-name { color: #088F9B; }
-.tt-contribs--authors li { grid-template-columns: 1fr auto; }
+.tt-contribs--authors li { grid-template-columns: 10px 1fr auto; }
 .tt-contribs--authors .tt-contrib-pct { text-align: right; }
 .tt-contrib-owner .tt-contrib-name::after { content: ' · owner'; font-weight: 500; font-size: 9px; color: #94a3b8; }
 
