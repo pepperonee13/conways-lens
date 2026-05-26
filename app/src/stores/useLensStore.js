@@ -528,6 +528,8 @@ export const useLensStore = defineStore('lens', () => {
     dateInfo.value      = null;
     activeRange.value   = { since: null, until: null };
     expandedTeams.value = new Set();
+    // Clear auto-generated sim teams; leave user-configured teams intact
+    if (teams.value.every(t => t.id.startsWith('sim-team-'))) teams.value = [];
   }
 
   function loadSimulatedData({ authorCount, repoCount, minCommits, maxCommits }) {
@@ -551,7 +553,19 @@ export const useLensStore = defineStore('lens', () => {
       }
     }
 
+    // Generate teams so the graph renders immediately
+    const teamCount  = Math.min(3, authorCount, repoCount);
+    const teamNames  = ['Alpha', 'Beta', 'Gamma'];
+    const simTeams   = Array.from({ length: teamCount }, (_, i) => ({
+      id:      `sim-team-${i}`,
+      name:    teamNames[i],
+      color:   DEFAULT_COLORS[i],
+      authors: authors.filter((_, j) => j % teamCount === i),
+      repos:   repos.filter((_, j) => j % teamCount === i),
+    }));
+
     timelineData.value  = rows;
+    teams.value         = simTeams;
     dateInfo.value      = { since: yearAgo.toISOString().slice(0, 10), until: now.toISOString().slice(0, 10) };
     dataLoaded.value    = true;
     dataError.value     = null;

@@ -1,2 +1,3 @@
-app/public/TimelineData.csv
+app/public/TimelineData*.csv
 node_modules/
+out/
