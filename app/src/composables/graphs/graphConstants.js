@@ -34,7 +34,7 @@ export const TOOLTIP_OFFSET = { x: 14, y: -10 };
 export const NODE_LABEL_OFFSET = 13; // px gap between node boundary and label baseline
 
 export const REPO_DETAIL = {
-  REPO_R:          22,   // half-size of central repo square
+  REPO_R:          44,   // radius of central repo circle
   AUTHOR_R_MIN:     8,   // rScale range min
   AUTHOR_R_MAX:    22,   // rScale range max
   EDGE_REPO_GAP:   30,   // clearance beyond repo square boundary to arrow tail
