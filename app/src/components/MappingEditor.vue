@@ -226,17 +226,26 @@
           <div v-if="activeAuthors.length" class="section-label" :class="{ 'mt-5': ignoredAuthorsSorted.length }">
             Active ({{ activeAuthors.length }})
           </div>
-          <div class="author-pills-grid">
-            <button
-              v-for="a in activeAuthors"
-              :key="a"
-              :class="['author-pill', 'author-pill--active', { 'pill-teamed': !!teamColor(a) }]"
-              :style="teamColor(a) ? { backgroundColor: teamColor(a) } : null"
-              @click="store.ignoreAuthor(a)"
-              title="Click to ignore"
-            >
-              <span class="pill-name">{{ a }}</span>
-            </button>
+          <div class="alias-groups">
+            <div v-for="group in activeAuthorGroups" :key="group.team.id" class="alias-group">
+              <div class="alias-group-header">
+                <span class="alias-group-swatch" :style="{ backgroundColor: group.team.color }"></span>
+                <span class="alias-group-name">{{ group.team.name }}</span>
+                <span class="alias-group-count">{{ group.authors.length }}</span>
+              </div>
+              <div class="author-pills-grid">
+                <button
+                  v-for="a in group.authors"
+                  :key="a"
+                  :class="['author-pill', 'author-pill--active', { 'pill-teamed': !!teamColor(a) }]"
+                  :style="teamColor(a) ? { backgroundColor: teamColor(a) } : null"
+                  @click="store.ignoreAuthor(a)"
+                  title="Click to ignore"
+                >
+                  <span class="pill-name">{{ a }}</span>
+                </button>
+              </div>
+            </div>
           </div>
 
           <p v-if="!allAuthors.length" class="hint-text" style="text-align:center;margin-top:2rem">
@@ -408,6 +417,27 @@ const ignoredAuthorsSorted = computed(() =>
 const activeAuthors = computed(() =>
   allAuthors.value.filter(a => !isIgnored(a))
 );
+
+// Group active (non-ignored) canonical authors by team, with Unassigned last.
+const activeAuthorGroups = computed(() => {
+  const canonicalToTeam = {};
+  for (const t of teams.value) {
+    for (const a of (t.authors ?? [])) canonicalToTeam[a] = t;
+  }
+  const groups = new Map();
+  const unassigned = [];
+  for (const a of activeAuthors.value) {
+    const team = canonicalToTeam[a];
+    if (!team) { unassigned.push(a); continue; }
+    if (!groups.has(team.id)) groups.set(team.id, { team, authors: [] });
+    groups.get(team.id).authors.push(a);
+  }
+  const ordered = teams.value.map(t => groups.get(t.id)).filter(Boolean);
+  if (unassigned.length) {
+    ordered.push({ team: { id: '__unassigned__', name: 'Unassigned', color: '#9CA3AF' }, authors: unassigned });
+  }
+  return ordered;
+});
 
 // ── Import / Export ──
 const fileInput   = ref(null);
