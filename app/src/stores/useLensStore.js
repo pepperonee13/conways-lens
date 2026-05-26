@@ -6,7 +6,9 @@ const STORAGE = {
   teams:          'conwaylens:teams',
   normalizations: 'conwaylens:normalizations',
   ignoredAuthors: 'conwaylens:ignoredAuthors',
-  filterTeamIds:  'conwaylens:filterTeamIds',
+  filterTeamIds:   'conwaylens:filterTeamIds',
+  filterRepoIds:   'conwaylens:filterRepoIds',
+  filterAuthorIds: 'conwaylens:filterAuthorIds',
 };
 
 const DEFAULT_COLORS  = ['#225EA9', '#088F9B', '#F08223', '#5A4A80', '#C45E0F', '#006B75', '#3A75BA', '#1A9FA9'];
@@ -130,8 +132,12 @@ export const useLensStore = defineStore('lens', () => {
   });
 
   const crossTeamOnly   = ref(false);
-  const filterTeamIds   = ref(new Set(load(STORAGE.filterTeamIds, [])));
-  watch(filterTeamIds, v => localStorage.setItem(STORAGE.filterTeamIds, JSON.stringify([...v])));
+  const filterTeamIds   = ref(new Set(load(STORAGE.filterTeamIds,   [])));
+  const filterRepoIds   = ref(new Set(load(STORAGE.filterRepoIds,   [])));
+  const filterAuthorIds = ref(new Set(load(STORAGE.filterAuthorIds, [])));
+  watch(filterTeamIds,   v => localStorage.setItem(STORAGE.filterTeamIds,   JSON.stringify([...v])));
+  watch(filterRepoIds,   v => localStorage.setItem(STORAGE.filterRepoIds,   JSON.stringify([...v])));
+  watch(filterAuthorIds, v => localStorage.setItem(STORAGE.filterAuthorIds, JSON.stringify([...v])));
 
   // Virtual team for authors and repos not yet assigned to any real team.
   // Only exists when at least one real team is configured.
@@ -465,16 +471,23 @@ export const useLensStore = defineStore('lens', () => {
       };
     });
 
-    // Apply team filter: keep only repos that have at least one contribution
-    // from an author belonging to one of the selected filter teams.
+    // Apply filter: repos are visible if owned by a selected team, explicitly
+    // selected, or touched by a selected author.
+    const hasFilter = filterTeamIds.value.size > 0
+                   || filterRepoIds.value.size   > 0
+                   || filterAuthorIds.value.size  > 0;
     let visibleRepoNodes = repoNodes;
     let visibleLinks     = links;
-    if (filterTeamIds.value.size > 0) {
-      visibleRepoNodes = repoNodes.filter(node =>
-        [...filterTeamIds.value].some(tid =>
-          (repoContribShas[`${node.id}\x00${tid}`]?.size ?? 0) > 0
-        )
-      );
+    if (hasFilter) {
+      visibleRepoNodes = repoNodes.filter(node => {
+        if (filterRepoIds.value.has(node.id)) return true;
+        const owner = node.owningTeamId ?? UNASSIGNED_ID;
+        if (filterTeamIds.value.has(owner)) return true;
+        for (const aid of filterAuthorIds.value) {
+          if ((repoAuthorShas[`${node.id}\x00${aid}`]?.size ?? 0) > 0) return true;
+        }
+        return false;
+      });
       const visibleRepoSet = new Set(visibleRepoNodes.map(n => n.id));
       visibleLinks = links.filter(l => visibleRepoSet.has(l.target));
     }
@@ -596,7 +609,21 @@ export const useLensStore = defineStore('lens', () => {
     if (active) next.add(id); else next.delete(id);
     filterTeamIds.value = next;
   }
-  function clearFilterTeams() { filterTeamIds.value = new Set(); }
+  function setFilterRepo(id, active) {
+    const next = new Set(filterRepoIds.value);
+    if (active) next.add(id); else next.delete(id);
+    filterRepoIds.value = next;
+  }
+  function setFilterAuthor(id, active) {
+    const next = new Set(filterAuthorIds.value);
+    if (active) next.add(id); else next.delete(id);
+    filterAuthorIds.value = next;
+  }
+  function clearAllFilters() {
+    filterTeamIds.value   = new Set();
+    filterRepoIds.value   = new Set();
+    filterAuthorIds.value = new Set();
+  }
 
   // Import / Export
   function exportMappings() {
@@ -653,14 +680,14 @@ export const useLensStore = defineStore('lens', () => {
     teams, syntheticTeam, authorNormalizations, ignoredAuthors,
     dateBounds, activeRange,
     crossTeamOnly,
-    filterTeamIds,
+    filterTeamIds, filterRepoIds, filterAuthorIds,
     expandedTeams,
     allRawAuthors, allAuthors, allRepos,
     graphData, ownershipGraphData, nodeColors, getNodeColor,
     repoContributorsData,
     loadTimelineData, loadSimulatedData, clearData,
     addTeam, removeTeam,
-    setFilterTeam, clearFilterTeams,
+    setFilterTeam, setFilterRepo, setFilterAuthor, clearAllFilters,
     setNormalization, removeNormalization,
     ignoreAuthor, unignoreAuthor,
     toggleTeamExpansion,

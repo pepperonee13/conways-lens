@@ -2,7 +2,7 @@
   <button class="floating-filter-btn" v-if="!open" @click="open = true" title="Filters">
     <SlidersHorizontal :size="18" />
     <span>Filters</span>
-    <span v-if="filterTeamIds.size" class="filter-badge">{{ filterTeamIds.size }}</span>
+    <span v-if="activeFilterCount" class="filter-badge">{{ activeFilterCount }}</span>
   </button>
 
   <transition name="backdrop-fade">
@@ -11,68 +11,152 @@
 
   <transition name="slide-panel">
     <div v-if="open" class="panel">
+
+      <!-- Header -->
       <div class="panel-header">
         <h2 class="panel-title">
           <SlidersHorizontal :size="20" class="title-icon" /> Filters
         </h2>
-        <button class="close-btn" @click="open = false" title="Close"><X :size="18" /></button>
+        <div class="header-right">
+          <button v-if="activeFilterCount" class="clear-all-btn" @click="store.clearAllFilters()">
+            Clear all
+          </button>
+          <button class="close-btn" @click="open = false" title="Close">
+            <X :size="18" />
+          </button>
+        </div>
       </div>
 
+      <!-- Search -->
+      <div class="search-wrap">
+        <Search :size="14" class="search-icon" />
+        <input
+          v-model="searchQuery"
+          class="search-input"
+          placeholder="Search teams, repos, authors…"
+        />
+        <button v-if="searchQuery" class="search-clear" @click="searchQuery = ''" title="Clear">
+          <X :size="12" />
+        </button>
+      </div>
+
+      <!-- Body -->
       <div class="panel-body">
 
-        <!-- Team filter section -->
-        <div class="section-header">
-          <span class="section-title">Selected Teams</span>
-          <div class="section-actions">
-            <button
-              v-if="filterTeamIds.size < teams.length"
-              class="action-link"
-              @click="selectAll"
-            >Select all</button>
-            <span v-if="filterTeamIds.size > 0 && filterTeamIds.size < teams.length" class="action-sep">·</span>
-            <button
-              v-if="filterTeamIds.size > 0"
-              class="action-link action-link--clear"
-              @click="store.clearFilterTeams()"
-            >Clear</button>
-          </div>
-        </div>
-
-        <p class="panel-hint">
-          Show only repos where at least one author from a selected team has contributed.
-          Leave all unselected to show every repo.
+        <p v-if="!filterableTeams.length" class="empty-state">
+          No teams configured. Set up teams in the <strong>Mapping</strong> panel first.
         </p>
 
-        <div v-if="!teams.length" class="no-teams">
-          No teams configured yet. Set up teams in the <strong>Mapping</strong> panel first.
-        </div>
+        <p v-else-if="filteredTeams.length === 0" class="empty-state">
+          No results for "<em>{{ searchQuery }}</em>"
+        </p>
 
-        <div class="team-filter-list">
-          <label
-            v-for="team in teams"
-            :key="team.id"
-            :class="['team-filter-item', { active: filterTeamIds.has(team.id) }]"
+        <template v-else>
+          <div
+            v-for="tv in filteredTeams"
+            :key="tv.id"
+            class="team-card"
+            :class="{
+              'is-team-selected': filterTeamIds.has(tv.id),
+              'has-partial':      !filterTeamIds.has(tv.id) && (tv.selRepos > 0 || tv.selAuthors > 0),
+            }"
+            :style="{ '--card-color': tv.color }"
           >
-            <input
-              type="checkbox"
-              class="sr-only"
-              :checked="filterTeamIds.has(team.id)"
-              @change="store.setFilterTeam(team.id, $event.target.checked)"
-            />
-            <span class="team-swatch" :style="{ backgroundColor: team.color }"></span>
-            <span class="team-filter-name">{{ team.name }}</span>
-            <span class="team-filter-meta">{{ team.authors.length }} authors · {{ team.repos.length }} repos</span>
-            <span :class="['team-check', { visible: filterTeamIds.has(team.id) }]">
-              <Check :size="14" />
-            </span>
-          </label>
-        </div>
+            <!-- Card header -->
+            <div class="card-header" @click="toggleExpand(tv.id)">
+              <ChevronRight :size="14" :class="['chevron', { rotated: isExpanded(tv.id) }]" />
+              <span class="team-dot" :style="{ backgroundColor: tv.color }"></span>
+              <span class="card-name">{{ tv.name }}</span>
 
-        <div v-if="filterTeamIds.size > 0" class="filter-active-note">
+              <!-- selection summary chips -->
+              <span class="card-chips">
+                <span v-if="filterTeamIds.has(tv.id)" class="chip chip--team">all repos</span>
+                <template v-else>
+                  <span v-if="tv.selRepos"    class="chip chip--repo">{{ tv.selRepos }} repo{{ tv.selRepos !== 1 ? 's' : '' }}</span>
+                  <span v-if="tv.selAuthors"  class="chip chip--author">{{ tv.selAuthors }} author{{ tv.selAuthors !== 1 ? 's' : '' }}</span>
+                </template>
+              </span>
+
+              <!-- "Select team" quick-toggle -->
+              <button
+                :class="['select-btn', { active: filterTeamIds.has(tv.id) }]"
+                @click.stop="store.setFilterTeam(tv.id, !filterTeamIds.has(tv.id))"
+                :title="filterTeamIds.has(tv.id) ? 'Deselect whole team' : 'Select whole team'"
+              >
+                <Check v-if="filterTeamIds.has(tv.id)" :size="11" />
+                <span>{{ filterTeamIds.has(tv.id) ? 'Team ✓' : 'All' }}</span>
+              </button>
+            </div>
+
+            <!-- Expanded body -->
+            <transition name="card-body">
+              <div v-if="isExpanded(tv.id)" class="card-body-wrap">
+
+                <!-- Repos -->
+                <div class="sub-section">
+                  <div class="sub-header">
+                    <span class="sub-label">Repositories</span>
+                    <span class="sub-count">{{ tv.repos.length }}</span>
+                  </div>
+                  <div v-if="tv.repos.length" class="item-grid">
+                    <label
+                      v-for="repo in tv.repos"
+                      :key="repo"
+                      :class="['item-row', {
+                        'item-checked':  filterRepoIds.has(repo) || filterTeamIds.has(tv.id),
+                        'item-via-team': filterTeamIds.has(tv.id) && !filterRepoIds.has(repo),
+                      }]"
+                      @click.stop
+                    >
+                      <input
+                        type="checkbox"
+                        class="item-cb"
+                        :checked="filterRepoIds.has(repo) || filterTeamIds.has(tv.id)"
+                        @change="onRepoToggle(repo, tv, $event.target.checked)"
+                      />
+                      <span class="item-name" :title="repo">{{ repo }}</span>
+                    </label>
+                  </div>
+                  <p v-else class="sub-empty">No repositories assigned</p>
+                </div>
+
+                <!-- Authors -->
+                <div class="sub-section">
+                  <div class="sub-header">
+                    <span class="sub-label">Authors</span>
+                    <span class="sub-count">{{ tv.authors.length }}</span>
+                  </div>
+                  <div v-if="tv.authors.length" class="item-grid">
+                    <label
+                      v-for="author in tv.authors"
+                      :key="author"
+                      :class="['item-row', { 'item-checked': filterAuthorIds.has(author) }]"
+                      @click.stop
+                    >
+                      <input
+                        type="checkbox"
+                        class="item-cb"
+                        :checked="filterAuthorIds.has(author)"
+                        @change="store.setFilterAuthor(author, $event.target.checked)"
+                      />
+                      <span class="item-name" :title="author">{{ author }}</span>
+                    </label>
+                  </div>
+                  <p v-else class="sub-empty">No authors assigned</p>
+                </div>
+
+              </div>
+            </transition>
+          </div>
+        </template>
+
+        <!-- Active note -->
+        <div v-if="activeFilterCount" class="active-note">
           <Info :size="13" />
-          Showing repos with contributions from
-          <strong>{{ filterTeamIds.size }} team{{ filterTeamIds.size === 1 ? '' : 's' }}</strong>.
-          Violation threshold applies on top.
+          <span>
+            {{ activeFilterCount }} active filter{{ activeFilterCount !== 1 ? 's' : '' }}
+            — violation threshold still applies
+          </span>
         </div>
 
       </div>
@@ -81,28 +165,88 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useLensStore } from '../stores/useLensStore';
-import { SlidersHorizontal, X, Check, Info } from 'lucide-vue-next';
+import { SlidersHorizontal, X, Check, Search, ChevronRight, Info } from 'lucide-vue-next';
 
 const store = useLensStore();
-const { teams, filterTeamIds } = storeToRefs(store);
+const { teams, syntheticTeam, filterTeamIds, filterRepoIds, filterAuthorIds } = storeToRefs(store);
 
-const open = ref(false);
+const open        = ref(false);
+const searchQuery = ref('');
 
-function selectAll() {
-  for (const team of teams.value) {
-    store.setFilterTeam(team.id, true);
+// All teams shown in the panel (real + Outside Contributors)
+const filterableTeams = computed(() => {
+  const result = [...teams.value];
+  if (syntheticTeam.value) result.push(syntheticTeam.value);
+  return result;
+});
+
+// Search-filtered + selection-count augmented team views
+const filteredTeams = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase();
+
+  return filterableTeams.value.flatMap(team => {
+    const teamHit = !q || team.name.toLowerCase().includes(q);
+    const repos   = (teamHit ? [...team.repos] : team.repos.filter(r => r.toLowerCase().includes(q))).sort();
+    const authors = (teamHit ? [...team.authors] : team.authors.filter(a => a.toLowerCase().includes(q))).sort();
+
+    if (q && !teamHit && repos.length === 0 && authors.length === 0) return [];
+
+    return [{
+      ...team,
+      repos,
+      authors,
+      selRepos:    repos.filter(r => filterRepoIds.value.has(r)).length,
+      selAuthors:  authors.filter(a => filterAuthorIds.value.has(a)).length,
+      autoExpand:  q && !teamHit,
+    }];
+  });
+});
+
+const activeFilterCount = computed(
+  () => filterTeamIds.value.size + filterRepoIds.value.size + filterAuthorIds.value.size
+);
+
+// Expansion state
+const expandedTeams = ref(new Set());
+function isExpanded(id) {
+  if (expandedTeams.value.has(id)) return true;
+  return filteredTeams.value.find(t => t.id === id)?.autoExpand ?? false;
+}
+function toggleExpand(id) {
+  const next = new Set(expandedTeams.value);
+  // If currently expanded (possibly via autoExpand), close it by adding to the set
+  // then toggling — simpler: track closed-overrides for auto-expanded teams
+  if (isExpanded(id)) {
+    // If it's only expanded because of autoExpand, add to set to "pin closed"
+    next.has(id) ? next.delete(id) : next.add(id);
+  } else {
+    next.add(id);
+  }
+  expandedTeams.value = next;
+}
+
+// When a repo checkbox is toggled while its team is fully selected,
+// "explode" the team selection into individual repo picks minus this one.
+function onRepoToggle(repo, tv, checked) {
+  if (!checked && filterTeamIds.value.has(tv.id)) {
+    store.setFilterTeam(tv.id, false);
+    for (const r of tv.repos) {
+      if (r !== repo) store.setFilterRepo(r, true);
+    }
+  } else {
+    store.setFilterRepo(repo, checked);
   }
 }
 </script>
 
 <style scoped>
 .floating-filter-btn {
-  @apply fixed left-6 bottom-6 z-40
-         text-white rounded-full shadow-2xl px-6 py-4 font-bold text-base cursor-pointer
-         transition-all duration-300 hover:scale-110 flex items-center gap-3;
+  @apply fixed left-6 bottom-6 z-40 text-white rounded-full shadow-2xl px-6 py-4
+         font-bold text-base cursor-pointer transition-all duration-300 hover:scale-110
+         flex items-center gap-3;
   background: linear-gradient(to right, #067a85, #088F9B);
 }
 .filter-badge {
@@ -117,92 +261,155 @@ function selectAll() {
 
 .panel {
   @apply fixed left-0 top-0 bottom-0 z-50 bg-white shadow-2xl flex flex-col;
-  width: 420px; max-width: 95vw;
+  width: 460px; max-width: 95vw;
 }
 .slide-panel-enter-active, .slide-panel-leave-active {
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .slide-panel-enter-from, .slide-panel-leave-to { transform: translateX(-100%); }
 
+/* Header */
 .panel-header {
-  @apply px-6 py-5 flex items-center justify-between shadow-lg flex-shrink-0 text-white;
+  @apply px-5 py-4 flex items-center justify-between shadow-sm flex-shrink-0 text-white;
   background: linear-gradient(to right, #067a85, #088F9B);
 }
-.panel-title { @apply flex items-center gap-2 text-2xl font-bold m-0; }
-.title-icon  { @apply text-white/80; }
+.panel-title   { @apply flex items-center gap-2 text-xl font-bold m-0; }
+.title-icon    { @apply opacity-80; }
+.header-right  { @apply flex items-center gap-2; }
+.clear-all-btn {
+  @apply text-xs font-semibold px-3 py-1.5 rounded-lg cursor-pointer transition-all;
+  background: rgba(255,255,255,0.18);
+  color: white;
+}
+.clear-all-btn:hover { background: rgba(255,255,255,0.3); }
 .close-btn {
-  @apply text-white hover:bg-white/20 rounded-full w-10 h-10 flex items-center
-         justify-center transition-all duration-200 cursor-pointer;
+  @apply w-9 h-9 flex items-center justify-center rounded-full cursor-pointer transition-all;
+  color: white;
+}
+.close-btn:hover { background: rgba(255,255,255,0.2); }
+
+/* Search */
+.search-wrap {
+  @apply flex items-center gap-2 px-4 py-3 border-b border-gray-100 bg-white flex-shrink-0;
+}
+.search-icon  { @apply text-gray-400 flex-shrink-0; }
+.search-input {
+  @apply flex-1 text-sm bg-transparent outline-none text-gray-700 placeholder-gray-400;
+}
+.search-clear {
+  @apply w-5 h-5 flex items-center justify-center rounded-full text-gray-400
+         hover:bg-gray-200 hover:text-gray-600 transition-all cursor-pointer flex-shrink-0;
 }
 
+/* Body */
 .panel-body {
-  @apply flex-1 overflow-y-auto p-5;
-  scrollbar-width: thin; scrollbar-color: rgba(8,143,155,0.3) transparent;
+  @apply flex-1 overflow-y-auto p-3;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(8,143,155,0.25) transparent;
+}
+.empty-state {
+  @apply text-sm text-gray-400 text-center py-10 leading-relaxed;
 }
 
-.panel-hint { @apply text-sm text-gray-500 mb-4 leading-relaxed; }
-
-/* Section header */
-.section-header {
-  @apply flex items-center justify-between mb-2;
+/* Team cards */
+.team-card {
+  @apply mb-2 rounded-xl border-2 border-gray-100 overflow-hidden transition-all duration-150;
+  border-left: 3px solid var(--card-color, #e5e7eb);
 }
-.section-title {
-  @apply text-xs font-bold text-gray-500 uppercase tracking-wide;
+.team-card.is-team-selected {
+  border-color: var(--card-color);
+  background: rgba(8,143,155,0.03);
 }
-.section-actions {
-  @apply flex items-center gap-1.5;
-}
-.action-link {
-  @apply text-xs font-semibold cursor-pointer transition-colors duration-150;
-  color: #088F9B;
-}
-.action-link:hover { color: #067a85; }
-.action-link--clear { @apply text-red-400 hover:text-red-600; }
-.action-sep { @apply text-gray-300 text-xs; }
-
-/* No teams */
-.no-teams {
-  @apply text-sm text-gray-400 py-6 text-center leading-relaxed;
+.team-card.has-partial {
+  border-color: var(--card-color);
+  border-style: solid;
 }
 
-/* Team list */
-.team-filter-list {
-  @apply flex flex-col gap-2;
+.card-header {
+  @apply flex items-center gap-2 px-3 py-2.5 cursor-pointer select-none
+         hover:bg-gray-50 transition-colors duration-100;
 }
-
-.team-filter-item {
-  @apply flex items-center gap-3 px-4 py-3 rounded-xl border-2 border-gray-100
-         cursor-pointer transition-all duration-150 select-none;
-  background: #f9fafb;
+.chevron {
+  @apply flex-shrink-0 text-gray-400 transition-transform duration-200;
 }
-.team-filter-item:hover {
-  @apply border-gray-300 bg-white;
+.chevron.rotated { transform: rotate(90deg); }
+.team-dot {
+  @apply w-2.5 h-2.5 rounded-full flex-shrink-0;
 }
-.team-filter-item.active {
-  @apply border-brand-teal bg-teal-50/60;
-}
-
-.team-swatch {
-  @apply w-3 h-3 rounded-full flex-shrink-0;
-}
-.team-filter-name {
+.card-name {
   @apply text-sm font-semibold text-gray-700 flex-1 min-w-0 truncate;
 }
-.team-filter-meta {
-  @apply text-xs text-gray-400 flex-shrink-0;
+
+/* Selection summary chips in header */
+.card-chips { @apply flex items-center gap-1 flex-shrink-0; }
+.chip {
+  @apply text-[10px] font-semibold px-1.5 py-0.5 rounded-full;
 }
-.team-check {
-  @apply w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0
-         transition-all duration-150 opacity-0;
-  color: #088F9B;
+.chip--team   { @apply bg-teal-100 text-teal-700; }
+.chip--repo   { @apply bg-blue-100 text-blue-700; }
+.chip--author { @apply bg-purple-100 text-purple-700; }
+
+/* "Select all" quick-toggle */
+.select-btn {
+  @apply flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg border
+         cursor-pointer transition-all duration-150 flex-shrink-0;
+  border-color: var(--card-color);
+  color: var(--card-color);
+  background: white;
 }
-.team-check.visible {
-  @apply opacity-100;
+.select-btn:hover { filter: brightness(0.92); background: color-mix(in srgb, var(--card-color) 8%, white); }
+.select-btn.active {
+  color: white;
+  background: var(--card-color);
+  border-color: var(--card-color);
 }
 
-/* Active filter note */
-.filter-active-note {
-  @apply mt-5 flex items-start gap-2 text-xs text-brand-teal bg-teal-50 border border-teal-200
-         rounded-lg px-3 py-2.5 leading-relaxed;
+/* Expanded body */
+.card-body-enter-active { transition: max-height 0.22s ease, opacity 0.18s ease; }
+.card-body-leave-active { transition: max-height 0.18s ease, opacity 0.14s ease; }
+.card-body-enter-from, .card-body-leave-to { max-height: 0; opacity: 0; overflow: hidden; }
+.card-body-enter-to, .card-body-leave-from { max-height: 1000px; overflow: hidden; }
+
+.card-body-wrap {
+  @apply border-t border-gray-100 bg-gray-50/60 px-3 pb-3 pt-2;
+}
+
+/* Sub-sections */
+.sub-section { @apply mb-3; }
+.sub-section:last-child { @apply mb-0; }
+.sub-header {
+  @apply flex items-center gap-1.5 mb-1.5;
+}
+.sub-label { @apply text-[10px] font-bold text-gray-400 uppercase tracking-wider; }
+.sub-count { @apply text-[10px] text-gray-400 font-mono; }
+.sub-empty { @apply text-xs text-gray-400 italic; }
+
+/* Item grid */
+.item-grid {
+  @apply flex flex-col gap-0.5;
+}
+.item-row {
+  @apply flex items-center gap-2 px-2 py-1 rounded-lg cursor-pointer
+         text-xs text-gray-600 transition-colors duration-100
+         hover:bg-white hover:shadow-sm;
+}
+.item-row.item-checked {
+  @apply bg-white text-gray-800;
+}
+.item-row.item-via-team {
+  @apply opacity-70;
+}
+.item-cb {
+  @apply w-3.5 h-3.5 rounded flex-shrink-0 cursor-pointer;
+  accent-color: #088F9B;
+}
+.item-name {
+  @apply flex-1 min-w-0 truncate;
+}
+
+/* Active note */
+.active-note {
+  @apply mt-3 flex items-center gap-2 text-xs text-brand-teal bg-teal-50
+         border border-teal-200 rounded-lg px-3 py-2.5;
 }
 </style>
