@@ -112,6 +112,31 @@
     </main>
 
     <MappingEditor />
+
+    <!-- Sim overwrite confirmation dialog -->
+    <teleport to="body">
+      <div v-if="showSimConfirm" class="sim-confirm-backdrop" @click.self="cancelSim">
+        <div class="sim-confirm-dialog" role="dialog" aria-modal="true">
+          <h3 class="sim-confirm-title">Replace team mappings?</h3>
+          <p class="sim-confirm-body">
+            Generating a simulation will overwrite your current team configuration with
+            auto-generated teams. This cannot be undone.
+          </p>
+          <p class="sim-confirm-hint">
+            Export your mappings first so you can restore them later.
+          </p>
+          <div class="sim-confirm-actions">
+            <button class="sim-export-btn" @click="exportMappings">
+              <Download :size="14" /> Export mappings
+            </button>
+            <div class="sim-confirm-right">
+              <button class="sim-cancel-btn" @click="cancelSim">Cancel</button>
+              <button class="sim-proceed-btn" @click="confirmSim">Generate anyway</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </teleport>
   </div>
 </template>
 
@@ -122,11 +147,11 @@ import { useLensStore } from '../stores/useLensStore';
 import NetworkGraph from '../components/NetworkGraph.vue';
 import MappingEditor from '../components/MappingEditor.vue';
 import {
-  FolderOpen, Inbox, FlaskConical, Plus, RefreshCw, FileText,
+  FolderOpen, Inbox, FlaskConical, Plus, RefreshCw, FileText, Download,
 } from 'lucide-vue-next';
 
 const store = useLensStore();
-const { dataLoaded, dataError, dateInfo } = storeToRefs(store);
+const { dataLoaded, dataError, dateInfo, teams } = storeToRefs(store);
 
 const loadedFilenames = ref([]);
 const isDragOver = ref(false);
@@ -137,15 +162,50 @@ const simAuthors = ref(8);
 const simRepos   = ref(5);
 const simMin     = ref(5);
 const simMax     = ref(50);
+const showSimConfirm = ref(false);
+const pendingSimParams = ref(null);
+
+function hasUserTeams() {
+  return teams.value.some(t => !t.id.startsWith('sim-team-'));
+}
 
 function generate() {
-  store.loadSimulatedData({
+  const params = {
     authorCount: simAuthors.value,
     repoCount:   simRepos.value,
     minCommits:  simMin.value,
     maxCommits:  simMax.value,
-  });
+  };
+  if (hasUserTeams()) {
+    pendingSimParams.value = params;
+    showSimConfirm.value = true;
+    return;
+  }
+  runSimulation(params);
+}
+
+function runSimulation(params) {
+  store.loadSimulatedData(params);
   loadedFilenames.value = [];
+  showSimConfirm.value = false;
+  pendingSimParams.value = null;
+}
+
+function confirmSim() {
+  if (pendingSimParams.value) runSimulation(pendingSimParams.value);
+}
+
+function cancelSim() {
+  showSimConfirm.value = false;
+  pendingSimParams.value = null;
+}
+
+function exportMappings() {
+  const blob = new Blob([store.exportMappings()], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = Object.assign(document.createElement('a'), { href: url, download: 'conwaylens-mappings.json' });
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function onClear() {
@@ -338,6 +398,54 @@ function onAppDrop(event) {
 
 .overlay-fade-enter-active, .overlay-fade-leave-active { transition: opacity 0.15s ease; }
 .overlay-fade-enter-from, .overlay-fade-leave-to { opacity: 0; }
+
+/* Sim overwrite confirmation dialog */
+.sim-confirm-backdrop {
+  @apply fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm;
+}
+
+.sim-confirm-dialog {
+  @apply bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full mx-4 flex flex-col gap-3;
+}
+
+.sim-confirm-title {
+  @apply text-base font-bold text-gray-800;
+}
+
+.sim-confirm-body {
+  @apply text-sm text-gray-600;
+}
+
+.sim-confirm-hint {
+  @apply text-sm font-semibold;
+  color: var(--brand-orange);
+}
+
+.sim-confirm-actions {
+  @apply flex items-center justify-between gap-3 mt-1 flex-wrap;
+}
+
+.sim-confirm-right {
+  @apply flex items-center gap-2 ml-auto;
+}
+
+.sim-export-btn {
+  @apply flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-lg border transition-all duration-150;
+  color: var(--brand-teal);
+  border-color: var(--brand-teal);
+  background: white;
+}
+.sim-export-btn:hover { background: #f0fafa; }
+
+.sim-cancel-btn {
+  @apply text-sm font-semibold px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 bg-white hover:border-gray-300 transition-all duration-150;
+}
+
+.sim-proceed-btn {
+  @apply text-sm font-bold px-4 py-1.5 rounded-lg text-white transition-all duration-150;
+  background: var(--brand-orange);
+}
+.sim-proceed-btn:hover { filter: brightness(0.9); }
 
 .graph-container {
   @apply flex-1;
