@@ -48,25 +48,59 @@ export const useLensStore = defineStore('lens', () => {
   // Drill-down expansion state
   const expandedTeams = ref(new Set()); // Set<teamId> — teams expanded to show their repo/author nodes
 
-  async function loadTimelineData(file) {
+  async function parseTimelineFile(file) {
+    const text  = new TextDecoder('utf-8').decode(await file.arrayBuffer());
+    const lines = text.split(/\r?\n/).filter(Boolean);
+    let parsedDateInfo = null;
+    if (lines.at(-1)?.startsWith('Since=')) {
+      const m = lines.pop().match(/Since=([\d-]+)?(?:,Until=([\d-]+))?/);
+      if (m) parsedDateInfo = { since: m[1] ?? null, until: m[2] ?? null };
+    }
+    const { data } = Papa.parse(lines.join('\n'), { header: true, skipEmptyLines: true });
+    return { rows: data, dateInfo: parsedDateInfo };
+  }
+
+  function mergeDateInfo(infos) {
+    let since = null, until = null;
+    for (const info of infos) {
+      if (info?.since && (!since || info.since < since)) since = info.since;
+      if (info?.until && (!until || info.until > until)) until = info.until;
+    }
+    return since || until ? { since, until } : null;
+  }
+
+  async function loadTimelineData(fileOrFiles, { append = false } = {}) {
     dataError.value = null;
+    const files = Array.isArray(fileOrFiles) ? fileOrFiles : [fileOrFiles];
+    if (files.length === 0) return;
     try {
-      const text  = new TextDecoder('utf-8').decode(await file.arrayBuffer());
-      const lines = text.split(/\r?\n/).filter(Boolean);
-      let parsedDateInfo = null;
-      if (lines.at(-1)?.startsWith('Since=')) {
-        const m = lines.pop().match(/Since=([\d-]+)?(?:,Until=([\d-]+))?/);
-        if (m) parsedDateInfo = { since: m[1] ?? null, until: m[2] ?? null };
+      const parsed = await Promise.all(files.map(parseTimelineFile));
+      const newRows  = parsed.flatMap(p => p.rows);
+      const newInfos = parsed.map(p => p.dateInfo).filter(Boolean);
+
+      if (append && dataLoaded.value) {
+        // Dedupe by Product + ChangesetId + FilePath when merging into existing data.
+        const seen = new Set();
+        const keyOf = r => `${r.Product}\x00${r.ChangesetId}\x00${r.FilePath ?? ''}`;
+        for (const r of timelineData.value) seen.add(keyOf(r));
+        const merged = [...timelineData.value];
+        for (const r of newRows) {
+          const k = keyOf(r);
+          if (!seen.has(k)) { seen.add(k); merged.push(r); }
+        }
+        timelineData.value = merged;
+        dateInfo.value     = mergeDateInfo([dateInfo.value, ...newInfos]);
+      } else {
+        timelineData.value = newRows;
+        dateInfo.value     = mergeDateInfo(newInfos);
       }
-      const { data } = Papa.parse(lines.join('\n'), { header: true, skipEmptyLines: true });
-      timelineData.value = data;
-      dateInfo.value     = parsedDateInfo;
-      dataLoaded.value   = true;
-      activeRange.value  = { since: null, until: null };
+
+      dataLoaded.value    = true;
+      activeRange.value   = { since: null, until: null };
       expandedTeams.value = new Set();
     } catch (err) {
       dataError.value  = err.message;
-      dataLoaded.value = false;
+      if (!append) dataLoaded.value = false;
     }
   }
 
