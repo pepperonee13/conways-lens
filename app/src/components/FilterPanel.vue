@@ -192,7 +192,8 @@ const filteredTeams = computed(() => {
   return filterableTeams.value.flatMap(team => {
     const teamHit = !q || team.name.toLowerCase().includes(q);
     const repos   = (teamHit ? [...team.repos] : team.repos.filter(r => r.toLowerCase().includes(q))).sort();
-    const authors = (teamHit ? [...team.authors] : team.authors.filter(a => anonymize(a).toLowerCase().includes(q))).sort();
+    const authors = (teamHit ? [...team.authors] : team.authors.filter(a => anonymize(a).toLowerCase().includes(q)))
+      .sort((a, b) => anonymize(a).localeCompare(anonymize(b)));
 
     if (q && !teamHit && repos.length === 0 && authors.length === 0) return [];
 
