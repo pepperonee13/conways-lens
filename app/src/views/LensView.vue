@@ -112,6 +112,7 @@
     </main>
 
     <MappingEditor />
+    <FilterPanel />
 
     <!-- Sim overwrite confirmation dialog -->
     <teleport to="body">
@@ -146,6 +147,7 @@ import { storeToRefs } from 'pinia';
 import { useLensStore } from '../stores/useLensStore';
 import NetworkGraph from '../components/NetworkGraph.vue';
 import MappingEditor from '../components/MappingEditor.vue';
+import FilterPanel from '../components/FilterPanel.vue';
 import {
   FolderOpen, Inbox, FlaskConical, Plus, RefreshCw, FileText, Download,
 } from 'lucide-vue-next';
