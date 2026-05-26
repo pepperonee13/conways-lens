@@ -36,6 +36,39 @@
             Assign authors and repositories to teams. Team color is applied to their nodes in the graph.
           </p>
 
+          <div v-if="teams.length && (unassignedAuthors.length || unassignedRepos.length)" class="unassigned-section">
+            <div class="unassigned-title">⚠ Unassigned</div>
+            <div class="unassigned-hint">Tip: drag any item below onto a team card to assign it.</div>
+            <div v-if="unassignedAuthors.length" class="unassigned-group">
+              <span class="unassigned-label">Authors not in any team:</span>
+              <div class="unassigned-chips">
+                <span
+                  v-for="a in unassignedAuthors"
+                  :key="a"
+                  :class="['unassigned-chip', 'unassigned-chip--draggable', { 'unassigned-chip--dragging': unassignedDrag?.kind === 'authors' && unassignedDrag?.value === a }]"
+                  draggable="true"
+                  @dragstart="onUnassignedDragStart('authors', a, $event)"
+                  @dragend="onUnassignedDragEnd"
+                >{{ a }}</span>
+              </div>
+            </div>
+            <div v-if="unassignedRepos.length" class="unassigned-group">
+              <span class="unassigned-label">Repositories not in any team:</span>
+              <div class="unassigned-chips">
+                <span
+                  v-for="r in unassignedRepos"
+                  :key="r"
+                  :class="['unassigned-chip', 'unassigned-chip--draggable', { 'unassigned-chip--dragging': unassignedDrag?.kind === 'repos' && unassignedDrag?.value === r }]"
+                  draggable="true"
+                  @dragstart="onUnassignedDragStart('repos', r, $event)"
+                  @dragend="onUnassignedDragEnd"
+                >{{ r }}</span>
+              </div>
+            </div>
+          </div>
+
+          <button class="add-team-btn" @click="addTeam()">+ Add Team</button>
+
           <div class="teams-list">
             <div
               v-for="(team, idx) in teams"
@@ -111,38 +144,6 @@
             <p class="hint-text">Authors and repositories are discovered automatically from the loaded data.</p>
           </div>
 
-          <div v-if="teams.length && (unassignedAuthors.length || unassignedRepos.length)" class="unassigned-section">
-            <div class="unassigned-title">⚠ Unassigned</div>
-            <div class="unassigned-hint">Tip: drag any item below onto a team card to assign it.</div>
-            <div v-if="unassignedAuthors.length" class="unassigned-group">
-              <span class="unassigned-label">Authors not in any team:</span>
-              <div class="unassigned-chips">
-                <span
-                  v-for="a in unassignedAuthors"
-                  :key="a"
-                  :class="['unassigned-chip', 'unassigned-chip--draggable', { 'unassigned-chip--dragging': unassignedDrag?.kind === 'authors' && unassignedDrag?.value === a }]"
-                  draggable="true"
-                  @dragstart="onUnassignedDragStart('authors', a, $event)"
-                  @dragend="onUnassignedDragEnd"
-                >{{ a }}</span>
-              </div>
-            </div>
-            <div v-if="unassignedRepos.length" class="unassigned-group">
-              <span class="unassigned-label">Repositories not in any team:</span>
-              <div class="unassigned-chips">
-                <span
-                  v-for="r in unassignedRepos"
-                  :key="r"
-                  :class="['unassigned-chip', 'unassigned-chip--draggable', { 'unassigned-chip--dragging': unassignedDrag?.kind === 'repos' && unassignedDrag?.value === r }]"
-                  draggable="true"
-                  @dragstart="onUnassignedDragStart('repos', r, $event)"
-                  @dragend="onUnassignedDragEnd"
-                >{{ r }}</span>
-              </div>
-            </div>
-          </div>
-
-          <button class="add-team-btn" @click="addTeam()">+ Add Team</button>
         </template>
 
         <!-- ── Author Aliases ── -->
