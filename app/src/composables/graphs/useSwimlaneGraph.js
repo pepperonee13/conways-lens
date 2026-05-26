@@ -354,7 +354,10 @@ export function useSwimlaneGraph({
       .append('path').attr('d', 'M0,-5L10,0L0,5').attr('fill', 'context-stroke');
 
     const root = svg.append('g');
-    svg.call(d3.zoom().scaleExtent([0.4, 4]).on('zoom', e => root.attr('transform', e.transform)));
+    const zoom = d3.zoom().scaleExtent([0.4, 4]).on('zoom', e => root.attr('transform', e.transform));
+    svg.call(zoom);
+    // Shift content right so the team-anchor tooltip (which opens left of cursor) stays in viewport.
+    zoom.transform(svg, d3.zoomIdentity.translate(180, 0));
 
     svg.append('text').attr('x', 12).attr('y', 20)
       .attr('fill', '#94a3b8').attr('font-size', '11px').attr('font-weight', '600')
