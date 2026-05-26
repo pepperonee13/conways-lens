@@ -1,6 +1,6 @@
 <template>
   <button class="floating-mapping-btn" v-if="!open" @click="open = true" title="Edit mappings">
-    <span>🗺</span>
+    <MapIcon :size="18" />
     <span>Mapping</span>
     <span v-if="teams.length" class="badge">{{ teams.length }}</span>
   </button>
@@ -12,8 +12,8 @@
   <transition name="slide-panel">
     <div v-if="open" class="panel">
       <div class="panel-header">
-        <h2 class="panel-title">🗺 Team Mapping</h2>
-        <button class="close-btn" @click="open = false">✕</button>
+        <h2 class="panel-title"><MapIcon :size="20" class="title-icon" /> Team Mapping</h2>
+        <button class="close-btn" @click="open = false" title="Close"><X :size="18" /></button>
       </div>
 
       <div class="panel-tabs">
@@ -37,7 +37,7 @@
           </p>
 
           <div v-if="teams.length && (unassignedAuthors.length || unassignedRepos.length)" class="unassigned-section">
-            <div class="unassigned-title">⚠ Unassigned</div>
+            <div class="unassigned-title"><AlertTriangle :size="14" /> Unassigned</div>
             <div class="unassigned-hint">Tip: drag any item below onto a team card to assign it.</div>
             <div v-if="unassignedAuthors.length" class="unassigned-group">
               <span class="unassigned-label">Authors not in any team:</span>
@@ -80,14 +80,14 @@
             >
               <div class="team-card-header">
                 <button class="team-toggle" @click="toggleTeam(team.id)" :title="isExpanded(team.id) ? 'Collapse' : 'Expand'">
-                  <span class="chevron" :class="{ rotated: isExpanded(team.id) }">›</span>
+                  <ChevronRight :size="16" class="chevron" :class="{ rotated: isExpanded(team.id) }" />
                 </button>
                 <input type="color" v-model="team.color" class="color-picker" :title="team.color" />
                 <input v-model="team.name" class="team-name-input" :placeholder="'Team ' + (idx + 1)" />
                 <span v-if="!isExpanded(team.id)" class="team-summary">
                   {{ team.authors.length }} authors · {{ team.repos.length }} repos
                 </span>
-                <button class="remove-team-btn" @click="askDeleteTeam(team)" title="Delete team">🗑</button>
+                <button class="remove-team-btn" @click="askDeleteTeam(team)" title="Delete team"><Trash2 :size="16" /></button>
               </div>
 
               <transition name="team-body">
@@ -95,7 +95,7 @@
                   <div class="section-label">Authors ({{ team.authors.length }})</div>
                   <div class="assigned-chips">
                     <span v-for="a in [...team.authors].sort()" :key="a" class="assigned-chip author-chip">
-                      {{ a }}<button class="chip-remove" @click="removeFrom(team, 'authors', a)">×</button>
+                      {{ a }}<button class="chip-remove" @click="removeFrom(team, 'authors', a)" title="Remove"><X :size="11" /></button>
                     </span>
                     <span v-if="!team.authors.length" class="empty-hint">No authors assigned</span>
                   </div>
@@ -121,7 +121,7 @@
                   <div class="section-label">Repositories ({{ team.repos.length }})</div>
                   <div class="assigned-chips">
                     <span v-for="r in [...team.repos].sort()" :key="r" class="assigned-chip repo-chip">
-                      {{ r }}<button class="chip-remove" @click="removeFrom(team, 'repos', r)">×</button>
+                      {{ r }}<button class="chip-remove" @click="removeFrom(team, 'repos', r)" title="Remove"><X :size="11" /></button>
                     </span>
                     <span v-if="!team.repos.length" class="empty-hint">No repositories assigned</span>
                   </div>
@@ -194,7 +194,7 @@
                 <span class="alias-raw">{{ raw }}</span>
                 <span class="alias-arrow-sm">→</span>
                 <span class="alias-canonical">{{ canonical }}</span>
-                <button class="alias-remove" @click="store.removeNormalization(raw)" title="Remove alias">✕</button>
+                <button class="alias-remove" @click="store.removeNormalization(raw)" title="Remove alias"><X :size="12" /></button>
               </div>
             </div>
           </template>
@@ -221,7 +221,7 @@
                 title="Click to unignore"
               >
                 <span class="pill-name">{{ a }}</span>
-                <span class="pill-x">✕</span>
+                <X :size="11" class="pill-x" />
               </button>
             </div>
           </template>
@@ -265,8 +265,8 @@
       <div class="panel-footer">
         <input ref="fileInput" type="file" accept=".json" class="hidden" @change="handleImport" />
         <span v-if="importError" class="import-error">{{ importError }}</span>
-        <button class="footer-btn footer-btn--secondary" @click="fileInput.click()">⬆ Import JSON</button>
-        <button class="footer-btn footer-btn--primary"   @click="handleExport">⬇ Export JSON</button>
+        <button class="footer-btn footer-btn--secondary" @click="fileInput.click()"><Upload :size="14" /> Import JSON</button>
+        <button class="footer-btn footer-btn--primary"   @click="handleExport"><Download :size="14" /> Export JSON</button>
       </div>
     </div>
   </transition>
@@ -299,6 +299,10 @@
 import { ref, computed, watch, onUnmounted } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useLensStore } from '../stores/useLensStore';
+import {
+  Map as MapIcon, X, ChevronRight, Trash2, AlertTriangle,
+  Upload, Download,
+} from 'lucide-vue-next';
 
 const store = useLensStore();
 const { teams, authorNormalizations, ignoredAuthors, allRawAuthors, allAuthors, allRepos, nodeColors } = storeToRefs(store);
@@ -573,11 +577,9 @@ async function handleImport(e) {
   @apply flex items-center justify-center w-6 h-6 rounded text-gray-400
          hover:text-brand-orange hover:bg-orange-50 transition-all flex-shrink-0 cursor-pointer;
 }
-.chevron {
-  display: inline-block; font-size: 14px; font-weight: 700; line-height: 1;
-  transition: transform 0.2s ease;
-}
+.chevron { transition: transform 0.2s ease; color: #6B7280; }
 .chevron.rotated { transform: rotate(90deg); }
+.title-icon { @apply inline-block align-text-bottom mr-1 text-brand-blue; }
 .team-summary { @apply text-xs text-gray-400 italic flex-1 min-w-0 truncate; }
 .team-body { @apply mt-3; }
 .team-name-row { @apply flex items-center gap-2 flex-1; }
@@ -621,7 +623,7 @@ async function handleImport(e) {
 .no-teams { @apply text-center text-gray-500 py-10 space-y-2; }
 .hint-text { @apply text-xs text-gray-400; }
 .unassigned-section { @apply mt-6 mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl; }
-.unassigned-title { @apply text-sm font-bold text-amber-700 mb-1; }
+.unassigned-title { @apply flex items-center gap-1.5 text-sm font-bold text-amber-700 mb-1; }
 .unassigned-hint { @apply text-xs text-amber-600/80 italic mb-3 flex items-center gap-1; }
 .unassigned-hint::before { content: '✋'; font-style: normal; }
 .unassigned-group { @apply mb-3; }
@@ -683,7 +685,7 @@ async function handleImport(e) {
   @apply flex items-center gap-2 px-5 py-3 border-t border-gray-200 bg-gray-50 flex-shrink-0;
 }
 .footer-btn {
-  @apply px-4 py-2 rounded-lg text-sm font-semibold cursor-pointer transition-all duration-150;
+  @apply inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold cursor-pointer transition-all duration-150;
 }
 .footer-btn--primary {
   @apply bg-brand-orange text-white hover:bg-brand-orange-dark ml-auto;
