@@ -161,6 +161,7 @@ import { useLensStore } from '../stores/useLensStore';
 import { useSwimlaneGraph } from '../composables/graphs/useSwimlaneGraph.js';
 import { useRepoDetailGraph } from '../composables/graphs/useRepoDetailGraph.js';
 import { useAnonymize } from '../composables/useAnonymize.js';
+import { DEFAULT_VIOLATION_THRESHOLD, DEFAULT_DISPLAY_AUTHORS } from '../config.js';
 
 const store = useLensStore();
 const {
@@ -178,17 +179,6 @@ const containerRef  = ref(null);
 const vizDropRef    = ref(null);
 const dims          = reactive({ w: 900, h: 600 });
 const detailRepoId  = ref(null);
-
-const DEFAULT_VIOLATION_THRESHOLD = (() => {
-  const raw = Number(import.meta.env.VITE_MIN_VIOLATION_PCT);
-  return Number.isFinite(raw) && raw >= 0 && raw <= 100 ? raw : 10;
-})();
-
-const DEFAULT_DISPLAY_AUTHORS = (() => {
-  const raw = import.meta.env.VITE_DISPLAY_AUTHORS_DEFAULT;
-  if (raw === undefined || raw === '') return true;
-  return String(raw).toLowerCase() !== 'false' && raw !== '0';
-})();
 
 const VIZ_DEFAULTS = {
   edgeWeight: true,

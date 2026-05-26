@@ -1,5 +1,6 @@
 import { computed } from 'vue'
 import { useLensStore } from '../stores/useLensStore.js'
+import { ANONYMIZE_AUTHORS } from '../config.js'
 
 const FIRST = [
   'Alice', 'Bob', 'Carol', 'David', 'Emma', 'Frank', 'Grace', 'Henry',
@@ -32,8 +33,7 @@ function fakeNameFor(canonical) {
 }
 
 export function useAnonymize() {
-  const enabled = import.meta.env.VITE_ANONYMIZE_AUTHORS === 'true'
-  if (!enabled) return { anonymize: n => n, enabled: false }
+  if (!ANONYMIZE_AUTHORS) return { anonymize: n => n, enabled: false }
 
   const store = useLensStore()
 
@@ -79,5 +79,5 @@ export function useAnonymize() {
     return canonicalMap.value[canonical] ?? canonicalMap.value[name] ?? name
   }
 
-  return { anonymize, enabled }
+  return { anonymize, enabled: true }
 }
