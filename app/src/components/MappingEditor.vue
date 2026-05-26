@@ -91,8 +91,16 @@
                 <button class="team-toggle" @click="toggleTeam(team.id)" :title="isExpanded(team.id) ? 'Collapse' : 'Expand'">
                   <ChevronRight :size="16" class="chevron" :class="{ rotated: isExpanded(team.id) }" />
                 </button>
-                <input type="color" v-model="team.color" class="color-picker" :title="team.color" />
-                <input v-model="team.name" class="team-name-input" :placeholder="'Team ' + (idx + 1)" />
+                <input type="color"
+                  :value="draftColor[team.id] ?? team.color"
+                  @input="onColorInput(team, $event.target.value)"
+                  @change="onColorChange(team, $event.target.value)"
+                  class="color-picker" :title="draftColor[team.id] ?? team.color" />
+                <input
+                  :value="draftName[team.id] ?? team.name"
+                  @input="onNameInput(team, $event.target.value)"
+                  @blur="onNameBlur(team, $event.target.value)"
+                  class="team-name-input" :placeholder="'Team ' + (idx + 1)" />
                 <span v-if="!isExpanded(team.id)" class="team-summary">
                   {{ team.authors.length }} authors · {{ team.repos.length }} repos
                 </span>
@@ -305,7 +313,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onUnmounted } from 'vue';
+import { ref, reactive, computed, watch, onUnmounted } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useLensStore } from '../stores/useLensStore';
 import {
@@ -351,7 +359,56 @@ const aliasAuthorGroups = computed(() => {
 const open = ref(false);
 const tab  = ref('teams');
 
-// ── Teams ──
+// ── Team name / color debouncing ──────────────────────────────────────────
+// Local draft values update immediately (keeping the input responsive), while
+// writes to the store are debounced so graphData only recomputes after the
+// user pauses (400 ms for text, 150 ms for colour).
+const draftName  = reactive({});
+const draftColor = reactive({});
+const _nameTimers  = {};
+const _colorTimers = {};
+
+// Initialize drafts for new teams; remove drafts for deleted teams.
+// Shallow watch — fires on push/splice/replace but NOT on property mutations
+// (which are our own debounced writes, so we don't want to re-init then).
+watch(teams, (newTeams) => {
+  const live = new Set(newTeams.map(t => t.id));
+  for (const id of Object.keys(draftName)) {
+    if (!live.has(id)) {
+      clearTimeout(_nameTimers[id]);  delete _nameTimers[id];
+      clearTimeout(_colorTimers[id]); delete _colorTimers[id];
+      delete draftName[id]; delete draftColor[id];
+    }
+  }
+  for (const t of newTeams) {
+    if (!(t.id in draftName)) { draftName[t.id] = t.name; draftColor[t.id] = t.color; }
+  }
+}, { immediate: true });
+
+function onNameInput(team, val) {
+  draftName[team.id] = val;
+  clearTimeout(_nameTimers[team.id]);
+  _nameTimers[team.id] = setTimeout(() => { team.name = val; }, 400);
+}
+function onNameBlur(team, val) {
+  clearTimeout(_nameTimers[team.id]);
+  delete _nameTimers[team.id];
+  if (team.name !== val) team.name = val;
+}
+function onColorInput(team, val) {
+  draftColor[team.id] = val;
+  clearTimeout(_colorTimers[team.id]);
+  _colorTimers[team.id] = setTimeout(() => { team.color = val; }, 150);
+}
+function onColorChange(team, val) {
+  // Flush immediately when the colour picker closes (mouseup / change event).
+  clearTimeout(_colorTimers[team.id]);
+  delete _colorTimers[team.id];
+  draftColor[team.id] = val;
+  if (team.color !== val) team.color = val;
+}
+
+// ── Teams ──────────────────────────────────────────────────────────────────
 const expandedTeams = ref(new Set());
 function isExpanded(id) { return expandedTeams.value.has(id); }
 function toggleTeam(id) {
@@ -378,7 +435,11 @@ watch(teamToDelete, t => {
   if (t) window.addEventListener('keydown', onModalKeydown);
   else   window.removeEventListener('keydown', onModalKeydown);
 });
-onUnmounted(() => window.removeEventListener('keydown', onModalKeydown));
+onUnmounted(() => {
+  window.removeEventListener('keydown', onModalKeydown);
+  for (const id in _nameTimers)  clearTimeout(_nameTimers[id]);
+  for (const id in _colorTimers) clearTimeout(_colorTimers[id]);
+});
 
 const ignoredSet = computed(() => new Set(ignoredAuthors.value));
 
@@ -516,6 +577,11 @@ async function handleImport(e) {
   if (!file) return;
   try {
     const text = await file.text();
+    // Clear all draft state before import so drafts reinitialise from the new store values.
+    for (const id in _nameTimers)  { clearTimeout(_nameTimers[id]);  delete _nameTimers[id]; }
+    for (const id in _colorTimers) { clearTimeout(_colorTimers[id]); delete _colorTimers[id]; }
+    for (const id of Object.keys(draftName))  delete draftName[id];
+    for (const id of Object.keys(draftColor)) delete draftColor[id];
     store.importMappings(JSON.parse(text));
     e.target.value = '';
   } catch (err) {
