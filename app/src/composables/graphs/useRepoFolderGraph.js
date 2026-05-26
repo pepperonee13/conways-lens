@@ -286,7 +286,7 @@ export function useRepoFolderGraph({
       .on('mouseenter', (e, d) => {
         highlightNode(d.id);
         onShowNodeTooltip(
-          { ...d, type: 'folder', pct: toPct(d.commits, repoTotal), action: d.hasChildren ? 'Click to explore subfolders' : '' },
+          { ...d, type: 'folder', pct: toPct(d.commits, repoTotal), folderFullPath: d.fullPath ?? d.id, action: d.hasChildren ? 'Click to explore subfolders' : '' },
           e.clientX + TOOLTIP_OFFSET.x, e.clientY + TOOLTIP_OFFSET.y
         );
       })
@@ -305,20 +305,23 @@ export function useRepoFolderGraph({
       .attr('fill', repoColor).attr('fill-opacity', 0.45)
       .attr('stroke', NODE.STROKE).attr('stroke-width', NODE.STROKE_WIDTH);
 
-    // Drill-in indicator for navigable folders
+    // Name inside the rect; shift left to leave room for › when drillable
+    folderEls.append('text')
+      .attr('text-anchor', 'middle')
+      .attr('x', d => d.hasChildren ? -10 : 0)
+      .attr('dy', '0.35em')
+      .attr('fill', NODE.STROKE).attr('font-size', '11px').attr('font-weight', '600')
+      .attr('pointer-events', 'none')
+      .text(d => d.id.length > 20 ? d.id.slice(0, 18) + '…' : d.id);
+
+    // › at right edge for drillable folders
     folderEls.filter(d => d.hasChildren).append('text')
-      .attr('text-anchor', 'middle').attr('dy', '0.35em')
+      .attr('text-anchor', 'middle')
+      .attr('x', FOLDER_HALF_W - 14)
+      .attr('dy', '0.35em')
       .attr('fill', NODE.STROKE).attr('font-size', '14px').attr('font-weight', '700')
       .attr('pointer-events', 'none')
       .text('›');
-
-    folderEls.append('text')
-      .attr('text-anchor', 'start')
-      .attr('x', -FOLDER_HALF_W + 6)
-      .attr('dy', FOLDER_H / 2 + NODE_LABEL_OFFSET)
-      .attr('fill', NODE.LABEL_COLOR).attr('font-size', NODE.LABEL_SIZE).attr('font-weight', '600')
-      .attr('pointer-events', 'none')
-      .text(d => d.id.length > 18 ? d.id.slice(0, 16) + '…' : d.id);
 
     // ── Left nodes ────────────────────────────────────────────────────────────
 

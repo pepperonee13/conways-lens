@@ -169,6 +169,7 @@
         </template>
         <template v-else>
           <div class="tt-name">{{ tooltipName }}</div>
+          <div v-if="tooltip.type === 'folder' && tooltip.folderFullPath" class="tt-path">{{ tooltip.folderFullPath }}</div>
           <div class="tt-detail">{{ tooltipDetail }}</div>
           <ul v-if="tooltip.type === 'repo' && tooltipContributions.length" class="tt-contribs">
             <li v-for="c in tooltipContributions" :key="c.teamId"
@@ -266,6 +267,7 @@ const tooltip = reactive({
   source: '', target: '', action: '',
   contributions: [], owningTeamId: null,
   authorContributions: null,
+  folderFullPath: null,
 });
 
 const tooltipName = computed(() => {
@@ -412,6 +414,7 @@ const folderRenderer = useRepoFolderGraph({
       teamName: d.teamName ?? '', repoCount: 0, authorCount: d.authors?.length ?? 0,
       action: d.action ?? '', contributions: [], owningTeamId: null,
       authorContributions: d.authorContributions ?? null,
+      folderFullPath: d.folderFullPath ?? null,
     });
   },
   onShowLinkTooltip: (d, x, y) => {
@@ -695,6 +698,7 @@ onMounted(() => {
   to   { opacity: 1; transform: translateX(-100%) translateY(0); }
 }
 .tt-name   { @apply font-bold text-brand-gray text-base; }
+.tt-path   { @apply text-gray-400 text-xs font-mono mt-0.5; }
 .tt-detail { @apply text-gray-500 text-xs mt-0.5; }
 .tt-action { @apply text-brand-blue text-xs mt-1 font-medium; }
 .tt-contribs {

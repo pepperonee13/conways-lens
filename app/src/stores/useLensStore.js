@@ -728,7 +728,8 @@ export const useLensStore = defineStore('lens', () => {
         (authorTotalShas[author] ??= new Set());
         shas.forEach(s => authorTotalShas[author].add(s));
       }
-      folderNodes.push({ id: segment, type: 'folder', commits: folderShas.size, hasChildren: segmentHasChildren[segment] ?? false });
+      const fullPath = folderPrefix ? `${folderPrefix}/${segment}` : segment;
+      folderNodes.push({ id: segment, type: 'folder', commits: folderShas.size, hasChildren: segmentHasChildren[segment] ?? false, fullPath });
     }
 
     const owningTeamId = allTeams.find(t => (t.repos ?? []).includes(repoId))?.id ?? null;
