@@ -115,8 +115,9 @@
 
           <div v-if="teams.length && (unassignedAuthors.length || unassignedRepos.length)" class="unassigned-section">
             <div class="unassigned-title">⚠ Unassigned</div>
+            <div class="unassigned-hint">Tip: drag any item below onto a team card to assign it.</div>
             <div v-if="unassignedAuthors.length" class="unassigned-group">
-              <span class="unassigned-label">Authors not in any team (drag onto a team to assign):</span>
+              <span class="unassigned-label">Authors not in any team:</span>
               <span
                 v-for="a in unassignedAuthors"
                 :key="a"
@@ -127,7 +128,7 @@
               >{{ anonymize(a) }}</span>
             </div>
             <div v-if="unassignedRepos.length" class="unassigned-group">
-              <span class="unassigned-label">Repositories not in any team (drag onto a team to assign):</span>
+              <span class="unassigned-label">Repositories not in any team:</span>
               <span
                 v-for="r in unassignedRepos"
                 :key="r"
@@ -473,7 +474,9 @@ async function handleImport(e) {
 .no-teams { @apply text-center text-gray-500 py-10 space-y-2; }
 .hint-text { @apply text-xs text-gray-400; }
 .unassigned-section { @apply mt-6 p-4 bg-amber-50 border border-amber-200 rounded-xl; }
-.unassigned-title { @apply text-sm font-bold text-amber-700 mb-3; }
+.unassigned-title { @apply text-sm font-bold text-amber-700 mb-1; }
+.unassigned-hint { @apply text-xs text-amber-600/80 italic mb-3 flex items-center gap-1; }
+.unassigned-hint::before { content: '✋'; font-style: normal; }
 .unassigned-group { @apply mb-2 flex flex-wrap items-center gap-2; }
 .unassigned-label { @apply text-xs text-amber-600 font-medium; }
 .unassigned-chip { @apply px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-800 border border-amber-300; }
