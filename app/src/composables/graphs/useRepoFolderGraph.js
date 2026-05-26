@@ -87,17 +87,10 @@ export function useRepoFolderGraph({
       g.totalCommits = g.authors.reduce((s, a) => s + (a.commits ?? 0), 0);
     }
 
-    const repoOwningTeamId = repoNode?.owningTeamId
-      ?? Object.values(teamGroups).sort((a, b) => b.totalCommits - a.totalCommits)[0]?.team.id
-      ?? null;
-    const threshold = violationThreshold?.value ?? 0;
-
-    const groups = Object.values(teamGroups).filter(g =>
-      g.team.id === repoOwningTeamId || (g.totalCommits / repoTotal) * 100 >= threshold
-    );
+    // Show all teams/authors present at this folder level — threshold only applies at repo level.
+    const groups = Object.values(teamGroups);
     if (unassigned.length) {
-      const uPct = (unassigned.reduce((s, a) => s + (a.commits ?? 0), 0) / repoTotal) * 100;
-      if (uPct >= threshold) groups.push({ team: null, authors: unassigned, totalCommits: uPct * repoTotal / 100 });
+      groups.push({ team: null, authors: unassigned, totalCommits: unassigned.reduce((s, a) => s + (a.commits ?? 0), 0) });
     }
 
     // author → { folderId → commits }
