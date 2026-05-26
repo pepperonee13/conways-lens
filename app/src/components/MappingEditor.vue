@@ -447,6 +447,7 @@ function addTeam() {
 
 // Team deletion is gated behind a confirmation modal — clicking the X or
 // the in-body delete button stages the team here; the modal commits or cancels.
+const aliasMergeConfirm = ref(null); // { raw, canonical } — staged alias merge awaiting confirmation
 const teamToDelete = ref(null);
 function askDeleteTeam(team) { teamToDelete.value = team; }
 function confirmDeleteTeam() {
@@ -546,8 +547,6 @@ function isMapped(author) { return author in authorNormalizations.value; }
 
 function onDragOver(author) { if (author !== dragSource.value) dragTarget.value = author; }
 function onDragLeave(author) { if (dragTarget.value === author) dragTarget.value = null; }
-
-const aliasMergeConfirm = ref(null); // { raw, canonical }
 
 function onDrop(canonical) {
   if (dragSource.value && dragSource.value !== canonical) {
