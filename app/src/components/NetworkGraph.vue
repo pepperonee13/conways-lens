@@ -240,6 +240,7 @@ const tooltip = reactive({
 
 const tooltipName = computed(() => {
   if (tooltip.type === 'team' || tooltip.type === 'team-collapsed') return tooltip.teamName;
+  if (tooltip.type === 'author') return anonymize(tooltip.name);
   return tooltip.name;
 });
 
@@ -334,7 +335,7 @@ const detailRenderer = useRepoDetailGraph({
   onShowLinkTooltip: (d, x, y) => {
     Object.assign(tooltip, {
       show: true, x, y, isLink: true,
-      source: d.authorId, target: typeof d.target === 'object' ? d.target.id : d.target,
+      source: anonymize(d.authorId), target: typeof d.target === 'object' ? d.target.id : d.target,
       commits: d.commits, pct: d.pct ?? null,
     });
   },
