@@ -206,24 +206,12 @@ export function useSwimlaneGraph({
       reposByTeam[tid].sort((a, b) => (b.commits ?? 0) - (a.commits ?? 0));
     }
 
-    // Identify which teams participate in at least one above-threshold violation —
-    // either as the owner of a repo with cross-team contributions ≥ threshold,
-    // or as the source of cross-team commits to another team's repo ≥ threshold.
-    const teamsWithViolation = new Set();
-    for (const n of data.nodes) {
-      if (n.type !== 'repo' || !n.commits) continue;
-      for (const c of (n.contributions ?? [])) {
-        if (c.teamId === n.owningTeamId) continue;
-        if ((c.commits / n.commits) * 100 < threshold) continue;
-        if (n.owningTeamId) teamsWithViolation.add(n.owningTeamId);
-        if (c.teamId)      teamsWithViolation.add(c.teamId);
-      }
-    }
-
-    // Order teams by violation severity desc (ties → preserve original order).
+    // A team is shown only if it has at least one violation — meaning at least
+    // one cross-team edge (incoming: another team committed to a repo it owns,
+    // or outgoing: one of its members committed to another team's repo).
     const severities = new Map(teams.map(t => [t.id, severityFor(t.id, data)]));
     const ordered = [...teams]
-      .filter(t => teamsWithViolation.has(t.id))
+      .filter(t => (severities.get(t.id) ?? 0) > 0)
       .sort((a, b) => (severities.get(b.id) - severities.get(a.id)));
 
     const gridLeft = LANE_LABEL_W;
