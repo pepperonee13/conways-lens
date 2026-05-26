@@ -188,23 +188,43 @@
         <!-- ── Ignored Authors ── -->
         <template v-if="tab === 'ignored'">
           <p class="panel-hint">
-            Ignored authors are removed from the graph entirely. Uses canonical names (after alias mappings are applied).
+            Click a pill to ignore an author (removes them from the graph entirely). Uses canonical names (after alias mappings are applied).
           </p>
 
-          <div class="author-toggle-list">
-            <div v-for="a in allAuthors" :key="a" :class="['author-toggle-row', { 'row-ignored': isIgnored(a) }]">
-              <span :class="['toggle-name', { 'name-ignored': isIgnored(a) }]">{{ anonymize(a) }}</span>
+          <template v-if="ignoredAuthorsSorted.length">
+            <div class="section-label section-label--ignored">Ignored ({{ ignoredAuthorsSorted.length }})</div>
+            <div class="author-pills-grid ignored-group">
               <button
-                :class="['toggle-btn', { 'toggle-btn--active': isIgnored(a) }]"
-                @click="isIgnored(a) ? store.unignoreAuthor(a) : store.ignoreAuthor(a)"
+                v-for="a in ignoredAuthorsSorted"
+                :key="a"
+                class="author-pill author-pill--ignored"
+                @click="store.unignoreAuthor(a)"
+                title="Click to unignore"
               >
-                {{ isIgnored(a) ? 'Unignore' : 'Ignore' }}
+                <span class="pill-name">{{ anonymize(a) }}</span>
+                <span class="pill-x">✕</span>
               </button>
             </div>
-            <p v-if="!allAuthors.length" class="hint-text" style="text-align:center;margin-top:2rem">
-              No authors found. Upload a CSV first.
-            </p>
+          </template>
+
+          <div v-if="activeAuthors.length" class="section-label" :class="{ 'mt-5': ignoredAuthorsSorted.length }">
+            Active ({{ activeAuthors.length }})
           </div>
+          <div class="author-pills-grid">
+            <button
+              v-for="a in activeAuthors"
+              :key="a"
+              class="author-pill author-pill--active"
+              @click="store.ignoreAuthor(a)"
+              title="Click to ignore"
+            >
+              <span class="pill-name">{{ anonymize(a) }}</span>
+            </button>
+          </div>
+
+          <p v-if="!allAuthors.length" class="hint-text" style="text-align:center;margin-top:2rem">
+            No authors found. Upload a CSV first.
+          </p>
         </template>
 
       </div>
@@ -335,6 +355,12 @@ function onDrop(canonical) {
 
 // ── Ignored Authors ──
 function isIgnored(name) { return ignoredAuthors.value.includes(name); }
+const ignoredAuthorsSorted = computed(() =>
+  allAuthors.value.filter(isIgnored).sort((a, b) => a.localeCompare(b))
+);
+const activeAuthors = computed(() =>
+  allAuthors.value.filter(a => !isIgnored(a))
+);
 
 // ── Import / Export ──
 const fileInput   = ref(null);
@@ -535,20 +561,17 @@ async function handleImport(e) {
 .import-error { @apply text-xs text-red-600 flex-1 truncate; }
 
 /* ── Ignored Authors ── */
-.author-toggle-list { @apply flex flex-col gap-1; }
-.author-toggle-row {
-  @apply flex items-center justify-between gap-3 px-3 py-2 rounded-lg
-         transition-colors hover:bg-gray-50;
+.section-label--ignored { @apply text-red-600 mt-0; }
+.ignored-group {
+  @apply p-3 bg-red-50/60 border border-red-200 rounded-xl;
 }
-.author-toggle-row.row-ignored { @apply bg-red-50/60; }
-.toggle-name { @apply text-sm text-brand-gray flex-1 min-w-0 truncate; }
-.toggle-name.name-ignored { @apply text-gray-400 line-through; }
-.toggle-btn {
-  @apply px-3 py-1 rounded-lg text-xs font-semibold flex-shrink-0 cursor-pointer
-         border border-gray-200 text-gray-500 hover:border-red-300 hover:text-red-600
-         transition-all;
+.author-pill--active {
+  @apply border-0 cursor-pointer hover:bg-red-500 hover:text-white;
 }
-.toggle-btn--active {
-  @apply border-green-300 text-green-700 hover:border-gray-200 hover:text-gray-500;
+.author-pill--ignored {
+  @apply bg-red-100 text-red-700 border border-red-300 cursor-pointer
+         hover:bg-red-200 transition-all;
 }
+.author-pill--ignored .pill-name { @apply line-through; }
+.pill-x { @apply text-red-500 font-bold text-[10px]; }
 </style>
