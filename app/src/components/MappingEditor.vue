@@ -64,7 +64,7 @@
                   <div class="section-label">Authors ({{ team.authors.length }})</div>
                   <div class="assigned-chips">
                     <span v-for="a in [...team.authors].sort()" :key="a" class="assigned-chip author-chip">
-                      {{ anonymize(a) }}<button class="chip-remove" @click="removeFrom(team, 'authors', a)">×</button>
+                      {{ a }}<button class="chip-remove" @click="removeFrom(team, 'authors', a)">×</button>
                     </span>
                     <span v-if="!team.authors.length" class="empty-hint">No authors assigned</span>
                   </div>
@@ -73,7 +73,7 @@
                       <div class="available-label">Add author:</div>
                       <div class="available-pills">
                         <button v-for="a in availableAuthorGroups(team).free" :key="a" class="available-pill" @click="addTo(team, 'authors', a)">
-                          + {{ anonymize(a) }}
+                          + {{ a }}
                         </button>
                       </div>
                     </template>
@@ -81,7 +81,7 @@
                       <div class="available-label available-label--shared">Also in another team:</div>
                       <div class="available-pills">
                         <button v-for="a in availableAuthorGroups(team).shared" :key="a" class="available-pill available-pill--shared" @click="addTo(team, 'authors', a)">
-                          + {{ anonymize(a) }}
+                          + {{ a }}
                         </button>
                       </div>
                     </template>
@@ -126,7 +126,7 @@
                   draggable="true"
                   @dragstart="onUnassignedDragStart('authors', a, $event)"
                   @dragend="onUnassignedDragEnd"
-                >{{ anonymize(a) }}</span>
+                >{{ a }}</span>
               </div>
             </div>
             <div v-if="unassignedRepos.length" class="unassigned-group">
@@ -170,8 +170,8 @@
               @dragleave.self="onDragLeave(author)"
               @drop.prevent="onDrop(author)"
             >
-              <span class="pill-name">{{ anonymize(author) }}</span>
-              <span v-if="isMapped(author)" class="pill-alias-badge">→ {{ anonymize(authorNormalizations[author]) }}</span>
+              <span class="pill-name">{{ author }}</span>
+              <span v-if="isMapped(author)" class="pill-alias-badge">→ {{ authorNormalizations[author] }}</span>
             </div>
           </div>
 
@@ -179,9 +179,9 @@
             <div class="section-label" style="margin-top:1.25rem">Active aliases ({{ normalizationCount }})</div>
             <div class="alias-list">
               <div v-for="[raw, canonical] in sortedNormalizations" :key="raw" class="alias-row">
-                <span class="alias-raw">{{ anonymize(raw) }}</span>
+                <span class="alias-raw">{{ raw }}</span>
                 <span class="alias-arrow-sm">→</span>
-                <span class="alias-canonical">{{ anonymize(canonical) }}</span>
+                <span class="alias-canonical">{{ canonical }}</span>
                 <button class="alias-remove" @click="store.removeNormalization(raw)" title="Remove alias">✕</button>
               </div>
             </div>
@@ -208,7 +208,7 @@
                 @click="store.unignoreAuthor(a)"
                 title="Click to unignore"
               >
-                <span class="pill-name">{{ anonymize(a) }}</span>
+                <span class="pill-name">{{ a }}</span>
                 <span class="pill-x">✕</span>
               </button>
             </div>
@@ -226,7 +226,7 @@
               @click="store.ignoreAuthor(a)"
               title="Click to ignore"
             >
-              <span class="pill-name">{{ anonymize(a) }}</span>
+              <span class="pill-name">{{ a }}</span>
             </button>
           </div>
 
@@ -252,7 +252,6 @@
 import { ref, computed } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useLensStore } from '../stores/useLensStore';
-import { useAnonymize } from '../composables/useAnonymize.js';
 
 const store = useLensStore();
 const { teams, authorNormalizations, ignoredAuthors, allRawAuthors, allAuthors, allRepos, nodeColors } = storeToRefs(store);
@@ -264,8 +263,6 @@ function aliasPillColor(rawAuthor) {
   const canonical = authorNormalizations.value[rawAuthor] ?? rawAuthor;
   return nodeColors.value[`author:${canonical}`] ?? null;
 }
-const { anonymize } = useAnonymize();
-
 const open = ref(false);
 const tab  = ref('teams');
 
