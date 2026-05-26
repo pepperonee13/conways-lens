@@ -87,7 +87,12 @@
                 <span v-if="!isExpanded(team.id)" class="team-summary">
                   {{ team.authors.length }} authors · {{ team.repos.length }} repos
                 </span>
-                <button class="remove-team-btn" @click="store.removeTeam(team.id)" title="Delete team">✕</button>
+                <button
+                  v-if="!isExpanded(team.id)"
+                  class="remove-team-btn"
+                  @click="askDeleteTeam(team)"
+                  title="Delete team"
+                >✕</button>
               </div>
 
               <transition name="team-body">
@@ -132,6 +137,12 @@
                         + {{ r }}
                       </button>
                     </div>
+                  </div>
+
+                  <div class="team-body-footer">
+                    <button class="delete-team-btn" @click="askDeleteTeam(team)">
+                      🗑 Delete team
+                    </button>
                   </div>
                 </div>
               </transition>
@@ -269,10 +280,33 @@
       </div>
     </div>
   </transition>
+
+  <!-- Team deletion confirmation modal -->
+  <Teleport to="body">
+    <transition name="modal-fade">
+      <div v-if="teamToDelete" class="modal-backdrop" @click.self="teamToDelete = null">
+        <div class="modal-dialog" role="dialog" aria-modal="true">
+          <div class="modal-header">
+            <span class="modal-swatch" :style="{ backgroundColor: teamToDelete.color }"></span>
+            <h3 class="modal-title">Delete team?</h3>
+          </div>
+          <p class="modal-body">
+            This will remove the team <strong>{{ teamToDelete.name }}</strong>
+            ({{ teamToDelete.authors.length }} authors, {{ teamToDelete.repos.length }} repos).
+            Members are not deleted — they'll appear as Unassigned.
+          </p>
+          <div class="modal-actions">
+            <button class="modal-btn modal-btn--secondary" @click="teamToDelete = null">Cancel</button>
+            <button class="modal-btn modal-btn--danger" @click="confirmDeleteTeam">Delete</button>
+          </div>
+        </div>
+      </div>
+    </transition>
+  </Teleport>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, watch, onUnmounted } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useLensStore } from '../stores/useLensStore';
 
@@ -327,6 +361,21 @@ function addTeam() {
   const newTeam = teams.value[teams.value.length - 1];
   if (newTeam) expandedTeams.value = new Set([...expandedTeams.value, newTeam.id]);
 }
+
+// Team deletion is gated behind a confirmation modal — clicking the X or
+// the in-body delete button stages the team here; the modal commits or cancels.
+const teamToDelete = ref(null);
+function askDeleteTeam(team) { teamToDelete.value = team; }
+function confirmDeleteTeam() {
+  if (teamToDelete.value) store.removeTeam(teamToDelete.value.id);
+  teamToDelete.value = null;
+}
+const onModalKeydown = e => { if (e.key === 'Escape') teamToDelete.value = null; };
+watch(teamToDelete, t => {
+  if (t) window.addEventListener('keydown', onModalKeydown);
+  else   window.removeEventListener('keydown', onModalKeydown);
+});
+onUnmounted(() => window.removeEventListener('keydown', onModalKeydown));
 
 const ignoredSet = computed(() => new Set(ignoredAuthors.value));
 
@@ -685,5 +734,43 @@ async function handleImport(e) {
   background-color: #ef4444;
   color: #fff;
   border-color: #ef4444;
+}
+
+/* ── In-body delete button ── */
+.team-body-footer { @apply mt-4 pt-3 border-t border-gray-100 flex justify-end; }
+.delete-team-btn {
+  @apply flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold
+         text-red-600 bg-white border border-red-200
+         hover:bg-red-50 hover:border-red-300 transition-all duration-150 cursor-pointer;
+}
+
+/* ── Confirmation modal ── */
+.modal-backdrop {
+  @apply fixed inset-0 z-[100] flex items-center justify-center bg-gray-900/40 backdrop-blur-sm;
+}
+.modal-dialog {
+  @apply bg-white rounded-2xl shadow-2xl border border-gray-200 max-w-md w-[92%] p-6;
+}
+.modal-header { @apply flex items-center gap-3 mb-3; }
+.modal-swatch { @apply inline-block w-3 h-3 rounded-full flex-shrink-0; }
+.modal-title  { @apply text-lg font-bold text-gray-800; }
+.modal-body   { @apply text-sm text-gray-600 leading-relaxed; }
+.modal-actions { @apply mt-5 flex justify-end gap-2; }
+.modal-btn {
+  @apply px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-150 cursor-pointer;
+}
+.modal-btn--secondary {
+  @apply bg-white text-gray-600 border border-gray-200 hover:bg-gray-50;
+}
+.modal-btn--danger {
+  @apply bg-red-500 text-white hover:bg-red-600;
+}
+.modal-fade-enter-active, .modal-fade-leave-active { transition: opacity 0.15s ease; }
+.modal-fade-enter-active .modal-dialog, .modal-fade-leave-active .modal-dialog {
+  transition: transform 0.15s ease;
+}
+.modal-fade-enter-from, .modal-fade-leave-to { opacity: 0; }
+.modal-fade-enter-from .modal-dialog, .modal-fade-leave-to .modal-dialog {
+  transform: scale(0.96);
 }
 </style>
