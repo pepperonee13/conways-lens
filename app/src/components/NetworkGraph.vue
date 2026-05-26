@@ -1,7 +1,7 @@
 <template>
   <div :class="['graph-wrap', { 'graph-wrap--fullscreen': isFullscreen }]" ref="containerRef">
     <div class="graph-header">
-      <h3 v-if="!isFullscreen" class="graph-title">Conway's Law Violation Graph</h3>
+      <h3 v-if="!isFullscreen" class="graph-title">Team ownership lens</h3>
       <div class="graph-desc-row">
         <p v-if="!isFullscreen && !detailRepoId" class="graph-desc">
           <span class="legend"><span class="legend-team"></span>Team lane</span>
@@ -240,6 +240,7 @@ const tooltip = reactive({
 
 const tooltipName = computed(() => {
   if (tooltip.type === 'team' || tooltip.type === 'team-collapsed') return tooltip.teamName;
+  if (tooltip.type === 'author') return anonymize(tooltip.name);
   return tooltip.name;
 });
 
@@ -260,18 +261,23 @@ const tooltipContributions = computed(() => {
   if (tooltip.type !== 'repo') return [];
   const total = tooltip.commits || 0;
   if (!total) return [];
-  return tooltip.contributions.map(c => ({
-    teamId: c.teamId,
-    teamColor: c.teamColor,
-    teamName: effectiveTeams.value.find(t => t.id === c.teamId)?.name ?? c.teamId,
-    commits: c.commits,
-    pct: ((c.commits / total) * 100).toFixed(1).replace(/\.0$/, ''),
-  })).sort((a, b) => {
-    const aOwner = a.teamId === tooltip.owningTeamId ? 1 : 0;
-    const bOwner = b.teamId === tooltip.owningTeamId ? 1 : 0;
-    if (aOwner !== bOwner) return bOwner - aOwner;
-    return b.commits - a.commits;
-  });
+  const threshold = violationThreshold.value;
+  return tooltip.contributions
+    .filter(c =>
+      c.teamId === tooltip.owningTeamId || (c.commits / total) * 100 >= threshold
+    )
+    .map(c => ({
+      teamId: c.teamId,
+      teamColor: c.teamColor,
+      teamName: effectiveTeams.value.find(t => t.id === c.teamId)?.name ?? c.teamId,
+      commits: c.commits,
+      pct: ((c.commits / total) * 100).toFixed(1).replace(/\.0$/, ''),
+    })).sort((a, b) => {
+      const aOwner = a.teamId === tooltip.owningTeamId ? 1 : 0;
+      const bOwner = b.teamId === tooltip.owningTeamId ? 1 : 0;
+      if (aOwner !== bOwner) return bOwner - aOwner;
+      return b.commits - a.commits;
+    });
 });
 
 function displayNodeName(id) {
@@ -334,7 +340,7 @@ const detailRenderer = useRepoDetailGraph({
   onShowLinkTooltip: (d, x, y) => {
     Object.assign(tooltip, {
       show: true, x, y, isLink: true,
-      source: d.authorId, target: typeof d.target === 'object' ? d.target.id : d.target,
+      source: anonymize(d.authorId), target: typeof d.target === 'object' ? d.target.id : d.target,
       commits: d.commits, pct: d.pct ?? null,
     });
   },

@@ -39,7 +39,14 @@
           <button class="add-team-btn" @click="addTeam()">+ Add Team</button>
 
           <div class="teams-list">
-            <div v-for="(team, idx) in teams" :key="team.id" class="team-card">
+            <div
+              v-for="(team, idx) in teams"
+              :key="team.id"
+              :class="['team-card', { 'team-card--drop-target': dropTargetTeamId === team.id }]"
+              @dragover.prevent="onTeamDragOver(team.id)"
+              @dragleave="onTeamDragLeave(team.id, $event)"
+              @drop.prevent="onTeamDrop(team)"
+            >
               <div class="team-card-header">
                 <button class="team-toggle" @click="toggleTeam(team.id)" :title="isExpanded(team.id) ? 'Collapse' : 'Expand'">
                   <span class="chevron" :class="{ rotated: isExpanded(team.id) }">›</span>
@@ -57,7 +64,7 @@
                   <div class="section-label">Authors ({{ team.authors.length }})</div>
                   <div class="assigned-chips">
                     <span v-for="a in [...team.authors].sort()" :key="a" class="assigned-chip author-chip">
-                      {{ anonymize(a) }}<button class="chip-remove" @click="removeFrom(team, 'authors', a)">×</button>
+                      {{ a }}<button class="chip-remove" @click="removeFrom(team, 'authors', a)">×</button>
                     </span>
                     <span v-if="!team.authors.length" class="empty-hint">No authors assigned</span>
                   </div>
@@ -66,7 +73,7 @@
                       <div class="available-label">Add author:</div>
                       <div class="available-pills">
                         <button v-for="a in availableAuthorGroups(team).free" :key="a" class="available-pill" @click="addTo(team, 'authors', a)">
-                          + {{ anonymize(a) }}
+                          + {{ a }}
                         </button>
                       </div>
                     </template>
@@ -74,7 +81,7 @@
                       <div class="available-label available-label--shared">Also in another team:</div>
                       <div class="available-pills">
                         <button v-for="a in availableAuthorGroups(team).shared" :key="a" class="available-pill available-pill--shared" @click="addTo(team, 'authors', a)">
-                          + {{ anonymize(a) }}
+                          + {{ a }}
                         </button>
                       </div>
                     </template>
@@ -108,13 +115,32 @@
 
           <div v-if="teams.length && (unassignedAuthors.length || unassignedRepos.length)" class="unassigned-section">
             <div class="unassigned-title">⚠ Unassigned</div>
+            <div class="unassigned-hint">Tip: drag any item below onto a team card to assign it.</div>
             <div v-if="unassignedAuthors.length" class="unassigned-group">
               <span class="unassigned-label">Authors not in any team:</span>
-              <span v-for="a in unassignedAuthors" :key="a" class="unassigned-chip">{{ anonymize(a) }}</span>
+              <div class="unassigned-chips">
+                <span
+                  v-for="a in unassignedAuthors"
+                  :key="a"
+                  :class="['unassigned-chip', 'unassigned-chip--draggable', { 'unassigned-chip--dragging': unassignedDrag?.kind === 'authors' && unassignedDrag?.value === a }]"
+                  draggable="true"
+                  @dragstart="onUnassignedDragStart('authors', a, $event)"
+                  @dragend="onUnassignedDragEnd"
+                >{{ a }}</span>
+              </div>
             </div>
             <div v-if="unassignedRepos.length" class="unassigned-group">
               <span class="unassigned-label">Repositories not in any team:</span>
-              <span v-for="r in unassignedRepos" :key="r" class="unassigned-chip">{{ r }}</span>
+              <div class="unassigned-chips">
+                <span
+                  v-for="r in unassignedRepos"
+                  :key="r"
+                  :class="['unassigned-chip', 'unassigned-chip--draggable', { 'unassigned-chip--dragging': unassignedDrag?.kind === 'repos' && unassignedDrag?.value === r }]"
+                  draggable="true"
+                  @dragstart="onUnassignedDragStart('repos', r, $event)"
+                  @dragend="onUnassignedDragEnd"
+                >{{ r }}</span>
+              </div>
             </div>
           </div>
         </template>
@@ -134,7 +160,9 @@
                 'pill-mapped':       isMapped(author),
                 'pill-dragging':     dragSource === author,
                 'pill-drop-target':  dragTarget === author,
+                'pill-teamed':       !isMapped(author) && !!aliasPillColor(author),
               }]"
+              :style="!isMapped(author) && aliasPillColor(author) ? { backgroundColor: aliasPillColor(author) } : null"
               draggable="true"
               @dragstart="dragSource = author"
               @dragend="dragSource = null; dragTarget = null"
@@ -142,8 +170,8 @@
               @dragleave.self="onDragLeave(author)"
               @drop.prevent="onDrop(author)"
             >
-              <span class="pill-name">{{ anonymize(author) }}</span>
-              <span v-if="isMapped(author)" class="pill-alias-badge">→ {{ anonymize(authorNormalizations[author]) }}</span>
+              <span class="pill-name">{{ author }}</span>
+              <span v-if="isMapped(author)" class="pill-alias-badge">→ {{ authorNormalizations[author] }}</span>
             </div>
           </div>
 
@@ -151,9 +179,9 @@
             <div class="section-label" style="margin-top:1.25rem">Active aliases ({{ normalizationCount }})</div>
             <div class="alias-list">
               <div v-for="[raw, canonical] in sortedNormalizations" :key="raw" class="alias-row">
-                <span class="alias-raw">{{ anonymize(raw) }}</span>
+                <span class="alias-raw">{{ raw }}</span>
                 <span class="alias-arrow-sm">→</span>
-                <span class="alias-canonical">{{ anonymize(canonical) }}</span>
+                <span class="alias-canonical">{{ canonical }}</span>
                 <button class="alias-remove" @click="store.removeNormalization(raw)" title="Remove alias">✕</button>
               </div>
             </div>
@@ -166,23 +194,45 @@
         <!-- ── Ignored Authors ── -->
         <template v-if="tab === 'ignored'">
           <p class="panel-hint">
-            Ignored authors are removed from the graph entirely. Uses canonical names (after alias mappings are applied).
+            Click a pill to ignore an author (removes them from the graph entirely). Uses canonical names (after alias mappings are applied).
           </p>
 
-          <div class="author-toggle-list">
-            <div v-for="a in allAuthors" :key="a" :class="['author-toggle-row', { 'row-ignored': isIgnored(a) }]">
-              <span :class="['toggle-name', { 'name-ignored': isIgnored(a) }]">{{ anonymize(a) }}</span>
+          <template v-if="ignoredAuthorsSorted.length">
+            <div class="section-label section-label--ignored">Ignored ({{ ignoredAuthorsSorted.length }})</div>
+            <div class="author-pills-grid ignored-group">
               <button
-                :class="['toggle-btn', { 'toggle-btn--active': isIgnored(a) }]"
-                @click="isIgnored(a) ? store.unignoreAuthor(a) : store.ignoreAuthor(a)"
+                v-for="a in ignoredAuthorsSorted"
+                :key="a"
+                class="author-pill author-pill--ignored"
+                :style="teamColor(a) ? { borderColor: teamColor(a), color: teamColor(a) } : null"
+                @click="store.unignoreAuthor(a)"
+                title="Click to unignore"
               >
-                {{ isIgnored(a) ? 'Unignore' : 'Ignore' }}
+                <span class="pill-name">{{ a }}</span>
+                <span class="pill-x">✕</span>
               </button>
             </div>
-            <p v-if="!allAuthors.length" class="hint-text" style="text-align:center;margin-top:2rem">
-              No authors found. Upload a CSV first.
-            </p>
+          </template>
+
+          <div v-if="activeAuthors.length" class="section-label" :class="{ 'mt-5': ignoredAuthorsSorted.length }">
+            Active ({{ activeAuthors.length }})
           </div>
+          <div class="author-pills-grid">
+            <button
+              v-for="a in activeAuthors"
+              :key="a"
+              :class="['author-pill', 'author-pill--active', { 'pill-teamed': !!teamColor(a) }]"
+              :style="teamColor(a) ? { backgroundColor: teamColor(a) } : null"
+              @click="store.ignoreAuthor(a)"
+              title="Click to ignore"
+            >
+              <span class="pill-name">{{ a }}</span>
+            </button>
+          </div>
+
+          <p v-if="!allAuthors.length" class="hint-text" style="text-align:center;margin-top:2rem">
+            No authors found. Upload a CSV first.
+          </p>
         </template>
 
       </div>
@@ -202,12 +252,17 @@
 import { ref, computed } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useLensStore } from '../stores/useLensStore';
-import { useAnonymize } from '../composables/useAnonymize.js';
 
 const store = useLensStore();
-const { teams, authorNormalizations, ignoredAuthors, allRawAuthors, allAuthors, allRepos } = storeToRefs(store);
-const { anonymize } = useAnonymize();
+const { teams, authorNormalizations, ignoredAuthors, allRawAuthors, allAuthors, allRepos, nodeColors } = storeToRefs(store);
 
+function teamColor(canonicalAuthor) {
+  return nodeColors.value[`author:${canonicalAuthor}`] ?? null;
+}
+function aliasPillColor(rawAuthor) {
+  const canonical = authorNormalizations.value[rawAuthor] ?? rawAuthor;
+  return nodeColors.value[`author:${canonical}`] ?? null;
+}
 const open = ref(false);
 const tab  = ref('teams');
 
@@ -261,6 +316,35 @@ const unassignedRepos = computed(() => {
   return allRepos.value.filter(r => !assigned.has(r));
 });
 
+// ── Drag unassigned author/repo → team ──
+const unassignedDrag = ref(null); // { kind: 'authors' | 'repos', value: string }
+const dropTargetTeamId = ref(null);
+
+function onUnassignedDragStart(kind, value, e) {
+  unassignedDrag.value = { kind, value };
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', value);
+  }
+}
+function onUnassignedDragEnd() {
+  unassignedDrag.value = null;
+  dropTargetTeamId.value = null;
+}
+function onTeamDragOver(teamId) {
+  if (unassignedDrag.value) dropTargetTeamId.value = teamId;
+}
+function onTeamDragLeave(teamId, e) {
+  if (e.currentTarget.contains(e.relatedTarget)) return;
+  if (dropTargetTeamId.value === teamId) dropTargetTeamId.value = null;
+}
+function onTeamDrop(team) {
+  const drag = unassignedDrag.value;
+  if (drag) addTo(team, drag.kind, drag.value);
+  unassignedDrag.value = null;
+  dropTargetTeamId.value = null;
+}
+
 // ── Author Aliases ──
 const dragSource = ref(null);
 const dragTarget = ref(null);
@@ -284,6 +368,12 @@ function onDrop(canonical) {
 
 // ── Ignored Authors ──
 function isIgnored(name) { return ignoredAuthors.value.includes(name); }
+const ignoredAuthorsSorted = computed(() =>
+  allAuthors.value.filter(isIgnored).sort((a, b) => a.localeCompare(b))
+);
+const activeAuthors = computed(() =>
+  allAuthors.value.filter(a => !isIgnored(a))
+);
 
 // ── Import / Export ──
 const fileInput   = ref(null);
@@ -423,10 +513,21 @@ async function handleImport(e) {
 .no-teams { @apply text-center text-gray-500 py-10 space-y-2; }
 .hint-text { @apply text-xs text-gray-400; }
 .unassigned-section { @apply mt-6 p-4 bg-amber-50 border border-amber-200 rounded-xl; }
-.unassigned-title { @apply text-sm font-bold text-amber-700 mb-3; }
-.unassigned-group { @apply mb-2 flex flex-wrap items-center gap-2; }
-.unassigned-label { @apply text-xs text-amber-600 font-medium; }
+.unassigned-title { @apply text-sm font-bold text-amber-700 mb-1; }
+.unassigned-hint { @apply text-xs text-amber-600/80 italic mb-3 flex items-center gap-1; }
+.unassigned-hint::before { content: '✋'; font-style: normal; }
+.unassigned-group { @apply mb-3; }
+.unassigned-label { @apply block text-xs text-amber-600 font-medium mb-1.5; }
+.unassigned-chips { @apply flex flex-wrap gap-1.5; }
 .unassigned-chip { @apply px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-800 border border-amber-300; }
+.unassigned-chip--draggable { @apply cursor-grab select-none; }
+.unassigned-chip--draggable:active { @apply cursor-grabbing; }
+.unassigned-chip--dragging { @apply opacity-40; }
+.team-card { @apply transition-all duration-150; }
+.team-card--drop-target {
+  @apply ring-2 ring-brand-orange ring-offset-1 bg-orange-50 border-brand-orange;
+}
+.team-card--drop-target * { pointer-events: none; }
 
 /* ── Team body transition ── */
 .team-body-enter-active { transition: max-height 0.25s ease, opacity 0.2s ease; }
@@ -474,20 +575,17 @@ async function handleImport(e) {
 .import-error { @apply text-xs text-red-600 flex-1 truncate; }
 
 /* ── Ignored Authors ── */
-.author-toggle-list { @apply flex flex-col gap-1; }
-.author-toggle-row {
-  @apply flex items-center justify-between gap-3 px-3 py-2 rounded-lg
-         transition-colors hover:bg-gray-50;
+.section-label--ignored { @apply text-red-600 mt-0; }
+.ignored-group {
+  @apply p-3 bg-red-50/60 border border-red-200 rounded-xl;
 }
-.author-toggle-row.row-ignored { @apply bg-red-50/60; }
-.toggle-name { @apply text-sm text-brand-gray flex-1 min-w-0 truncate; }
-.toggle-name.name-ignored { @apply text-gray-400 line-through; }
-.toggle-btn {
-  @apply px-3 py-1 rounded-lg text-xs font-semibold flex-shrink-0 cursor-pointer
-         border border-gray-200 text-gray-500 hover:border-red-300 hover:text-red-600
-         transition-all;
+.author-pill--active {
+  @apply border-0 cursor-pointer hover:bg-red-500 hover:text-white;
 }
-.toggle-btn--active {
-  @apply border-green-300 text-green-700 hover:border-gray-200 hover:text-gray-500;
+.author-pill--ignored {
+  @apply bg-red-100 text-red-700 border border-red-300 cursor-pointer
+         hover:bg-red-200 transition-all;
 }
+.author-pill--ignored .pill-name { @apply line-through; }
+.pill-x { @apply text-red-500 font-bold text-[10px]; }
 </style>

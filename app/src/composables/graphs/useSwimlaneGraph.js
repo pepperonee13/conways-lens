@@ -206,9 +206,13 @@ export function useSwimlaneGraph({
       reposByTeam[tid].sort((a, b) => (b.commits ?? 0) - (a.commits ?? 0));
     }
 
-    // Order teams by violation severity desc (ties → preserve original order).
+    // A team is shown only if it has at least one violation — meaning at least
+    // one cross-team edge (incoming: another team committed to a repo it owns,
+    // or outgoing: one of its members committed to another team's repo).
     const severities = new Map(teams.map(t => [t.id, severityFor(t.id, data)]));
-    const ordered = [...teams].sort((a, b) => (severities.get(b.id) - severities.get(a.id)));
+    const ordered = [...teams]
+      .filter(t => (severities.get(t.id) ?? 0) > 0)
+      .sort((a, b) => (severities.get(b.id) - severities.get(a.id)));
 
     const gridLeft = LANE_LABEL_W;
     const usableW  = Math.max(REPO_SLOT_W, W - gridLeft - 24);

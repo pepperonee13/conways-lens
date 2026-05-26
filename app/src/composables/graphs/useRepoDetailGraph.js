@@ -43,7 +43,7 @@ export function useRepoDetailGraph({
       .attr('stroke-width', d => edgeWidth(d))
       .attr('display',      null)
       .attr('opacity',      EDGE.HL_OPACITY);
-    if (linkLabelEls) linkLabelEls.attr('display', 'none');
+    if (linkLabelEls) linkLabelEls.attr('display', null);
   }
 
   function highlightNode(d) {
@@ -53,6 +53,7 @@ export function useRepoDetailGraph({
       .attr('display', l => l.nodeId === d.id ? null : 'none')
       .attr('opacity', EDGE.HL_OPACITY);
     if (linkLabelEls) linkLabelEls.attr('display', l => l.nodeId === d.id ? null : 'none');
+    if (linkLabelEls) linkLabelEls.filter(l => l.nodeId === d.id).raise();
   }
 
   function resetHighlight() {
@@ -115,8 +116,12 @@ export function useRepoDetailGraph({
 
     const teams = effectiveTeams.value;
     const authorTeam = {};
+    // First assignment wins — must match the store's authorToTeamId logic so
+    // contribution percentages line up between the swimlane and detail views.
     for (const t of teams) {
-      for (const a of (t.authors ?? [])) authorTeam[a] = t;
+      for (const a of (t.authors ?? [])) {
+        if (!(a in authorTeam)) authorTeam[a] = t;
+      }
     }
 
     const teamGroups = {};
@@ -135,8 +140,11 @@ export function useRepoDetailGraph({
       g.totalCommits = g.authors.reduce((s, a) => s + (a.commits ?? 0), 0);
     }
 
-    const repoOwningTeamId = Object.values(teamGroups)
-      .sort((a, b) => b.totalCommits - a.totalCommits)[0]?.team.id ?? null;
+    // Prefer the configured owning team (from team mappings). Fall back to the
+    // top contributor when the repo isn't assigned to any team.
+    const repoOwningTeamId = repoNode?.owningTeamId
+      ?? Object.values(teamGroups).sort((a, b) => b.totalCommits - a.totalCommits)[0]?.team.id
+      ?? null;
 
     const threshold = violationThreshold?.value ?? 0;
     const groups = Object.values(teamGroups).filter(g =>
@@ -333,7 +341,7 @@ export function useRepoDetailGraph({
       .on('mousemove',  e => onMoveTooltip(e.clientX + TOOLTIP_OFFSET.x, e.clientY + TOOLTIP_OFFSET.y))
       .on('mouseleave', () => { resetHighlight(); onHideTooltip(); });
 
-    // Edge pct badge (shown only on node hover)
+    // Edge pct badge (always visible)
     linkLabelEls = root.append('g')
       .selectAll('g').data(links).join('g')
       .attr('transform', d => {
@@ -343,7 +351,6 @@ export function useRepoDetailGraph({
         return `translate(${(pos.x + end.lx2) / 2},${(pos.y + end.ly2) / 2})`;
       })
       .attr('pointer-events', 'none')
-      .attr('display', 'none')
       .each(function(d) {
         const g     = d3.select(this);
         const label = `${d.pct}%`;
@@ -369,7 +376,12 @@ export function useRepoDetailGraph({
         highlightNode(d);
         const authorContributions = d.type === 'team-collapsed'
           ? d.authors
-              .map(a => ({ authorId: a.id, commits: a.commits, pct: toPct(a.commits, repoTotal) }))
+              .map(a => ({
+                authorId: a.id,
+                commits: a.commits,
+                pct: toPct(a.commits, repoTotal),
+                teamColor: d.team?.color ?? null,
+              }))
               .sort((a, b) => b.commits - a.commits)
           : null;
         onShowNodeTooltip(
