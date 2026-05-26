@@ -153,7 +153,7 @@
           <ul v-if="tooltip.authorContributions?.length" class="tt-contribs tt-contribs--authors">
             <li v-for="a in tooltip.authorContributions" :key="a.authorId">
               <span class="tt-contrib-dot" :style="{ background: a.teamColor || '#9CA3AF' }"></span>
-              <span class="tt-contrib-name">{{ anonymize(a.authorId) }}</span>
+              <span class="tt-contrib-name">{{ anonMap[a.authorId] ?? a.authorId }}</span>
               <span class="tt-contrib-pct">{{ a.pct }}%</span>
             </li>
           </ul>
@@ -240,7 +240,7 @@ const tooltip = reactive({
 
 const tooltipName = computed(() => {
   if (tooltip.type === 'team' || tooltip.type === 'team-collapsed') return tooltip.teamName;
-  if (tooltip.type === 'author') return anonymize(tooltip.name);
+  if (tooltip.type === 'author') return anonMap.value[tooltip.name] ?? tooltip.name;
   return tooltip.name;
 });
 
@@ -291,6 +291,18 @@ function displayNodeName(id) {
 
 const { anonymize } = useAnonymize();
 
+const anonMap = computed(() => {
+  const map = {};
+  for (const node of ownershipGraphData.value.nodes) {
+    if (node.type === 'author') map[node.id] = anonymize(node.id);
+    if (node.authorContributions) {
+      for (const a of node.authorContributions)
+        if (!(a.authorId in map)) map[a.authorId] = anonymize(a.authorId);
+    }
+  }
+  return map;
+});
+
 // ── Renderer ──────────────────────────────────────────────────────────────
 const renderer = useSwimlaneGraph({
   svgRef,
@@ -326,7 +338,7 @@ const detailRenderer = useRepoDetailGraph({
   svgRef: detailSvgRef,
   effectiveTeams,
   getNodeColor: store.getNodeColor,
-  anonymize,
+  anonMap,
   violationThreshold,
   onShowNodeTooltip: (d, x, y) => {
     Object.assign(tooltip, {
@@ -340,7 +352,7 @@ const detailRenderer = useRepoDetailGraph({
   onShowLinkTooltip: (d, x, y) => {
     Object.assign(tooltip, {
       show: true, x, y, isLink: true,
-      source: anonymize(d.authorId), target: typeof d.target === 'object' ? d.target.id : d.target,
+      source: anonMap.value[d.authorId] ?? d.authorId, target: typeof d.target === 'object' ? d.target.id : d.target,
       commits: d.commits, pct: d.pct ?? null,
     });
   },

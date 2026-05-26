@@ -11,7 +11,7 @@ export function useRepoDetailGraph({
   svgRef,
   effectiveTeams,
   getNodeColor,
-  anonymize,
+  anonMap,
   onShowNodeTooltip,
   onShowLinkTooltip,
   onMoveTooltip,
@@ -419,7 +419,7 @@ export function useRepoDetailGraph({
       .attr('dy', d => rScale(d.commits) + NODE_LABEL_OFFSET)
       .attr('fill', NODE.LABEL_COLOR).attr('font-size', NODE.LABEL_SIZE).attr('font-weight', '600')
       .attr('pointer-events', 'none')
-      .text(d => anonymize(d.id));
+      .text(d => anonMap.value[d.id] ?? d.id);
 
     // ── Collapse buttons ─────────────────────────────────────────────────────
 
