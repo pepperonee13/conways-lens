@@ -139,7 +139,7 @@
                         :checked="filterAuthorIds.has(author)"
                         @change="store.setFilterAuthor(author, $event.target.checked)"
                       />
-                      <span class="item-name" :title="author">{{ author }}</span>
+                      <span class="item-name" :title="anonymize(author)">{{ anonymize(author) }}</span>
                     </label>
                   </div>
                   <p v-else class="sub-empty">No authors assigned</p>
@@ -169,9 +169,11 @@ import { ref, computed } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useLensStore } from '../stores/useLensStore';
 import { SlidersHorizontal, X, Check, Search, ChevronRight, Info } from 'lucide-vue-next';
+import { useAnonymize } from '../composables/useAnonymize.js';
 
 const store = useLensStore();
 const { teams, syntheticTeam, filterTeamIds, filterRepoIds, filterAuthorIds } = storeToRefs(store);
+const { anonymize } = useAnonymize();
 
 const open        = ref(false);
 const searchQuery = ref('');
@@ -190,7 +192,7 @@ const filteredTeams = computed(() => {
   return filterableTeams.value.flatMap(team => {
     const teamHit = !q || team.name.toLowerCase().includes(q);
     const repos   = (teamHit ? [...team.repos] : team.repos.filter(r => r.toLowerCase().includes(q))).sort();
-    const authors = (teamHit ? [...team.authors] : team.authors.filter(a => a.toLowerCase().includes(q))).sort();
+    const authors = (teamHit ? [...team.authors] : team.authors.filter(a => anonymize(a).toLowerCase().includes(q))).sort();
 
     if (q && !teamHit && repos.length === 0 && authors.length === 0) return [];
 
