@@ -152,26 +152,35 @@
             Useful when the same person appears under multiple git identities.
           </p>
 
-          <div class="author-pills-grid">
-            <div
-              v-for="author in allRawAuthors"
-              :key="author"
-              :class="['author-pill', {
-                'pill-mapped':       isMapped(author),
-                'pill-dragging':     dragSource === author,
-                'pill-drop-target':  dragTarget === author,
-                'pill-teamed':       !isMapped(author) && !!aliasPillColor(author),
-              }]"
-              :style="!isMapped(author) && aliasPillColor(author) ? { backgroundColor: aliasPillColor(author) } : null"
-              draggable="true"
-              @dragstart="dragSource = author"
-              @dragend="dragSource = null; dragTarget = null"
-              @dragover.prevent="onDragOver(author)"
-              @dragleave.self="onDragLeave(author)"
-              @drop.prevent="onDrop(author)"
-            >
-              <span class="pill-name">{{ author }}</span>
-              <span v-if="isMapped(author)" class="pill-alias-badge">→ {{ authorNormalizations[author] }}</span>
+          <div class="alias-groups">
+            <div v-for="group in aliasAuthorGroups" :key="group.team.id" class="alias-group">
+              <div class="alias-group-header">
+                <span class="alias-group-swatch" :style="{ backgroundColor: group.team.color }"></span>
+                <span class="alias-group-name">{{ group.team.name }}</span>
+                <span class="alias-group-count">{{ group.authors.length }}</span>
+              </div>
+              <div class="author-pills-grid">
+                <div
+                  v-for="author in group.authors"
+                  :key="author"
+                  :class="['author-pill', {
+                    'pill-mapped':       isMapped(author),
+                    'pill-dragging':     dragSource === author,
+                    'pill-drop-target':  dragTarget === author,
+                    'pill-teamed':       !isMapped(author) && !!aliasPillColor(author),
+                  }]"
+                  :style="!isMapped(author) && aliasPillColor(author) ? { backgroundColor: aliasPillColor(author) } : null"
+                  draggable="true"
+                  @dragstart="dragSource = author"
+                  @dragend="dragSource = null; dragTarget = null"
+                  @dragover.prevent="onDragOver(author)"
+                  @dragleave.self="onDragLeave(author)"
+                  @drop.prevent="onDrop(author)"
+                >
+                  <span class="pill-name">{{ author }}</span>
+                  <span v-if="isMapped(author)" class="pill-alias-badge">→ {{ authorNormalizations[author] }}</span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -263,6 +272,31 @@ function aliasPillColor(rawAuthor) {
   const canonical = authorNormalizations.value[rawAuthor] ?? rawAuthor;
   return nodeColors.value[`author:${canonical}`] ?? null;
 }
+
+// Groups raw author pills by team (via canonical name), with an Unassigned
+// bucket at the bottom. Used by the Author Aliases tab.
+const aliasAuthorGroups = computed(() => {
+  const canonicalToTeam = {}; // canonicalName → team
+  for (const t of teams.value) {
+    for (const a of (t.authors ?? [])) canonicalToTeam[a] = t;
+  }
+  const groups = new Map(); // teamId → { team, authors[] }
+  const unassigned = [];
+  for (const raw of allRawAuthors.value) {
+    if (raw in authorNormalizations.value) continue; // shown in "Active aliases" list
+    const team = canonicalToTeam[raw];
+    if (!team) { unassigned.push(raw); continue; }
+    if (!groups.has(team.id)) groups.set(team.id, { team, authors: [] });
+    groups.get(team.id).authors.push(raw);
+  }
+  const ordered = teams.value
+    .map(t => groups.get(t.id))
+    .filter(Boolean);
+  if (unassigned.length) {
+    ordered.push({ team: { id: '__unassigned__', name: 'Unassigned', color: '#9CA3AF' }, authors: unassigned });
+  }
+  return ordered;
+});
 const open = ref(false);
 const tab  = ref('teams');
 
@@ -536,6 +570,12 @@ async function handleImport(e) {
 .team-body-enter-to, .team-body-leave-from { max-height: 800px; overflow: hidden; }
 
 /* ── Author Aliases ── */
+.alias-groups { @apply flex flex-col gap-3; }
+.alias-group { @apply flex flex-col gap-1.5; }
+.alias-group-header { @apply flex items-center gap-2 text-xs font-bold text-gray-500 uppercase tracking-wide; }
+.alias-group-swatch { @apply inline-block w-2.5 h-2.5 rounded-full; }
+.alias-group-name { @apply text-gray-600; }
+.alias-group-count { @apply text-gray-400 font-mono normal-case tracking-normal; }
 .author-pills-grid { @apply flex flex-wrap gap-2; }
 .author-pill {
   @apply flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold
