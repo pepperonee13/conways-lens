@@ -386,9 +386,19 @@ export function useSwimlaneGraph({
       .style('cursor', d => (onNodeClick && d.type === 'repo') ? 'pointer' : 'default')
       .on('mouseenter', (e, d) => {
         highlightNode(d);
-        onShowNodeTooltip(d, e.clientX + TOOLTIP_OFFSET.x, e.clientY + TOOLTIP_OFFSET.y);
+        if (d.type === 'team') {
+          onShowNodeTooltip(d, e.clientX, e.clientY + 14);
+        } else {
+          onShowNodeTooltip(d, e.clientX + TOOLTIP_OFFSET.x, e.clientY + TOOLTIP_OFFSET.y);
+        }
       })
-      .on('mousemove',  e => onMoveTooltip(e.clientX + TOOLTIP_OFFSET.x, e.clientY + TOOLTIP_OFFSET.y))
+      .on('mousemove', (e, d) => {
+        if (d.type === 'team') {
+          onMoveTooltip(e.clientX, e.clientY + 14);
+        } else {
+          onMoveTooltip(e.clientX + TOOLTIP_OFFSET.x, e.clientY + TOOLTIP_OFFSET.y);
+        }
+      })
       .on('mouseleave', () => { resetHighlight(); onHideTooltip(); })
       .on('click', (e, d) => { if (onNodeClick && d.type === 'repo') { onHideTooltip(); onNodeClick(d); } });
 
