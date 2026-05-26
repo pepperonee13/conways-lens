@@ -6,6 +6,7 @@ const STORAGE = {
   teams:          'conwaylens:teams',
   normalizations: 'conwaylens:normalizations',
   ignoredAuthors: 'conwaylens:ignoredAuthors',
+  filterTeamIds:  'conwaylens:filterTeamIds',
 };
 
 const DEFAULT_COLORS  = ['#225EA9', '#088F9B', '#F08223', '#5A4A80', '#C45E0F', '#006B75', '#3A75BA', '#1A9FA9'];
@@ -128,7 +129,9 @@ export const useLensStore = defineStore('lens', () => {
     return min ? { since: min, until: max } : null;
   });
 
-  const crossTeamOnly = ref(false);
+  const crossTeamOnly   = ref(false);
+  const filterTeamIds   = ref(new Set(load(STORAGE.filterTeamIds, [])));
+  watch(filterTeamIds, v => localStorage.setItem(STORAGE.filterTeamIds, JSON.stringify([...v])));
 
   // Virtual team for authors and repos not yet assigned to any real team.
   // Only exists when at least one real team is configured.
@@ -462,7 +465,21 @@ export const useLensStore = defineStore('lens', () => {
       };
     });
 
-    return { nodes: [...teamNodes, ...repoNodes], links };
+    // Apply team filter: keep only repos that have at least one contribution
+    // from an author belonging to one of the selected filter teams.
+    let visibleRepoNodes = repoNodes;
+    let visibleLinks     = links;
+    if (filterTeamIds.value.size > 0) {
+      visibleRepoNodes = repoNodes.filter(node =>
+        [...filterTeamIds.value].some(tid =>
+          (repoContribShas[`${node.id}\x00${tid}`]?.size ?? 0) > 0
+        )
+      );
+      const visibleRepoSet = new Set(visibleRepoNodes.map(n => n.id));
+      visibleLinks = links.filter(l => visibleRepoSet.has(l.target));
+    }
+
+    return { nodes: [...teamNodes, ...visibleRepoNodes], links: visibleLinks };
   });
 
   // Lookup map: `${type}:${id}` → team hex color (for author/repo coloring)
@@ -573,6 +590,14 @@ export const useLensStore = defineStore('lens', () => {
     expandedTeams.value = new Set();
   }
 
+  // Filter actions
+  function setFilterTeam(id, active) {
+    const next = new Set(filterTeamIds.value);
+    if (active) next.add(id); else next.delete(id);
+    filterTeamIds.value = next;
+  }
+  function clearFilterTeams() { filterTeamIds.value = new Set(); }
+
   // Import / Export
   function exportMappings() {
     return JSON.stringify({
@@ -628,12 +653,14 @@ export const useLensStore = defineStore('lens', () => {
     teams, syntheticTeam, authorNormalizations, ignoredAuthors,
     dateBounds, activeRange,
     crossTeamOnly,
+    filterTeamIds,
     expandedTeams,
     allRawAuthors, allAuthors, allRepos,
     graphData, ownershipGraphData, nodeColors, getNodeColor,
     repoContributorsData,
     loadTimelineData, loadSimulatedData, clearData,
     addTeam, removeTeam,
+    setFilterTeam, clearFilterTeams,
     setNormalization, removeNormalization,
     ignoreAuthor, unignoreAuthor,
     toggleTeamExpansion,
