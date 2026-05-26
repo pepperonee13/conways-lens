@@ -165,7 +165,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useLensStore } from '../stores/useLensStore';
 import { SlidersHorizontal, X, Check, Search, ChevronRight, Info } from 'lucide-vue-next';
@@ -222,30 +222,41 @@ const activeFilterCount = computed(
 );
 
 // Expansion state
-const expandedTeams = ref(new Set());
+// expandedTeams: manually opened; collapsedOverrides: explicitly closed while auto-expanded.
+const expandedTeams      = ref(new Set());
+const collapsedOverrides = ref(new Set());
+
+// Reset overrides on each new search so auto-expansions start fresh.
+watch(searchQuery, () => { collapsedOverrides.value = new Set(); });
+
 function isExpanded(id) {
+  if (collapsedOverrides.value.has(id)) return false;
   if (expandedTeams.value.has(id)) return true;
   return filteredTeams.value.find(t => t.id === id)?.autoExpand ?? false;
 }
 function toggleExpand(id) {
-  const next = new Set(expandedTeams.value);
-  // If currently expanded (possibly via autoExpand), close it by adding to the set
-  // then toggling — simpler: track closed-overrides for auto-expanded teams
+  const expanded  = new Set(expandedTeams.value);
+  const collapsed = new Set(collapsedOverrides.value);
   if (isExpanded(id)) {
-    // If it's only expanded because of autoExpand, add to set to "pin closed"
-    next.has(id) ? next.delete(id) : next.add(id);
+    expanded.delete(id);
+    if (filteredTeams.value.find(t => t.id === id)?.autoExpand) collapsed.add(id);
   } else {
-    next.add(id);
+    expanded.add(id);
+    collapsed.delete(id);
   }
-  expandedTeams.value = next;
+  expandedTeams.value      = expanded;
+  collapsedOverrides.value = collapsed;
 }
 
 // When a repo checkbox is toggled while its team is fully selected,
 // "explode" the team selection into individual repo picks minus this one.
+// Use the full (unfiltered) team repo list so a search-narrowed view
+// doesn't silently drop repos that aren't currently visible.
 function onRepoToggle(repo, tv, checked) {
   if (!checked && filterTeamIds.value.has(tv.id)) {
+    const fullTeam = filterableTeams.value.find(t => t.id === tv.id);
     store.setFilterTeam(tv.id, false);
-    for (const r of tv.repos) {
+    for (const r of (fullTeam?.repos ?? tv.repos)) {
       if (r !== repo) store.setFilterRepo(r, true);
     }
   } else {
