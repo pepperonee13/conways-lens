@@ -565,7 +565,9 @@ export const useLensStore = defineStore('lens', () => {
     const links = Object.entries(edgeMap).map(([author, shas]) => ({
       source: author, target: repoId, commits: shas.size,
     }));
-    const owningTeamId = teams.value.find(t => (t.repos ?? []).includes(repoId))?.id ?? null;
+    const syntheticT = syntheticTeam.value;
+    const allTeams   = syntheticT ? [...teams.value, syntheticT] : teams.value;
+    const owningTeamId = allTeams.find(t => (t.repos ?? []).includes(repoId))?.id ?? null;
     const nodes = [
       { id: repoId, type: 'repo', commits: repoShas.size, owningTeamId },
       ...links.map(l => ({ id: l.source, type: 'author', commits: l.commits })),
