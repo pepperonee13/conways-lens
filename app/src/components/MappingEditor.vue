@@ -36,8 +36,6 @@
             Assign authors and repositories to teams. Team color is applied to their nodes in the graph.
           </p>
 
-          <button class="add-team-btn" @click="addTeam()">+ Add Team</button>
-
           <div class="teams-list">
             <div
               v-for="(team, idx) in teams"
@@ -143,6 +141,8 @@
               </div>
             </div>
           </div>
+
+          <button class="add-team-btn" @click="addTeam()">+ Add Team</button>
         </template>
 
         <!-- ── Author Aliases ── -->
