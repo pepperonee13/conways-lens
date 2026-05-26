@@ -7,7 +7,18 @@
           <span class="legend"><span class="legend-team"></span>Team lane</span>
           <span class="legend"><span class="legend-repo"></span>Bounded Context</span>
           <span class="legend"><span class="legend-ring"></span>Violation ring</span>
-          &nbsp;·&nbsp; Lanes sorted by violation severity &nbsp;·&nbsp; Edge crossing a lane = cross-team contribution
+          &nbsp;·&nbsp;
+          <span class="info-wrap">
+            Lanes sorted by violation severity
+            <span class="info-icon" tabindex="0" aria-label="What is severity?">i</span>
+            <span class="info-tooltip" role="tooltip">
+              <strong>Severity</strong> = total cross-team commits touching a team, in both directions:
+              <span class="info-line"><em>Inbound</em> — commits made by other teams into repos this team owns.</span>
+              <span class="info-line"><em>Outbound</em> — commits made by this team into repos other teams own.</span>
+              Lanes are ordered by inbound + outbound, descending. The threshold setting does not affect ordering.
+            </span>
+          </span>
+          &nbsp;·&nbsp; Edge crossing a lane = cross-team contribution
         </p>
         <p v-if="!isFullscreen && detailRepoId" class="graph-desc">
           <span class="legend"><span class="legend-detail-repo"></span>Bounded Context</span>
@@ -479,6 +490,33 @@ onMounted(() => {
   color: #B85A14;
 }
 .violation-banner strong { color: #F08223; font-weight: 700; }
+
+.info-wrap { position: relative; display: inline-flex; align-items: center; gap: 4px; }
+.info-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: #225EA9; color: #fff;
+  font-size: 9px; font-weight: 700; font-family: 'JetBrains Mono', monospace;
+  font-style: normal; line-height: 1;
+  cursor: help; user-select: none;
+}
+.info-icon:focus { outline: 2px solid #088F9B; outline-offset: 1px; }
+.info-tooltip {
+  position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+  width: 280px; padding: 10px 12px;
+  background: #fff; color: #374151;
+  border: 1.5px solid #225EA9; border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  font-size: 11px; line-height: 1.5; font-style: normal; text-align: left;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.12s;
+  z-index: 300;
+}
+.info-tooltip strong { color: #225EA9; }
+.info-tooltip em { color: #088F9B; font-style: normal; font-weight: 600; }
+.info-line { display: block; margin-top: 4px; }
+.info-icon:hover + .info-tooltip,
+.info-icon:focus + .info-tooltip { opacity: 1; }
 .detail-header     { @apply flex items-center gap-3 mb-3; }
 .back-btn {
   @apply flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border
