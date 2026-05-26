@@ -28,15 +28,29 @@ By default the script reads `repos.json` from its own directory. Use `-ReposFile
 
 ### 2. Run the analysis
 
+**Node.js (cross-platform, parallel — recommended for many repos):**
+
+```bash
+node analysis/analyse-repositories.mjs
+# Optional parameters:
+node analysis/analyse-repositories.mjs --since 2024-01-01 --until 2024-12-31
+node analysis/analyse-repositories.mjs --concurrency 8 --workdir /tmp/repos
+node analysis/analyse-repositories.mjs --repos team-a-repos.json --output team-a.csv
+```
+
+Clones in parallel (default `--concurrency 4`, no npm dependencies needed). Output defaults to
+`app/public/TimelineData-<reposFileName>.csv`, so different team configs produce different files
+that can be merged in the frontend (see step 5).
+
+**PowerShell (Windows, sequential):**
+
 ```powershell
 .\analysis\Analyse-Repositories.ps1
-# Optional parameters:
 .\analysis\Analyse-Repositories.ps1 -Since 2024-01-01 -Until 2024-12-31
-.\analysis\Analyse-Repositories.ps1 -WorkDir C:\my-repos
 .\analysis\Analyse-Repositories.ps1 -ReposFile C:\projects\my-repos.json
 ```
 
-This clones or updates each repository and writes `app/public/TimelineData.csv`.
+Both produce the same CSV schema and metadata footer.
 
 ### 3. Start the app
 
@@ -47,6 +61,12 @@ npm run dev
 ```
 
 Open http://localhost:5174 in your browser.
+
+Drag and drop one or more CSV files into the upload zone. Multiple files are merged into a single
+dataset (rows are deduplicated by `Product`+`ChangesetId`+`FilePath`, and the date range is
+expanded to cover all inputs). Once data is loaded, use **Add CSV** to merge additional files,
+or **Replace** to start over. Drag-and-drop on an active dataset merges by default; hold
+<kbd>Shift</kbd> while dropping to replace.
 
 ### 4. Define team mappings
 

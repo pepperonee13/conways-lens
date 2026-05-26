@@ -1,6 +1,6 @@
 <template>
   <button class="floating-mapping-btn" v-if="!open" @click="open = true" title="Edit mappings">
-    <span>🗺</span>
+    <MapIcon :size="18" />
     <span>Mapping</span>
     <span v-if="teams.length" class="badge">{{ teams.length }}</span>
   </button>
@@ -12,8 +12,8 @@
   <transition name="slide-panel">
     <div v-if="open" class="panel">
       <div class="panel-header">
-        <h2 class="panel-title">🗺 Team Mapping</h2>
-        <button class="close-btn" @click="open = false">✕</button>
+        <h2 class="panel-title"><MapIcon :size="20" class="title-icon" /> Team Mapping</h2>
+        <button class="close-btn" @click="open = false" title="Close"><X :size="18" /></button>
       </div>
 
       <div class="panel-tabs">
@@ -36,85 +36,8 @@
             Assign authors and repositories to teams. Team color is applied to their nodes in the graph.
           </p>
 
-          <button class="add-team-btn" @click="addTeam()">+ Add Team</button>
-
-          <div class="teams-list">
-            <div
-              v-for="(team, idx) in teams"
-              :key="team.id"
-              :class="['team-card', { 'team-card--drop-target': dropTargetTeamId === team.id }]"
-              @dragover.prevent="onTeamDragOver(team.id)"
-              @dragleave="onTeamDragLeave(team.id, $event)"
-              @drop.prevent="onTeamDrop(team)"
-            >
-              <div class="team-card-header">
-                <button class="team-toggle" @click="toggleTeam(team.id)" :title="isExpanded(team.id) ? 'Collapse' : 'Expand'">
-                  <span class="chevron" :class="{ rotated: isExpanded(team.id) }">›</span>
-                </button>
-                <input type="color" v-model="team.color" class="color-picker" :title="team.color" />
-                <input v-model="team.name" class="team-name-input" :placeholder="'Team ' + (idx + 1)" />
-                <span v-if="!isExpanded(team.id)" class="team-summary">
-                  {{ team.authors.length }} authors · {{ team.repos.length }} repos
-                </span>
-                <button class="remove-team-btn" @click="store.removeTeam(team.id)" title="Delete team">✕</button>
-              </div>
-
-              <transition name="team-body">
-                <div v-if="isExpanded(team.id)" class="team-body">
-                  <div class="section-label">Authors ({{ team.authors.length }})</div>
-                  <div class="assigned-chips">
-                    <span v-for="a in [...team.authors].sort()" :key="a" class="assigned-chip author-chip">
-                      {{ a }}<button class="chip-remove" @click="removeFrom(team, 'authors', a)">×</button>
-                    </span>
-                    <span v-if="!team.authors.length" class="empty-hint">No authors assigned</span>
-                  </div>
-                  <div class="available-list" v-if="availableAuthorGroups(team).free.length || availableAuthorGroups(team).shared.length">
-                    <template v-if="availableAuthorGroups(team).free.length">
-                      <div class="available-label">Add author:</div>
-                      <div class="available-pills">
-                        <button v-for="a in availableAuthorGroups(team).free" :key="a" class="available-pill" @click="addTo(team, 'authors', a)">
-                          + {{ a }}
-                        </button>
-                      </div>
-                    </template>
-                    <template v-if="availableAuthorGroups(team).shared.length">
-                      <div class="available-label available-label--shared">Also in another team:</div>
-                      <div class="available-pills">
-                        <button v-for="a in availableAuthorGroups(team).shared" :key="a" class="available-pill available-pill--shared" @click="addTo(team, 'authors', a)">
-                          + {{ a }}
-                        </button>
-                      </div>
-                    </template>
-                  </div>
-
-                  <div class="section-label">Repositories ({{ team.repos.length }})</div>
-                  <div class="assigned-chips">
-                    <span v-for="r in [...team.repos].sort()" :key="r" class="assigned-chip repo-chip">
-                      {{ r }}<button class="chip-remove" @click="removeFrom(team, 'repos', r)">×</button>
-                    </span>
-                    <span v-if="!team.repos.length" class="empty-hint">No repositories assigned</span>
-                  </div>
-                  <div class="available-list" v-if="availableRepos(team).length">
-                    <div class="available-label">Add repository:</div>
-                    <div class="available-pills">
-                      <button v-for="r in availableRepos(team)" :key="r" class="available-pill repo-pill" @click="addTo(team, 'repos', r)">
-                        + {{ r }}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </transition>
-            </div>
-          </div>
-
-          <div v-if="!teams.length" class="no-teams">
-            <p>No teams defined yet.</p>
-            <p>Click <strong>+ Add Team</strong> to create your first team, then assign authors and repositories to it.</p>
-            <p class="hint-text">Authors and repositories are discovered automatically from the loaded data.</p>
-          </div>
-
           <div v-if="teams.length && (unassignedAuthors.length || unassignedRepos.length)" class="unassigned-section">
-            <div class="unassigned-title">⚠ Unassigned</div>
+            <div class="unassigned-title"><AlertTriangle :size="14" /> Unassigned</div>
             <div class="unassigned-hint">Tip: drag any item below onto a team card to assign it.</div>
             <div v-if="unassignedAuthors.length" class="unassigned-group">
               <span class="unassigned-label">Authors not in any team:</span>
@@ -143,6 +66,85 @@
               </div>
             </div>
           </div>
+
+          <button class="add-team-btn" @click="addTeam()">+ Add Team</button>
+
+          <div class="teams-list">
+            <div
+              v-for="(team, idx) in teams"
+              :key="team.id"
+              :class="['team-card', { 'team-card--drop-target': dropTargetTeamId === team.id }]"
+              @dragover.prevent="onTeamDragOver(team.id)"
+              @dragleave="onTeamDragLeave(team.id, $event)"
+              @drop.prevent="onTeamDrop(team)"
+            >
+              <div class="team-card-header">
+                <button class="team-toggle" @click="toggleTeam(team.id)" :title="isExpanded(team.id) ? 'Collapse' : 'Expand'">
+                  <ChevronRight :size="16" class="chevron" :class="{ rotated: isExpanded(team.id) }" />
+                </button>
+                <input type="color" v-model="team.color" class="color-picker" :title="team.color" />
+                <input v-model="team.name" class="team-name-input" :placeholder="'Team ' + (idx + 1)" />
+                <span v-if="!isExpanded(team.id)" class="team-summary">
+                  {{ team.authors.length }} authors · {{ team.repos.length }} repos
+                </span>
+                <button class="remove-team-btn" @click="askDeleteTeam(team)" title="Delete team"><Trash2 :size="16" /></button>
+              </div>
+
+              <transition name="team-body">
+                <div v-if="isExpanded(team.id)" class="team-body">
+                  <div class="section-label">Authors ({{ team.authors.length }})</div>
+                  <div class="assigned-chips">
+                    <span v-for="a in [...team.authors].sort()" :key="a" class="assigned-chip author-chip">
+                      {{ a }}<button class="chip-remove" @click="removeFrom(team, 'authors', a)" title="Remove"><X :size="11" /></button>
+                    </span>
+                    <span v-if="!team.authors.length" class="empty-hint">No authors assigned</span>
+                  </div>
+                  <div class="available-list" v-if="availableAuthorGroups(team).free.length || availableAuthorGroups(team).shared.length">
+                    <template v-if="availableAuthorGroups(team).free.length">
+                      <div class="available-label">Add author:</div>
+                      <div class="available-pills">
+                        <button v-for="a in availableAuthorGroups(team).free" :key="a" class="available-pill" @click="addTo(team, 'authors', a)">
+                          + {{ a }}
+                        </button>
+                      </div>
+                    </template>
+                    <template v-if="availableAuthorGroups(team).shared.length">
+                      <div class="available-label available-label--shared">Also in another team:</div>
+                      <div class="available-pills">
+                        <button v-for="a in availableAuthorGroups(team).shared" :key="a" class="available-pill available-pill--shared" @click="addTo(team, 'authors', a)">
+                          + {{ a }}
+                        </button>
+                      </div>
+                    </template>
+                  </div>
+
+                  <div class="section-label">Repositories ({{ team.repos.length }})</div>
+                  <div class="assigned-chips">
+                    <span v-for="r in [...team.repos].sort()" :key="r" class="assigned-chip repo-chip">
+                      {{ r }}<button class="chip-remove" @click="removeFrom(team, 'repos', r)" title="Remove"><X :size="11" /></button>
+                    </span>
+                    <span v-if="!team.repos.length" class="empty-hint">No repositories assigned</span>
+                  </div>
+                  <div class="available-list" v-if="availableRepos(team).length">
+                    <div class="available-label">Add repository:</div>
+                    <div class="available-pills">
+                      <button v-for="r in availableRepos(team)" :key="r" class="available-pill repo-pill" @click="addTo(team, 'repos', r)">
+                        + {{ r }}
+                      </button>
+                    </div>
+                  </div>
+
+                </div>
+              </transition>
+            </div>
+          </div>
+
+          <div v-if="!teams.length" class="no-teams">
+            <p>No teams defined yet.</p>
+            <p>Click <strong>+ Add Team</strong> to create your first team, then assign authors and repositories to it.</p>
+            <p class="hint-text">Authors and repositories are discovered automatically from the loaded data.</p>
+          </div>
+
         </template>
 
         <!-- ── Author Aliases ── -->
@@ -152,26 +154,36 @@
             Useful when the same person appears under multiple git identities.
           </p>
 
-          <div class="author-pills-grid">
-            <div
-              v-for="author in allRawAuthors"
-              :key="author"
-              :class="['author-pill', {
-                'pill-mapped':       isMapped(author),
-                'pill-dragging':     dragSource === author,
-                'pill-drop-target':  dragTarget === author,
-                'pill-teamed':       !isMapped(author) && !!aliasPillColor(author),
-              }]"
-              :style="!isMapped(author) && aliasPillColor(author) ? { backgroundColor: aliasPillColor(author) } : null"
-              draggable="true"
-              @dragstart="dragSource = author"
-              @dragend="dragSource = null; dragTarget = null"
-              @dragover.prevent="onDragOver(author)"
-              @dragleave.self="onDragLeave(author)"
-              @drop.prevent="onDrop(author)"
-            >
-              <span class="pill-name">{{ author }}</span>
-              <span v-if="isMapped(author)" class="pill-alias-badge">→ {{ authorNormalizations[author] }}</span>
+          <div class="alias-groups">
+            <div v-for="group in aliasAuthorGroups" :key="group.team.id" class="alias-group">
+              <div class="alias-group-header">
+                <span class="alias-group-swatch" :style="{ backgroundColor: group.team.color }"></span>
+                <span class="alias-group-name">{{ group.team.name }}</span>
+                <span class="alias-group-count">{{ group.authors.length }}</span>
+              </div>
+              <div class="author-pills-grid">
+                <div
+                  v-for="author in group.authors"
+                  :key="author"
+                  :class="['author-pill', {
+                    'pill-mapped':       isMapped(author),
+                    'pill-dragging':     dragSource === author,
+                    'pill-drop-target':  dragTarget === author,
+                    'pill-teamed':       !isMapped(author) && !!aliasPillColor(author),
+                    'pill-unassigned':   group.team.id === '__unassigned__',
+                  }]"
+                  :style="!isMapped(author) && aliasPillColor(author) ? { backgroundColor: aliasPillColor(author) } : null"
+                  draggable="true"
+                  @dragstart="dragSource = author"
+                  @dragend="dragSource = null; dragTarget = null"
+                  @dragover.prevent="onDragOver(author)"
+                  @dragleave.self="onDragLeave(author)"
+                  @drop.prevent="onDrop(author)"
+                >
+                  <span class="pill-name">{{ author }}</span>
+                  <span v-if="isMapped(author)" class="pill-alias-badge">→ {{ authorNormalizations[author] }}</span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -182,7 +194,7 @@
                 <span class="alias-raw">{{ raw }}</span>
                 <span class="alias-arrow-sm">→</span>
                 <span class="alias-canonical">{{ canonical }}</span>
-                <button class="alias-remove" @click="store.removeNormalization(raw)" title="Remove alias">✕</button>
+                <button class="alias-remove" @click="store.removeNormalization(raw)" title="Remove alias"><X :size="12" /></button>
               </div>
             </div>
           </template>
@@ -209,7 +221,7 @@
                 title="Click to unignore"
               >
                 <span class="pill-name">{{ a }}</span>
-                <span class="pill-x">✕</span>
+                <X :size="11" class="pill-x" />
               </button>
             </div>
           </template>
@@ -217,17 +229,29 @@
           <div v-if="activeAuthors.length" class="section-label" :class="{ 'mt-5': ignoredAuthorsSorted.length }">
             Active ({{ activeAuthors.length }})
           </div>
-          <div class="author-pills-grid">
-            <button
-              v-for="a in activeAuthors"
-              :key="a"
-              :class="['author-pill', 'author-pill--active', { 'pill-teamed': !!teamColor(a) }]"
-              :style="teamColor(a) ? { backgroundColor: teamColor(a) } : null"
-              @click="store.ignoreAuthor(a)"
-              title="Click to ignore"
-            >
-              <span class="pill-name">{{ a }}</span>
-            </button>
+          <div class="alias-groups">
+            <div v-for="group in activeAuthorGroups" :key="group.team.id" class="alias-group">
+              <div class="alias-group-header">
+                <span class="alias-group-swatch" :style="{ backgroundColor: group.team.color }"></span>
+                <span class="alias-group-name">{{ group.team.name }}</span>
+                <span class="alias-group-count">{{ group.authors.length }}</span>
+              </div>
+              <div class="author-pills-grid">
+                <button
+                  v-for="a in group.authors"
+                  :key="a"
+                  :class="['author-pill', 'author-pill--active', {
+                    'pill-teamed':     !!teamColor(a),
+                    'pill-unassigned': group.team.id === '__unassigned__',
+                  }]"
+                  :style="teamColor(a) ? { backgroundColor: teamColor(a) } : null"
+                  @click="store.ignoreAuthor(a)"
+                  title="Click to ignore"
+                >
+                  <span class="pill-name">{{ a }}</span>
+                </button>
+              </div>
+            </div>
           </div>
 
           <p v-if="!allAuthors.length" class="hint-text" style="text-align:center;margin-top:2rem">
@@ -241,17 +265,44 @@
       <div class="panel-footer">
         <input ref="fileInput" type="file" accept=".json" class="hidden" @change="handleImport" />
         <span v-if="importError" class="import-error">{{ importError }}</span>
-        <button class="footer-btn footer-btn--secondary" @click="fileInput.click()">⬆ Import JSON</button>
-        <button class="footer-btn footer-btn--primary"   @click="handleExport">⬇ Export JSON</button>
+        <button class="footer-btn footer-btn--secondary" @click="fileInput.click()"><Upload :size="14" /> Import JSON</button>
+        <button class="footer-btn footer-btn--primary"   @click="handleExport"><Download :size="14" /> Export JSON</button>
       </div>
     </div>
   </transition>
+
+  <!-- Team deletion confirmation modal -->
+  <Teleport to="body">
+    <transition name="modal-fade">
+      <div v-if="teamToDelete" class="modal-backdrop" @click.self="teamToDelete = null">
+        <div class="modal-dialog" role="dialog" aria-modal="true">
+          <div class="modal-header">
+            <span class="modal-swatch" :style="{ backgroundColor: teamToDelete.color }"></span>
+            <h3 class="modal-title">Delete team?</h3>
+          </div>
+          <p class="modal-body">
+            This will remove the team <strong>{{ teamToDelete.name }}</strong>
+            ({{ teamToDelete.authors.length }} authors, {{ teamToDelete.repos.length }} repos).
+            Members are not deleted — they'll appear as Unassigned.
+          </p>
+          <div class="modal-actions">
+            <button class="modal-btn modal-btn--secondary" @click="teamToDelete = null">Cancel</button>
+            <button class="modal-btn modal-btn--danger" @click="confirmDeleteTeam">Delete</button>
+          </div>
+        </div>
+      </div>
+    </transition>
+  </Teleport>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, watch, onUnmounted } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useLensStore } from '../stores/useLensStore';
+import {
+  Map as MapIcon, X, ChevronRight, Trash2, AlertTriangle,
+  Upload, Download,
+} from 'lucide-vue-next';
 
 const store = useLensStore();
 const { teams, authorNormalizations, ignoredAuthors, allRawAuthors, allAuthors, allRepos, nodeColors } = storeToRefs(store);
@@ -263,6 +314,31 @@ function aliasPillColor(rawAuthor) {
   const canonical = authorNormalizations.value[rawAuthor] ?? rawAuthor;
   return nodeColors.value[`author:${canonical}`] ?? null;
 }
+
+// Groups raw author pills by team (via canonical name), with an Unassigned
+// bucket at the bottom. Used by the Author Aliases tab.
+const aliasAuthorGroups = computed(() => {
+  const canonicalToTeam = {}; // canonicalName → team
+  for (const t of teams.value) {
+    for (const a of (t.authors ?? [])) canonicalToTeam[a] = t;
+  }
+  const groups = new Map(); // teamId → { team, authors[] }
+  const unassigned = [];
+  for (const raw of allRawAuthors.value) {
+    if (raw in authorNormalizations.value) continue; // shown in "Active aliases" list
+    const team = canonicalToTeam[raw];
+    if (!team) { unassigned.push(raw); continue; }
+    if (!groups.has(team.id)) groups.set(team.id, { team, authors: [] });
+    groups.get(team.id).authors.push(raw);
+  }
+  const ordered = teams.value
+    .map(t => groups.get(t.id))
+    .filter(Boolean);
+  if (unassigned.length) {
+    ordered.push({ team: { id: '__unassigned__', name: 'Unassigned', color: '#9CA3AF' }, authors: unassigned });
+  }
+  return ordered;
+});
 const open = ref(false);
 const tab  = ref('teams');
 
@@ -279,6 +355,21 @@ function addTeam() {
   const newTeam = teams.value[teams.value.length - 1];
   if (newTeam) expandedTeams.value = new Set([...expandedTeams.value, newTeam.id]);
 }
+
+// Team deletion is gated behind a confirmation modal — clicking the X or
+// the in-body delete button stages the team here; the modal commits or cancels.
+const teamToDelete = ref(null);
+function askDeleteTeam(team) { teamToDelete.value = team; }
+function confirmDeleteTeam() {
+  if (teamToDelete.value) store.removeTeam(teamToDelete.value.id);
+  teamToDelete.value = null;
+}
+const onModalKeydown = e => { if (e.key === 'Escape') teamToDelete.value = null; };
+watch(teamToDelete, t => {
+  if (t) window.addEventListener('keydown', onModalKeydown);
+  else   window.removeEventListener('keydown', onModalKeydown);
+});
+onUnmounted(() => window.removeEventListener('keydown', onModalKeydown));
 
 const ignoredSet = computed(() => new Set(ignoredAuthors.value));
 
@@ -375,6 +466,27 @@ const activeAuthors = computed(() =>
   allAuthors.value.filter(a => !isIgnored(a))
 );
 
+// Group active (non-ignored) canonical authors by team, with Unassigned last.
+const activeAuthorGroups = computed(() => {
+  const canonicalToTeam = {};
+  for (const t of teams.value) {
+    for (const a of (t.authors ?? [])) canonicalToTeam[a] = t;
+  }
+  const groups = new Map();
+  const unassigned = [];
+  for (const a of activeAuthors.value) {
+    const team = canonicalToTeam[a];
+    if (!team) { unassigned.push(a); continue; }
+    if (!groups.has(team.id)) groups.set(team.id, { team, authors: [] });
+    groups.get(team.id).authors.push(a);
+  }
+  const ordered = teams.value.map(t => groups.get(t.id)).filter(Boolean);
+  if (unassigned.length) {
+    ordered.push({ team: { id: '__unassigned__', name: 'Unassigned', color: '#9CA3AF' }, authors: unassigned });
+  }
+  return ordered;
+});
+
 // ── Import / Export ──
 const fileInput   = ref(null);
 const importError = ref('');
@@ -430,7 +542,7 @@ async function handleImport(e) {
   @apply bg-gradient-to-r from-brand-orange-dark to-brand-orange text-white
          px-6 py-5 flex items-center justify-between shadow-lg flex-shrink-0;
 }
-.panel-title { @apply text-2xl font-bold m-0; }
+.panel-title { @apply flex items-center gap-2 text-2xl font-bold m-0; }
 .close-btn {
   @apply text-white hover:bg-white/20 rounded-full w-10 h-10 flex items-center
          justify-center text-2xl font-bold transition-all duration-200 cursor-pointer;
@@ -465,11 +577,9 @@ async function handleImport(e) {
   @apply flex items-center justify-center w-6 h-6 rounded text-gray-400
          hover:text-brand-orange hover:bg-orange-50 transition-all flex-shrink-0 cursor-pointer;
 }
-.chevron {
-  display: inline-block; font-size: 14px; font-weight: 700; line-height: 1;
-  transition: transform 0.2s ease;
-}
+.chevron { transition: transform 0.2s ease; color: #6B7280; }
 .chevron.rotated { transform: rotate(90deg); }
+.title-icon { @apply text-gray-700; }
 .team-summary { @apply text-xs text-gray-400 italic flex-1 min-w-0 truncate; }
 .team-body { @apply mt-3; }
 .team-name-row { @apply flex items-center gap-2 flex-1; }
@@ -512,14 +622,19 @@ async function handleImport(e) {
 }
 .no-teams { @apply text-center text-gray-500 py-10 space-y-2; }
 .hint-text { @apply text-xs text-gray-400; }
-.unassigned-section { @apply mt-6 p-4 bg-amber-50 border border-amber-200 rounded-xl; }
-.unassigned-title { @apply text-sm font-bold text-amber-700 mb-1; }
+.unassigned-section { @apply mt-6 mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl; }
+.unassigned-title { @apply flex items-center gap-1.5 text-sm font-bold text-amber-700 mb-1; }
 .unassigned-hint { @apply text-xs text-amber-600/80 italic mb-3 flex items-center gap-1; }
 .unassigned-hint::before { content: '✋'; font-style: normal; }
 .unassigned-group { @apply mb-3; }
 .unassigned-label { @apply block text-xs text-amber-600 font-medium mb-1.5; }
 .unassigned-chips { @apply flex flex-wrap gap-1.5; }
-.unassigned-chip { @apply px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-800 border border-amber-300; }
+.unassigned-chip {
+  @apply px-3 py-1 rounded-full text-xs font-semibold;
+  background-color: rgba(156, 163, 175, 0.18);
+  color: #4B5563;
+  border: 1px dashed #9CA3AF;
+}
 .unassigned-chip--draggable { @apply cursor-grab select-none; }
 .unassigned-chip--draggable:active { @apply cursor-grabbing; }
 .unassigned-chip--dragging { @apply opacity-40; }
@@ -536,6 +651,12 @@ async function handleImport(e) {
 .team-body-enter-to, .team-body-leave-from { max-height: 800px; overflow: hidden; }
 
 /* ── Author Aliases ── */
+.alias-groups { @apply flex flex-col gap-3; }
+.alias-group { @apply flex flex-col gap-1.5; }
+.alias-group-header { @apply flex items-center gap-2 text-xs font-bold text-gray-500 uppercase tracking-wide; }
+.alias-group-swatch { @apply inline-block w-2.5 h-2.5 rounded-full; }
+.alias-group-name { @apply text-gray-600; }
+.alias-group-count { @apply text-gray-400 font-mono normal-case tracking-normal; }
 .author-pills-grid { @apply flex flex-wrap gap-2; }
 .author-pill {
   @apply flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold
@@ -564,7 +685,7 @@ async function handleImport(e) {
   @apply flex items-center gap-2 px-5 py-3 border-t border-gray-200 bg-gray-50 flex-shrink-0;
 }
 .footer-btn {
-  @apply px-4 py-2 rounded-lg text-sm font-semibold cursor-pointer transition-all duration-150;
+  @apply inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold cursor-pointer transition-all duration-150;
 }
 .footer-btn--primary {
   @apply bg-brand-orange text-white hover:bg-brand-orange-dark ml-auto;
@@ -588,4 +709,52 @@ async function handleImport(e) {
 }
 .author-pill--ignored .pill-name { @apply line-through; }
 .pill-x { @apply text-red-500 font-bold text-[10px]; }
+
+/* Unassigned authors — match the "Outside Contributors" team styling */
+.author-pill.pill-unassigned {
+  background-color: rgba(156, 163, 175, 0.18);
+  color: #4B5563;
+  border: 1px dashed #9CA3AF;
+  /* compensate for the added border so layout matches solid pills */
+  padding-top: calc(0.375rem - 1px);
+  padding-bottom: calc(0.375rem - 1px);
+}
+.author-pill.pill-unassigned:hover {
+  background-color: rgba(156, 163, 175, 0.3);
+}
+.author-pill--active.pill-unassigned:hover {
+  background-color: #ef4444;
+  color: #fff;
+  border-color: #ef4444;
+}
+
+/* ── Confirmation modal ── */
+.modal-backdrop {
+  @apply fixed inset-0 z-[100] flex items-center justify-center bg-gray-900/40 backdrop-blur-sm;
+}
+.modal-dialog {
+  @apply bg-white rounded-2xl shadow-2xl border border-gray-200 max-w-md w-[92%] p-6;
+}
+.modal-header { @apply flex items-center gap-3 mb-3; }
+.modal-swatch { @apply inline-block w-3 h-3 rounded-full flex-shrink-0; }
+.modal-title  { @apply text-lg font-bold text-gray-800; }
+.modal-body   { @apply text-sm text-gray-600 leading-relaxed; }
+.modal-actions { @apply mt-5 flex justify-end gap-2; }
+.modal-btn {
+  @apply px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-150 cursor-pointer;
+}
+.modal-btn--secondary {
+  @apply bg-white text-gray-600 border border-gray-200 hover:bg-gray-50;
+}
+.modal-btn--danger {
+  @apply bg-red-500 text-white hover:bg-red-600;
+}
+.modal-fade-enter-active, .modal-fade-leave-active { transition: opacity 0.15s ease; }
+.modal-fade-enter-active .modal-dialog, .modal-fade-leave-active .modal-dialog {
+  transition: transform 0.15s ease;
+}
+.modal-fade-enter-from, .modal-fade-leave-to { opacity: 0; }
+.modal-fade-enter-from .modal-dialog, .modal-fade-leave-to .modal-dialog {
+  transform: scale(0.96);
+}
 </style>
