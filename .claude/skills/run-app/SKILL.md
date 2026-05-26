@@ -9,22 +9,19 @@ description: Run the ConwayLens app and interact with it via Playwright using th
 
 The dev server must already be running on port 5174:
 ```bash
-cd app && npm run dev -- --port 5174 &
+cd app && npx vite --port 5174 > /tmp/vite.log 2>&1 &
+sleep 4 && curl -s -o /dev/null -w "%{http_code}" http://localhost:5174
+mkdir -p out
 ```
 
-Or the production build preview:
-```bash
-cd app && npx vite build && npx vite preview --port 5174 &
-```
-
-Playwright is available via `npx playwright`. Scripts must use `@playwright/test` or the standalone `playwright` package via npx.
+Playwright is installed globally at `/opt/node22/lib/node_modules/playwright`.
 
 ## Page Object Model
 
 All Playwright automation uses the `LensPage` class at `playwright/lens-page.mjs`.
 
 ```js
-import { chromium } from 'playwright';
+import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
 import { LensPage }  from './playwright/lens-page.mjs';
 
 const browser = await chromium.launch({ args: ['--no-sandbox'] });
@@ -40,12 +37,16 @@ const lens    = await LensPage.open(browser);          // opens http://localhost
 | `await lens.expandNode('Backend')` | Click a named SVG node to expand it; waits for simulation |
 | `await lens.collapseNode('Backend')` | Click a named SVG node to collapse it; waits for simulation |
 | `await lens.hoverNode('Backend')` | Hover over a node and return tooltip text |
+| `await lens.openRepoDetail('backend-api')` | Click a repo node to open the detail graph (omit name for first repo) |
+| `await lens.measureTeamTooltipDirection()` | Hover team anchor, return `{ isBelow, isLeft, anchorX, tipLeft, … }` |
+| `await lens.measureBadgeGeometry()` | Return `[{ label, r, textHalfW, gap }]` for pct badge circles in detail view |
+| `await lens.getRepoLabels()` | Return `[{ label }]` for all repo nodes in swimlane (shows truncation) |
 | `await lens.screenshot('out/foo.png')` | Save a screenshot (path relative to repo root) |
 
 ### Full example
 
 ```js
-import { chromium } from 'playwright';
+import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
 import { LensPage }  from './playwright/lens-page.mjs';
 
 const browser = await chromium.launch({ args: ['--no-sandbox'] });
