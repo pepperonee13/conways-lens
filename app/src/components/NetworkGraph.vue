@@ -97,6 +97,12 @@
     </div>
 
     <template v-else>
+      <div v-if="!detailRepoId && violationSummary.violating > 0" class="violation-banner">
+        <strong>{{ violationSummary.violating }}</strong> out of
+        <strong>{{ violationSummary.total }}</strong>
+        {{ violationSummary.total === 1 ? 'repository violates' : 'repositories violate' }}
+        the <strong>{{ violationThreshold }}%</strong> threshold
+      </div>
       <template v-if="detailRepoId">
         <div class="detail-header">
           <button class="back-btn" @click="closeDetail">← Back to overview</button>
@@ -197,6 +203,17 @@ const edgeWeight         = ref(VIZ_DEFAULTS.edgeWeight);
 const violationThreshold = ref(VIZ_DEFAULTS.violationThreshold);
 const violatingOnly      = ref(VIZ_DEFAULTS.violatingOnly);
 const displayAuthors     = ref(VIZ_DEFAULTS.displayAuthors);
+
+const violationSummary = computed(() => {
+  const threshold = violationThreshold.value;
+  const repos = ownershipGraphData.value.nodes.filter(n => n.type === 'repo');
+  const violating = repos.filter(r =>
+    r.commits && r.contributions?.some(c =>
+      c.teamId !== r.owningTeamId && (c.commits / r.commits) * 100 >= threshold
+    )
+  ).length;
+  return { violating, total: repos.length };
+});
 
 function toggleFullscreen() {
   isFullscreen.value = !isFullscreen.value;
@@ -465,6 +482,13 @@ onMounted(() => {
 }
 .date-bounds-hint  { @apply text-xs text-gray-300 font-mono ml-1; }
 .hint              { @apply text-xs text-gray-400 italic text-center mb-2; }
+.violation-banner {
+  @apply text-sm text-center mb-2 px-4 py-2 rounded-lg;
+  background: rgba(240, 130, 35, 0.10);
+  border: 1px solid rgba(240, 130, 35, 0.35);
+  color: #B85A14;
+}
+.violation-banner strong { color: #F08223; font-weight: 700; }
 .detail-header     { @apply flex items-center gap-3 mb-3; }
 .back-btn {
   @apply flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border
