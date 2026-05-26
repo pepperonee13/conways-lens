@@ -120,15 +120,22 @@
               <span
                 v-for="a in unassignedAuthors"
                 :key="a"
-                :class="['unassigned-chip', 'unassigned-chip--draggable', { 'unassigned-chip--dragging': unassignedDragAuthor === a }]"
+                :class="['unassigned-chip', 'unassigned-chip--draggable', { 'unassigned-chip--dragging': unassignedDrag?.kind === 'authors' && unassignedDrag?.value === a }]"
                 draggable="true"
-                @dragstart="onUnassignedDragStart(a, $event)"
+                @dragstart="onUnassignedDragStart('authors', a, $event)"
                 @dragend="onUnassignedDragEnd"
               >{{ anonymize(a) }}</span>
             </div>
             <div v-if="unassignedRepos.length" class="unassigned-group">
-              <span class="unassigned-label">Repositories not in any team:</span>
-              <span v-for="r in unassignedRepos" :key="r" class="unassigned-chip">{{ r }}</span>
+              <span class="unassigned-label">Repositories not in any team (drag onto a team to assign):</span>
+              <span
+                v-for="r in unassignedRepos"
+                :key="r"
+                :class="['unassigned-chip', 'unassigned-chip--draggable', { 'unassigned-chip--dragging': unassignedDrag?.kind === 'repos' && unassignedDrag?.value === r }]"
+                draggable="true"
+                @dragstart="onUnassignedDragStart('repos', r, $event)"
+                @dragend="onUnassignedDragEnd"
+              >{{ r }}</span>
             </div>
           </div>
         </template>
@@ -275,32 +282,32 @@ const unassignedRepos = computed(() => {
   return allRepos.value.filter(r => !assigned.has(r));
 });
 
-// ── Drag unassigned author → team ──
-const unassignedDragAuthor = ref(null);
+// ── Drag unassigned author/repo → team ──
+const unassignedDrag = ref(null); // { kind: 'authors' | 'repos', value: string }
 const dropTargetTeamId = ref(null);
 
-function onUnassignedDragStart(author, e) {
-  unassignedDragAuthor.value = author;
+function onUnassignedDragStart(kind, value, e) {
+  unassignedDrag.value = { kind, value };
   if (e.dataTransfer) {
     e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', author);
+    e.dataTransfer.setData('text/plain', value);
   }
 }
 function onUnassignedDragEnd() {
-  unassignedDragAuthor.value = null;
+  unassignedDrag.value = null;
   dropTargetTeamId.value = null;
 }
 function onTeamDragOver(teamId) {
-  if (unassignedDragAuthor.value) dropTargetTeamId.value = teamId;
+  if (unassignedDrag.value) dropTargetTeamId.value = teamId;
 }
 function onTeamDragLeave(teamId, e) {
   if (e.currentTarget.contains(e.relatedTarget)) return;
   if (dropTargetTeamId.value === teamId) dropTargetTeamId.value = null;
 }
 function onTeamDrop(team) {
-  const author = unassignedDragAuthor.value;
-  if (author) addTo(team, 'authors', author);
-  unassignedDragAuthor.value = null;
+  const drag = unassignedDrag.value;
+  if (drag) addTo(team, drag.kind, drag.value);
+  unassignedDrag.value = null;
   dropTargetTeamId.value = null;
 }
 
