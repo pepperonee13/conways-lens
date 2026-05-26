@@ -675,6 +675,72 @@ export const useLensStore = defineStore('lens', () => {
     return { nodes, links };
   }
 
+  // Returns {nodes, links} for a repo drilled into a specific folder path.
+  // folderPrefix = '' for top-level, 'src' for inside src/, 'src/auth' for inside src/auth/, etc.
+  function repoFolderData(repoId, folderPrefix = '') {
+    const since = activeRange.value.since;
+    const until = activeRange.value.until;
+    const syntheticT = syntheticTeam.value;
+    const allTeams   = syntheticT ? [...teams.value, syntheticT] : teams.value;
+
+    // segment → author → Set<sha>, and whether segment has deeper paths
+    const segmentAuthorShas = {};
+    const segmentHasChildren = {};
+
+    for (const row of timelineData.value) {
+      if (!row.Author || !row.Product || !row.ChangesetId) continue;
+      if (row.Product !== repoId) continue;
+      if (since && row.Date < since) continue;
+      if (until && row.Date > until) continue;
+      const author = normalizeAuthor(row.Author);
+      if (ignoredSet.value.has(author)) continue;
+
+      const filePath = row.FilePath ?? '';
+      let segment;
+      if (folderPrefix === '') {
+        const slash = filePath.indexOf('/');
+        if (slash === -1) { segment = filePath; segmentHasChildren[filePath] = segmentHasChildren[filePath] || false; }
+        else              { segment = filePath.slice(0, slash); segmentHasChildren[segment] = true; }
+      } else {
+        const prefix = folderPrefix + '/';
+        if (!filePath.startsWith(prefix)) continue;
+        const rest = filePath.slice(prefix.length);
+        if (!rest) continue;
+        const slash = rest.indexOf('/');
+        if (slash === -1) { segment = rest; segmentHasChildren[rest] = segmentHasChildren[rest] || false; }
+        else              { segment = rest.slice(0, slash); segmentHasChildren[segment] = true; }
+      }
+      if (!segment) continue;
+
+      ((segmentAuthorShas[segment] ??= {})[author] ??= new Set()).add(row.ChangesetId);
+    }
+
+    const folderNodes = [];
+    const links = [];
+    const authorTotalShas = {};
+    const allShas = new Set();
+
+    for (const [segment, authorMap] of Object.entries(segmentAuthorShas)) {
+      const folderShas = new Set();
+      for (const [author, shas] of Object.entries(authorMap)) {
+        shas.forEach(s => { folderShas.add(s); allShas.add(s); });
+        links.push({ source: author, target: segment, commits: shas.size });
+        (authorTotalShas[author] ??= new Set());
+        shas.forEach(s => authorTotalShas[author].add(s));
+      }
+      folderNodes.push({ id: segment, type: 'folder', commits: folderShas.size, hasChildren: segmentHasChildren[segment] ?? false });
+    }
+
+    const owningTeamId = allTeams.find(t => (t.repos ?? []).includes(repoId))?.id ?? null;
+    const nodes = [
+      { id: repoId, type: 'repo', commits: allShas.size, owningTeamId },
+      ...folderNodes,
+      ...Object.entries(authorTotalShas).map(([id, shas]) => ({ id, type: 'author', commits: shas.size })),
+    ];
+
+    return { nodes, links };
+  }
+
   return {
     timelineData, dataLoaded, dataError, dateInfo,
     teams, syntheticTeam, authorNormalizations, ignoredAuthors,
@@ -684,7 +750,7 @@ export const useLensStore = defineStore('lens', () => {
     expandedTeams,
     allRawAuthors, allAuthors, allRepos,
     graphData, ownershipGraphData, nodeColors, getNodeColor,
-    repoContributorsData,
+    repoContributorsData, repoFolderData,
     loadTimelineData, loadSimulatedData, clearData,
     addTeam, removeTeam,
     setFilterTeam, setFilterRepo, setFilterAuthor, clearAllFilters,

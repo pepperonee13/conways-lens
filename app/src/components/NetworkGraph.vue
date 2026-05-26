@@ -20,11 +20,17 @@
           </span>
           &nbsp;·&nbsp; Edge crossing a lane = cross-team contribution
         </p>
-        <p v-if="!isFullscreen && detailRepoId" class="graph-desc">
+        <p v-if="!isFullscreen && detailRepoId && folderPath === null" class="graph-desc">
           <span class="legend"><span class="legend-detail-repo"></span>Bounded Context</span>
           <span class="legend"><span class="legend-detail-team"></span>Team (click to expand)</span>
           <span class="legend"><span class="legend-detail-author"></span>Author</span>
-          &nbsp;·&nbsp; Edge width = commit volume &nbsp;·&nbsp; Edge color = author's team
+          &nbsp;·&nbsp; Edge width = commit volume &nbsp;·&nbsp; Click repo to explore folders
+        </p>
+        <p v-if="!isFullscreen && detailRepoId && folderPath !== null" class="graph-desc">
+          <span class="legend"><span class="legend-detail-team"></span>Team (click to expand)</span>
+          <span class="legend"><span class="legend-detail-author"></span>Author</span>
+          <span class="legend"><span class="legend-folder"></span>Folder (› = drill in)</span>
+          &nbsp;·&nbsp; Edge color = team &nbsp;·&nbsp; Hover node to see connections
         </p>
         <div class="viz-dropdown-wrap" ref="vizDropRef">
           <button :class="['cross-team-btn', { active: edgeWeight }]" @click="vizOpen = !vizOpen">
@@ -115,11 +121,32 @@
         the <strong>{{ violationThreshold }}%</strong> threshold
       </div>
       <template v-if="detailRepoId">
-        <div class="detail-header">
-          <button class="back-btn" @click="closeDetail">← Back to overview</button>
-          <span class="detail-title">Contributors to <strong>{{ detailRepoId }}</strong></span>
-        </div>
-        <p v-if="!isFullscreen" class="hint">Scroll to zoom · Hover nodes or edges to inspect</p>
+        <!-- Folder drill-down mode -->
+        <template v-if="folderPath !== null">
+          <div class="detail-header">
+            <button class="back-btn" @click="closeDetail">← Back to overview</button>
+            <nav class="folder-breadcrumb" aria-label="Folder path">
+              <button class="breadcrumb-item breadcrumb-repo" @click="closeFolderMode">{{ detailRepoId }}</button>
+              <template v-for="(seg, idx) in folderPath" :key="idx">
+                <span class="breadcrumb-sep">/</span>
+                <button
+                  class="breadcrumb-item"
+                  :class="{ 'breadcrumb-current': idx === folderPath.length - 1 }"
+                  @click="breadcrumbNavigate(idx)"
+                >{{ seg }}</button>
+              </template>
+            </nav>
+          </div>
+          <p v-if="!isFullscreen" class="hint">Scroll to zoom · Hover to inspect · Click › folder to drill in · Click breadcrumb to navigate up</p>
+        </template>
+        <!-- Author radial mode -->
+        <template v-else>
+          <div class="detail-header">
+            <button class="back-btn" @click="closeDetail">← Back to overview</button>
+            <span class="detail-title">Contributors to <strong>{{ detailRepoId }}</strong></span>
+          </div>
+          <p v-if="!isFullscreen" class="hint">Scroll to zoom · Hover nodes or edges to inspect · Click the repo to explore folders</p>
+        </template>
         <div class="svg-wrap">
           <svg ref="detailSvgRef" class="graph-svg"></svg>
         </div>
@@ -172,6 +199,7 @@ import { Maximize2, Minimize2 } from 'lucide-vue-next';
 import { useLensStore } from '../stores/useLensStore';
 import { useSwimlaneGraph } from '../composables/graphs/useSwimlaneGraph.js';
 import { useRepoDetailGraph } from '../composables/graphs/useRepoDetailGraph.js';
+import { useRepoFolderGraph } from '../composables/graphs/useRepoFolderGraph.js';
 import { useAnonymize } from '../composables/useAnonymize.js';
 import { DEFAULT_VIOLATION_THRESHOLD, DEFAULT_DISPLAY_AUTHORS } from '../config.js';
 
@@ -191,6 +219,7 @@ const containerRef  = ref(null);
 const vizDropRef    = ref(null);
 const dims          = reactive({ w: 900, h: 600 });
 const detailRepoId  = ref(null);
+const folderPath    = ref(null); // null = author view, [] = folder root, ['src'] = inside src/, etc.
 
 const VIZ_DEFAULTS = {
   edgeWeight: true,
@@ -252,6 +281,10 @@ const tooltipDetail = computed(() => {
   if (tooltip.type === 'team-collapsed') {
     const devs = tooltip.authorCount;
     return `${devs} ${devs === 1 ? 'dev' : 'devs'} · ${c} commits · click to expand`;
+  }
+  if (tooltip.type === 'folder') {
+    const pctStr = tooltip.pct != null ? `${tooltip.pct}% of commits` : `${c} commits`;
+    return pctStr;
   }
   const team = tooltip.teamName ? ` · ${tooltip.teamName}` : '';
   const pctStr = tooltip.pct != null ? `${tooltip.pct}%` : `${c} commits`;
@@ -342,12 +375,13 @@ const detailRenderer = useRepoDetailGraph({
   getNodeColor: store.getNodeColor,
   anonMap,
   violationThreshold,
+  onRepoClick: () => openFolderMode(),
   onShowNodeTooltip: (d, x, y) => {
     Object.assign(tooltip, {
       show: true, x, y, isLink: false,
       name: d.id, type: d.type, commits: d.commits, pct: d.pct ?? null,
       teamName: d.teamName ?? '', repoCount: 0, authorCount: d.authors?.length ?? 0,
-      action: '', contributions: d.contributions ?? [], owningTeamId: d.owningTeamId ?? null,
+      action: d.action ?? '', contributions: d.contributions ?? [], owningTeamId: d.owningTeamId ?? null,
       authorContributions: d.authorContributions ?? null,
     });
   },
@@ -363,7 +397,39 @@ const detailRenderer = useRepoDetailGraph({
   edgeWeight,
 });
 
+// ── Folder drill-down renderer ────────────────────────────────────────────
+const folderRenderer = useRepoFolderGraph({
+  svgRef: detailSvgRef,
+  effectiveTeams,
+  getNodeColor: store.getNodeColor,
+  anonMap,
+  violationThreshold,
+  onFolderClick: (segmentId) => drillDown(segmentId),
+  onShowNodeTooltip: (d, x, y) => {
+    Object.assign(tooltip, {
+      show: true, x, y, isLink: false,
+      name: d.id, type: d.type, commits: d.commits, pct: d.pct ?? null,
+      teamName: d.teamName ?? '', repoCount: 0, authorCount: d.authors?.length ?? 0,
+      action: d.action ?? '', contributions: [], owningTeamId: null,
+      authorContributions: d.authorContributions ?? null,
+    });
+  },
+  onShowLinkTooltip: (d, x, y) => {
+    Object.assign(tooltip, {
+      show: true, x, y, isLink: true,
+      source: d.displaySource ?? d.sourceId,
+      target: d.targetId,
+      commits: d.commits, pct: d.pct ?? null,
+    });
+  },
+  onMoveTooltip: (x, y) => { tooltip.x = x; tooltip.y = y; },
+  onHideTooltip: () => { tooltip.show = false; },
+  edgeWeight,
+});
+
 function openDetail(repoId) {
+  folderRenderer.teardown();
+  folderPath.value = null;
   detailRepoId.value = repoId;
   nextTick(() => {
     const data = store.repoContributorsData(repoId);
@@ -373,8 +439,41 @@ function openDetail(repoId) {
 
 function closeDetail() {
   detailRenderer.teardown();
+  folderRenderer.teardown();
+  folderPath.value = null;
   detailRepoId.value = null;
   nextTick(() => redraw());
+}
+
+function openFolderMode() {
+  detailRenderer.teardown();
+  folderPath.value = [];
+  nextTick(() => redrawFolder());
+}
+
+function closeFolderMode() {
+  folderRenderer.teardown();
+  folderPath.value = null;
+  nextTick(() => {
+    const data = store.repoContributorsData(detailRepoId.value);
+    detailRenderer.draw({ dims, data });
+  });
+}
+
+function drillDown(segmentId) {
+  folderPath.value = [...folderPath.value, segmentId];
+  redrawFolder();
+}
+
+function breadcrumbNavigate(index) {
+  folderPath.value = folderPath.value.slice(0, index + 1);
+  redrawFolder();
+}
+
+function redrawFolder() {
+  const prefix = (folderPath.value ?? []).join('/');
+  const data = store.repoFolderData(detailRepoId.value, prefix);
+  folderRenderer.draw({ dims, data });
 }
 
 function redraw() {
@@ -383,11 +482,19 @@ function redraw() {
 
 watch(ownershipGraphData, () => redraw(), { deep: true, flush: 'post' });
 watch(dims,               () => redraw(), { flush: 'post' });
-watch(edgeWeight,         () => (detailRepoId.value ? detailRenderer : renderer).updateEdgeStyles());
+watch(edgeWeight, () => {
+  if (detailRepoId.value) {
+    (folderPath.value !== null ? folderRenderer : detailRenderer).updateEdgeStyles();
+  } else {
+    renderer.updateEdgeStyles();
+  }
+});
 watch(nodeColors,         () => renderer.updateNodeColors());
 watch(violationThreshold, () => {
-  if (detailRepoId.value) openDetail(detailRepoId.value);
-  else if (violatingOnly.value) redraw();
+  if (detailRepoId.value) {
+    if (folderPath.value !== null) redrawFolder();
+    else openDetail(detailRepoId.value);
+  } else if (violatingOnly.value) redraw();
   else renderer.drawOverlays();
 });
 watch(violatingOnly,      () => redraw());
@@ -537,13 +644,37 @@ onMounted(() => {
 .info-line { display: block; margin-top: 4px; }
 .info-icon:hover + .info-tooltip,
 .info-icon:focus + .info-tooltip { opacity: 1; }
-.detail-header     { @apply flex items-center gap-3 mb-3; }
+.detail-header     { @apply flex items-center gap-3 mb-3 flex-wrap; }
 .back-btn {
   @apply flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border
          border-gray-200 text-gray-500 bg-white hover:border-brand-blue hover:text-brand-blue
-         transition-all duration-150 cursor-pointer;
+         transition-all duration-150 cursor-pointer flex-shrink-0;
 }
 .detail-title      { @apply text-sm text-gray-500; }
+
+.folder-breadcrumb {
+  @apply flex items-center gap-0 text-sm font-semibold flex-wrap;
+}
+.breadcrumb-item {
+  @apply px-2 py-1 rounded text-xs font-semibold text-gray-500 bg-transparent border-none cursor-pointer
+         hover:text-brand-blue hover:bg-blue-50 transition-all duration-100;
+}
+.breadcrumb-repo {
+  @apply text-brand-teal hover:text-brand-teal hover:bg-teal-50;
+  color: var(--brand-teal);
+}
+.breadcrumb-current {
+  @apply text-brand-blue bg-blue-50;
+  pointer-events: none;
+}
+.breadcrumb-sep {
+  @apply text-gray-300 text-xs select-none px-0.5;
+}
+
+.legend-folder {
+  display: inline-block; width: 30px; height: 14px; border-radius: 4px;
+  background: #088F9B; opacity: 0.6; border: 1.5px solid #2F3944;
+}
 .svg-wrap          { overflow: auto; border-radius: 8px; scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
 .graph-svg         { display: block; }
 .empty-state       { @apply flex items-center justify-center py-16 text-gray-400 text-base; }
