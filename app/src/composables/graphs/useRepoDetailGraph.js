@@ -369,7 +369,12 @@ export function useRepoDetailGraph({
         highlightNode(d);
         const authorContributions = d.type === 'team-collapsed'
           ? d.authors
-              .map(a => ({ authorId: a.id, commits: a.commits, pct: toPct(a.commits, repoTotal) }))
+              .map(a => ({
+                authorId: a.id,
+                commits: a.commits,
+                pct: toPct(a.commits, repoTotal),
+                teamColor: d.team?.color ?? null,
+              }))
               .sort((a, b) => b.commits - a.commits)
           : null;
         onShowNodeTooltip(
