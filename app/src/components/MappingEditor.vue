@@ -87,12 +87,7 @@
                 <span v-if="!isExpanded(team.id)" class="team-summary">
                   {{ team.authors.length }} authors · {{ team.repos.length }} repos
                 </span>
-                <button
-                  v-if="!isExpanded(team.id)"
-                  class="remove-team-btn"
-                  @click="askDeleteTeam(team)"
-                  title="Delete team"
-                >✕</button>
+                <button class="remove-team-btn" @click="askDeleteTeam(team)" title="Delete team">🗑</button>
               </div>
 
               <transition name="team-body">
@@ -139,11 +134,6 @@
                     </div>
                   </div>
 
-                  <div class="team-body-footer">
-                    <button class="delete-team-btn" @click="askDeleteTeam(team)">
-                      🗑 Delete team
-                    </button>
-                  </div>
                 </div>
               </transition>
             </div>
@@ -734,14 +724,6 @@ async function handleImport(e) {
   background-color: #ef4444;
   color: #fff;
   border-color: #ef4444;
-}
-
-/* ── In-body delete button ── */
-.team-body-footer { @apply mt-4 pt-3 border-t border-gray-100 flex justify-end; }
-.delete-team-btn {
-  @apply flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold
-         text-red-600 bg-white border border-red-200
-         hover:bg-red-50 hover:border-red-300 transition-all duration-150 cursor-pointer;
 }
 
 /* ── Confirmation modal ── */
