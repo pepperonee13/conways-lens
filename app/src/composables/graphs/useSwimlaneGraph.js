@@ -331,8 +331,11 @@ export function useSwimlaneGraph({
   function draw({ dims, data }) {
     if (!svgRef.value || !data.nodes.length) return;
 
+    const INITIAL_X = 180;
     const W = dims.w;
-    const { positions, lanes, totalH } = computeLayout(dims, data);
+    // Layout within the visible viewport width (W minus the initial pan offset) so
+    // rightmost nodes don't render off-canvas after the translate is applied.
+    const { positions, lanes, totalH } = computeLayout({ ...dims, w: W - INITIAL_X }, data);
     const H = Math.max(dims.h, totalH);
 
     // Node sizing: repos by commits, team anchors fixed.
@@ -370,7 +373,7 @@ export function useSwimlaneGraph({
     const zoom = d3.zoom().scaleExtent([0.4, 4]).on('zoom', e => root.attr('transform', e.transform));
     svg.call(zoom);
     // Shift content right so the team-anchor tooltip (which opens left of cursor) stays in viewport.
-    zoom.transform(svg, d3.zoomIdentity.translate(180, 0));
+    zoom.transform(svg, d3.zoomIdentity.translate(INITIAL_X, 0));
 
     svg.append('text').attr('x', 12).attr('y', 20)
       .attr('fill', '#94a3b8').attr('font-size', '11px').attr('font-weight', '600')
