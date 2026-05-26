@@ -261,18 +261,23 @@ const tooltipContributions = computed(() => {
   if (tooltip.type !== 'repo') return [];
   const total = tooltip.commits || 0;
   if (!total) return [];
-  return tooltip.contributions.map(c => ({
-    teamId: c.teamId,
-    teamColor: c.teamColor,
-    teamName: effectiveTeams.value.find(t => t.id === c.teamId)?.name ?? c.teamId,
-    commits: c.commits,
-    pct: ((c.commits / total) * 100).toFixed(1).replace(/\.0$/, ''),
-  })).sort((a, b) => {
-    const aOwner = a.teamId === tooltip.owningTeamId ? 1 : 0;
-    const bOwner = b.teamId === tooltip.owningTeamId ? 1 : 0;
-    if (aOwner !== bOwner) return bOwner - aOwner;
-    return b.commits - a.commits;
-  });
+  const threshold = violationThreshold.value;
+  return tooltip.contributions
+    .filter(c =>
+      c.teamId === tooltip.owningTeamId || (c.commits / total) * 100 >= threshold
+    )
+    .map(c => ({
+      teamId: c.teamId,
+      teamColor: c.teamColor,
+      teamName: effectiveTeams.value.find(t => t.id === c.teamId)?.name ?? c.teamId,
+      commits: c.commits,
+      pct: ((c.commits / total) * 100).toFixed(1).replace(/\.0$/, ''),
+    })).sort((a, b) => {
+      const aOwner = a.teamId === tooltip.owningTeamId ? 1 : 0;
+      const bOwner = b.teamId === tooltip.owningTeamId ? 1 : 0;
+      if (aOwner !== bOwner) return bOwner - aOwner;
+      return b.commits - a.commits;
+    });
 });
 
 function displayNodeName(id) {
