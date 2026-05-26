@@ -4,7 +4,7 @@
     <!-- Header -->
     <header class="lens-header">
       <div class="header-left">
-        <Telescope :size="24" class="logo-icon" />
+        <span class="logo-icon">🔭</span>
         <div class="brand">
           <span class="brand-conway">Conway</span><span class="brand-lens">Lens</span>
         </div>
@@ -122,7 +122,7 @@ import { useLensStore } from '../stores/useLensStore';
 import NetworkGraph from '../components/NetworkGraph.vue';
 import MappingEditor from '../components/MappingEditor.vue';
 import {
-  Telescope, FolderOpen, Inbox, FlaskConical, Plus, RefreshCw, FileText,
+  FolderOpen, Inbox, FlaskConical, Plus, RefreshCw, FileText,
 } from 'lucide-vue-next';
 
 const store = useLensStore();
@@ -211,7 +211,7 @@ function onAppDrop(event) {
 }
 
 .logo-icon {
-  @apply text-brand-blue;
+  @apply text-2xl;
 }
 
 .brand {

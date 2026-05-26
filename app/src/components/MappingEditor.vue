@@ -542,7 +542,7 @@ async function handleImport(e) {
   @apply bg-gradient-to-r from-brand-orange-dark to-brand-orange text-white
          px-6 py-5 flex items-center justify-between shadow-lg flex-shrink-0;
 }
-.panel-title { @apply text-2xl font-bold m-0; }
+.panel-title { @apply flex items-center gap-2 text-2xl font-bold m-0; }
 .close-btn {
   @apply text-white hover:bg-white/20 rounded-full w-10 h-10 flex items-center
          justify-center text-2xl font-bold transition-all duration-200 cursor-pointer;
@@ -579,7 +579,7 @@ async function handleImport(e) {
 }
 .chevron { transition: transform 0.2s ease; color: #6B7280; }
 .chevron.rotated { transform: rotate(90deg); }
-.title-icon { @apply inline-block align-text-bottom mr-1 text-brand-blue; }
+.title-icon { @apply text-gray-700; }
 .team-summary { @apply text-xs text-gray-400 italic flex-1 min-w-0 truncate; }
 .team-body { @apply mt-3; }
 .team-name-row { @apply flex items-center gap-2 flex-1; }
