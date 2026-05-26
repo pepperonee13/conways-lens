@@ -43,7 +43,7 @@ export function useRepoDetailGraph({
       .attr('stroke-width', d => edgeWidth(d))
       .attr('display',      null)
       .attr('opacity',      EDGE.HL_OPACITY);
-    if (linkLabelEls) linkLabelEls.attr('display', 'none');
+    if (linkLabelEls) linkLabelEls.attr('display', null);
   }
 
   function highlightNode(d) {
@@ -53,6 +53,7 @@ export function useRepoDetailGraph({
       .attr('display', l => l.nodeId === d.id ? null : 'none')
       .attr('opacity', EDGE.HL_OPACITY);
     if (linkLabelEls) linkLabelEls.attr('display', l => l.nodeId === d.id ? null : 'none');
+    if (linkLabelEls) linkLabelEls.filter(l => l.nodeId === d.id).raise();
   }
 
   function resetHighlight() {
@@ -333,7 +334,7 @@ export function useRepoDetailGraph({
       .on('mousemove',  e => onMoveTooltip(e.clientX + TOOLTIP_OFFSET.x, e.clientY + TOOLTIP_OFFSET.y))
       .on('mouseleave', () => { resetHighlight(); onHideTooltip(); });
 
-    // Edge pct badge (shown only on node hover)
+    // Edge pct badge (always visible)
     linkLabelEls = root.append('g')
       .selectAll('g').data(links).join('g')
       .attr('transform', d => {
@@ -343,7 +344,6 @@ export function useRepoDetailGraph({
         return `translate(${(pos.x + end.lx2) / 2},${(pos.y + end.ly2) / 2})`;
       })
       .attr('pointer-events', 'none')
-      .attr('display', 'none')
       .each(function(d) {
         const g     = d3.select(this);
         const label = `${d.pct}%`;
