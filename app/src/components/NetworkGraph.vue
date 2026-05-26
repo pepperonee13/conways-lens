@@ -177,7 +177,18 @@ const DEFAULT_VIOLATION_THRESHOLD = (() => {
   return Number.isFinite(raw) && raw >= 0 && raw <= 100 ? raw : 10;
 })();
 
-const VIZ_DEFAULTS = { edgeWeight: true, violationThreshold: DEFAULT_VIOLATION_THRESHOLD, violatingOnly: true, displayAuthors: true };
+const DEFAULT_DISPLAY_AUTHORS = (() => {
+  const raw = import.meta.env.VITE_DISPLAY_AUTHORS_DEFAULT;
+  if (raw === undefined || raw === '') return true;
+  return String(raw).toLowerCase() !== 'false' && raw !== '0';
+})();
+
+const VIZ_DEFAULTS = {
+  edgeWeight: true,
+  violationThreshold: DEFAULT_VIOLATION_THRESHOLD,
+  violatingOnly: true,
+  displayAuthors: DEFAULT_DISPLAY_AUTHORS,
+};
 
 const vizOpen            = ref(false);
 const isFullscreen       = ref(false);
