@@ -10,7 +10,8 @@
  *   await lens.screenshot('out.png');
  */
 
-import { resolve } from 'path';
+import { resolve, basename } from 'path';
+import { readFileSync } from 'fs';
 
 const SETTLE_MS  = 1800; // wait after expand/collapse for simulation to settle
 const IMPORT_MS  = 800;  // wait after import for store to update
@@ -33,30 +34,38 @@ export class LensPage {
     return new LensPage(page);
   }
 
-  /** Upload a CSV file via the "Load file" button. */
+  /**
+   * Load a CSV file by simulating a drop event on the app's drag zone.
+   * This bypasses the native file-picker dialog, which is unavailable in
+   * headless/sandboxed environments.
+   */
   async loadCSV(csvPath) {
-    const abs = resolve(csvPath);
-    const [fc] = await Promise.all([
-      this.page.waitForEvent('filechooser'),
-      this.page.click('label.load-btn'),
-    ]);
-    await fc.setFiles(abs);
+    const text = readFileSync(resolve(csvPath), 'utf8');
+    const name = basename(csvPath);
+    await this.page.evaluate(({ text, name }) => {
+      const file = new File([text], name, { type: 'text/csv' });
+      const dt   = new DataTransfer();
+      dt.items.add(file);
+      const target = document.querySelector('.lens-app') ?? document.body;
+      target.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }));
+      target.dispatchEvent(new DragEvent('drop',     { bubbles: true, cancelable: true, dataTransfer: dt }));
+    }, { text, name });
     await this.page.waitForTimeout(1500);
   }
 
-  /** Open the Mapping panel, import a JSON file, then close the panel. */
+  /**
+   * Import team mappings from a JSON file by injecting directly into the
+   * MappingEditor's hidden file input (no panel interaction required).
+   */
   async importMappings(jsonPath) {
     const abs = resolve(jsonPath);
+    // The MappingEditor renders a hidden JSON input only when the panel is open.
     await this.page.click('button:has-text("Mapping")');
     await this.page.waitForTimeout(400);
-    const [fc] = await Promise.all([
-      this.page.waitForEvent('filechooser'),
-      this.page.click('button:has-text("Import JSON")'),
-    ]);
-    await fc.setFiles(abs);
+    await this.page.locator('input[type=file][accept=".json"]').setInputFiles(abs);
     await this.page.waitForTimeout(IMPORT_MS);
     await this.page.click('.backdrop', { force: true });
-    await this.page.waitForTimeout(1200);
+    await this.page.waitForTimeout(800);
   }
 
   /**

@@ -288,6 +288,29 @@
     </div>
   </transition>
 
+  <!-- Author alias merge confirmation modal -->
+  <Teleport to="body">
+    <transition name="modal-fade">
+      <div v-if="aliasMergeConfirm" class="modal-backdrop" @click.self="cancelAliasMerge">
+        <div class="modal-dialog" role="dialog" aria-modal="true">
+          <div class="modal-header">
+            <h3 class="modal-title">Merge author aliases?</h3>
+          </div>
+          <p class="modal-body">
+            <strong>{{ aliasMergeConfirm.raw }}</strong> will become an alias for
+            <strong>{{ aliasMergeConfirm.canonical }}</strong>.
+            All contributions from <em>{{ aliasMergeConfirm.raw }}</em> will be attributed to
+            <em>{{ aliasMergeConfirm.canonical }}</em> in the graph.
+          </p>
+          <div class="modal-actions">
+            <button class="modal-btn modal-btn--secondary" @click="cancelAliasMerge">Cancel</button>
+            <button class="modal-btn modal-btn--confirm" @click="confirmAliasMerge">Merge</button>
+          </div>
+        </div>
+      </div>
+    </transition>
+  </Teleport>
+
   <!-- Team deletion confirmation modal -->
   <Teleport to="body">
     <transition name="modal-fade">
@@ -430,10 +453,12 @@ function confirmDeleteTeam() {
   if (teamToDelete.value) store.removeTeam(teamToDelete.value.id);
   teamToDelete.value = null;
 }
-const onModalKeydown = e => { if (e.key === 'Escape') teamToDelete.value = null; };
-watch(teamToDelete, t => {
-  if (t) window.addEventListener('keydown', onModalKeydown);
-  else   window.removeEventListener('keydown', onModalKeydown);
+const onModalKeydown = e => {
+  if (e.key === 'Escape') { teamToDelete.value = null; aliasMergeConfirm.value = null; }
+};
+watch([teamToDelete, aliasMergeConfirm], ([t, a]) => {
+  if (t || a) window.addEventListener('keydown', onModalKeydown);
+  else        window.removeEventListener('keydown', onModalKeydown);
 });
 onUnmounted(() => {
   window.removeEventListener('keydown', onModalKeydown);
@@ -477,7 +502,7 @@ const unassignedRepos = computed(() => {
   return allRepos.value.filter(r => !assigned.has(r));
 });
 
-const unassignedExpanded = ref(true);
+const unassignedExpanded = ref(false);
 
 // ── Drag unassigned author/repo → team ──
 const unassignedDrag = ref(null); // { kind: 'authors' | 'repos', value: string }
@@ -522,11 +547,25 @@ function isMapped(author) { return author in authorNormalizations.value; }
 function onDragOver(author) { if (author !== dragSource.value) dragTarget.value = author; }
 function onDragLeave(author) { if (dragTarget.value === author) dragTarget.value = null; }
 
+const aliasMergeConfirm = ref(null); // { raw, canonical }
+
 function onDrop(canonical) {
-  if (dragSource.value && dragSource.value !== canonical)
-    store.setNormalization(dragSource.value, canonical);
+  if (dragSource.value && dragSource.value !== canonical) {
+    aliasMergeConfirm.value = { raw: dragSource.value, canonical };
+  }
   dragSource.value = null;
   dragTarget.value = null;
+}
+
+function confirmAliasMerge() {
+  if (aliasMergeConfirm.value) {
+    store.setNormalization(aliasMergeConfirm.value.raw, aliasMergeConfirm.value.canonical);
+  }
+  aliasMergeConfirm.value = null;
+}
+
+function cancelAliasMerge() {
+  aliasMergeConfirm.value = null;
 }
 
 // ── Ignored Authors ──
@@ -832,6 +871,9 @@ async function handleImport(e) {
 }
 .modal-btn--danger {
   @apply bg-red-500 text-white hover:bg-red-600;
+}
+.modal-btn--confirm {
+  @apply bg-brand-blue text-white hover:bg-brand-blue/85;
 }
 .modal-fade-enter-active, .modal-fade-leave-active { transition: opacity 0.15s ease; }
 .modal-fade-enter-active .modal-dialog, .modal-fade-leave-active .modal-dialog {
