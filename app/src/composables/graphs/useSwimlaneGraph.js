@@ -2,6 +2,19 @@ import * as d3 from 'd3';
 import { EDGE, NODE, ARROW, TOOLTIP_OFFSET, VIOLATION_ARC } from './graphConstants.js';
 import { calcEdgeWidth } from './graphUtils.js';
 
+// Canvas-based text measurer for accurate truncation of SVG labels.
+const _canvas = typeof document !== 'undefined' ? document.createElement('canvas') : null;
+const _ctx    = _canvas?.getContext('2d');
+
+function truncateLabel(text, maxPx, font = '600 10px Inter, sans-serif') {
+  if (!_ctx) return text;
+  _ctx.font = font;
+  if (_ctx.measureText(text).width <= maxPx) return text;
+  let t = text;
+  while (t.length > 0 && _ctx.measureText(t + '…').width > maxPx) t = t.slice(0, -1);
+  return t + '…';
+}
+
 /**
  * Conway's Law violation renderer — Swimlane Layout.
  *
@@ -440,7 +453,7 @@ export function useSwimlaneGraph({
       .attr('text-anchor', 'middle').attr('dy', d => d.r + VIOLATION_ARC.OUTER_PAD + 13)
       .attr('fill', NODE.LABEL_COLOR).attr('font-size', NODE.LABEL_SIZE_SM).attr('font-weight', '600')
       .attr('pointer-events', 'none')
-      .text(d => d.id);
+      .text(d => truncateLabel(d.id, REPO_SLOT_W - 20));
 
     drawRings();
   }

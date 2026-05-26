@@ -49,4 +49,9 @@ Heidi,ci-platform,sha047,2024-03-05,infrastructure/terraform/databases.tf
 Heidi,ci-platform,sha048,2024-03-07,monitoring/dashboards/backend.json
 Heidi,ci-platform,sha049,2024-03-09,monitoring/alerts/latency.yml
 Heidi,data-pipeline,sha050,2024-03-11,infrastructure/airflow/dags.py
+Alice,authentication-and-authorisation-service,sha051,2024-03-12,src/oauth/provider.ts
+Alice,authentication-and-authorisation-service,sha052,2024-03-14,src/oauth/callback.ts
+Alice,authentication-and-authorisation-service,sha053,2024-03-16,src/jwt/validator.ts
+Bob,authentication-and-authorisation-service,sha054,2024-03-18,src/sessions/store.ts
+Carol,authentication-and-authorisation-service,sha055,2024-03-20,src/frontend/sso.tsx
 Since=2024-03-01,Until=2024-03-31
