@@ -177,7 +177,7 @@ export function useCirclePackGraph({
     // ── Edge helpers ──────────────────────────────────────────────────────────
     // edgeLayer appended after all circles so it renders on top (SVG z = DOM order)
     let edgeLayer;
-    function clearEdges() { edgeLayer?.selectAll('*').remove(); }
+    let activeLinks = null; // links currently displayed — redrawn on every tick
 
     function edgePath(src, tgt) {
       const dx = tgt.x - src.x, dy = tgt.y - src.y;
@@ -197,8 +197,8 @@ export function useCirclePackGraph({
       return expandedTeams.has(owningTeamId) ? posMap[repoId] : posMap[`team:${owningTeamId}`];
     }
 
-    function drawEdges(links) {
-      clearEdges();
+    function renderEdges(links) {
+      edgeLayer?.selectAll('*').remove();
       for (const l of links) {
         const src = posMap[l.source];
         const tgt = resolveTarget(l.target);
@@ -216,6 +216,9 @@ export function useCirclePackGraph({
           .attr('pointer-events', 'none');
       }
     }
+
+    function drawEdges(links) { activeLinks = links; renderEdges(links); }
+    function clearEdges()      { activeLinks = null;  edgeLayer?.selectAll('*').remove(); }
 
     g.on('mouseleave', clearEdges);
 
@@ -334,22 +337,45 @@ export function useCirclePackGraph({
         syncPosMap();
         teamGs.attr('transform', d => `translate(${d.x},${d.y})`);
         g.selectAll('g.repo-bubble').attr('transform', d => `translate(${d.x},${d.y})`);
+        if (activeLinks) renderEdges(activeLinks); // keep edges in sync while moving
       });
 
     // ── Drag (team bubbles) ───────────────────────────────────────────────────
-    let isDragging = false;
+    // We detect click vs drag by distance — D3 v7 may suppress the browser
+    // click event after pointerdown, so we handle expand/collapse in drag.end.
+    let dragMoved = false;
+    let dragStartX = 0, dragStartY = 0;
+
+    function toggleExpand(d) {
+      const teamId  = d.data.teamId;
+      const expanded = !expandedTeams.has(teamId);
+      if (expanded) expandedTeams.add(teamId); else expandedTeams.delete(teamId);
+      g.selectAll(`g.repo-bubble[data-team-id="${teamId}"]`)
+        .style('display', expanded ? null : 'none');
+      g.selectAll('g.team-bubble')
+        .filter(td => td.data.teamId === teamId)
+        .select('text.team-label')
+        .attr('dominant-baseline', expanded ? 'auto' : 'middle')
+        .attr('y', expanded ? -(d.r - 16) : 0);
+    }
 
     const teamDrag = d3.drag()
       .on('start', function(event, d) {
-        isDragging = false;
-        if (!event.active) simulation.alphaTarget(0.3).restart();
-        const sn = simNodeByTeamId[d.data.teamId];
+        dragMoved  = false;
+        dragStartX = event.x; dragStartY = event.y;
+        const sn   = simNodeByTeamId[d.data.teamId];
         sn.fx = sn.x; sn.fy = sn.y;
         d3.select(this).raise();
-        d3.select(this).select('circle').attr('cursor', 'grabbing');
       })
       .on('drag', (event, d) => {
-        isDragging = true;
+        const dist = Math.hypot(event.x - dragStartX, event.y - dragStartY);
+        if (!dragMoved && dist > 4) {
+          dragMoved = true;
+          if (!event.active) simulation.alphaTarget(0.3).restart();
+          d3.select(event.sourceEvent.target.closest?.('g.team-bubble') ?? event.currentTarget)
+            .select('circle').attr('cursor', 'grabbing');
+        }
+        if (!dragMoved) return; // don't move until threshold crossed
         const k  = d3.zoomTransform(svg.node()).k;
         const sn = simNodeByTeamId[d.data.teamId];
         sn.fx += event.dx / k;
@@ -361,31 +387,15 @@ export function useCirclePackGraph({
         sn.fx = null; sn.fy = null; // release — let physics settle
         d3.select(this).select('circle').attr('cursor', 'grab');
         g.node().appendChild(edgeLayer.node()); // keep edge layer on top after raise()
-        setTimeout(() => { isDragging = false; }, 0);
+        if (!dragMoved) toggleExpand(d); // treat as click
       });
 
     teamGs.call(teamDrag);
 
     // ── Team interactions ─────────────────────────────────────────────────────
     teamGs
-      .on('click', (event, d) => {
-        if (isDragging) return;
-        event.stopPropagation();
-        const teamId   = d.data.teamId;
-        const expanded = !expandedTeams.has(teamId);
-        if (expanded) expandedTeams.add(teamId); else expandedTeams.delete(teamId);
-
-        g.selectAll(`g.repo-bubble[data-team-id="${teamId}"]`)
-          .style('display', expanded ? null : 'none');
-
-        g.selectAll('g.team-bubble')
-          .filter(td => td.data.teamId === teamId)
-          .select('text.team-label')
-          .attr('dominant-baseline', expanded ? 'auto' : 'middle')
-          .attr('y', expanded ? -(d.r - 16) : 0);
-      })
       .on('mouseover', (event, d) => {
-        if (isDragging) return;
+        if (dragMoved) return;
         event.stopPropagation();
         const teamNodeId = d.data.id;
         const teamId     = d.data.teamId;
