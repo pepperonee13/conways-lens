@@ -365,7 +365,6 @@ export function useCirclePackGraph({
         dragStartX = event.x; dragStartY = event.y;
         const sn   = simNodeByTeamId[d.data.teamId];
         sn.fx = sn.x; sn.fy = sn.y;
-        d3.select(this).raise();
       })
       .on('drag', (event, d) => {
         const dist = Math.hypot(event.x - dragStartX, event.y - dragStartY);
@@ -375,7 +374,7 @@ export function useCirclePackGraph({
           d3.select(event.sourceEvent.target.closest?.('g.team-bubble') ?? event.currentTarget)
             .select('circle').attr('cursor', 'grabbing');
         }
-        if (!dragMoved) return; // don't move until threshold crossed
+        if (!dragMoved) return;
         const k  = d3.zoomTransform(svg.node()).k;
         const sn = simNodeByTeamId[d.data.teamId];
         sn.fx += event.dx / k;
@@ -384,10 +383,10 @@ export function useCirclePackGraph({
       .on('end', function(event, d) {
         if (!event.active) simulation.alphaTarget(0);
         const sn = simNodeByTeamId[d.data.teamId];
-        sn.fx = null; sn.fy = null; // release — let physics settle
+        sn.fx = null; sn.fy = null;
         d3.select(this).select('circle').attr('cursor', 'grab');
-        g.node().appendChild(edgeLayer.node()); // keep edge layer on top after raise()
-        if (!dragMoved) toggleExpand(d); // treat as click
+        if (!dragMoved) toggleExpand(d);
+        dragMoved = false; // reset so tooltips work immediately after drag
       });
 
     teamGs.call(teamDrag);
