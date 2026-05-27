@@ -167,7 +167,7 @@
           <div class="tt-name">{{ displayNodeName(tooltip.source) }} → {{ displayNodeName(tooltip.target) }}</div>
           <div class="tt-detail">
             {{ tooltip.commits.toLocaleString() }} commits
-            <template v-if="tooltip.pct != null"> · {{ tooltip.pct }}% of <em class="tt-of-folder">{{ displayNodeName(tooltip.target) }}</em></template>
+            <template v-if="tooltip.pct != null"> · {{ tooltip.pct }}% of <em class="tt-of-folder">{{ displayNodeName(tooltip.target) }}</em>'s commits</template>
           </div>
         </template>
         <template v-else>
@@ -183,6 +183,7 @@
               <span class="tt-contrib-pct">{{ c.pct }}%</span>
             </li>
           </ul>
+          <div v-if="tooltip.contribsLabel" class="tt-contribs-label">{{ tooltip.contribsLabel }}</div>
           <ul v-if="tooltip.authorContributions?.length" class="tt-contribs tt-contribs--authors">
             <li v-for="a in tooltip.authorContributions" :key="a.authorId">
               <span class="tt-contrib-dot" :style="{ background: a.teamColor || '#9CA3AF' }"></span>
@@ -273,6 +274,8 @@ const tooltip = reactive({
   authorContributions: null,
   folderFullPath: null,
   folderLastCommit: null,
+  context: '',        // 'folder' when shown by the folder drill-down renderer
+  contribsLabel: null, // optional label above the author contributions list
 });
 
 const tooltipName = computed(() => {
@@ -287,14 +290,17 @@ const tooltipDetail = computed(() => {
     return `Team · ${tooltip.repoCount} ${tooltip.repoCount === 1 ? 'repo' : 'repos'} · ${tooltip.authorCount} ${tooltip.authorCount === 1 ? 'dev' : 'devs'} · ${c} commits`;
   if (tooltip.type === 'team-collapsed') {
     const devs = tooltip.authorCount;
-    return `${devs} ${devs === 1 ? 'dev' : 'devs'} · ${c} commits · click to expand`;
+    const commitLabel = tooltip.context === 'folder' ? `${c} commits at this level` : `${c} commits`;
+    return `${devs} ${devs === 1 ? 'dev' : 'devs'} · ${commitLabel} · click to expand`;
   }
   if (tooltip.type === 'folder') {
-    const pctStr = tooltip.pct != null ? `${tooltip.pct}% of commits` : `${c} commits`;
-    return pctStr;
+    const pctStr = tooltip.pct != null ? `${tooltip.pct}% of this level's commits` : `${c} commits`;
+    return `${c} commits · ${pctStr}`;
   }
   const team = tooltip.teamName ? ` · ${tooltip.teamName}` : '';
-  const pctStr = tooltip.pct != null ? `${tooltip.pct}%` : `${c} commits`;
+  const pctStr = tooltip.pct != null
+    ? (tooltip.context === 'folder' ? `${tooltip.pct}% of this level's commits` : `${tooltip.pct}%`)
+    : `${c} commits`;
   return `${pctStr}${team}`;
 });
 
@@ -421,6 +427,8 @@ const folderRenderer = useRepoFolderGraph({
       authorContributions: d.authorContributions ?? null,
       folderFullPath: d.folderFullPath ?? null,
       folderLastCommit: d.folderLastCommit ?? null,
+      context: 'folder',
+      contribsLabel: d.type === 'team-collapsed' ? "each dev's share of this level's commits:" : null,
     });
   },
   onShowLinkTooltip: (d, x, y) => {
@@ -432,7 +440,7 @@ const folderRenderer = useRepoFolderGraph({
     });
   },
   onMoveTooltip: (x, y) => { tooltip.x = x; tooltip.y = y; },
-  onHideTooltip: () => { tooltip.show = false; },
+  onHideTooltip: () => { tooltip.show = false; tooltip.context = ''; tooltip.contribsLabel = null; },
   edgeWeight,
 });
 
@@ -705,7 +713,8 @@ onMounted(() => {
 }
 .tt-name   { @apply font-bold text-brand-gray text-base; }
 .tt-path        { @apply text-gray-400 text-xs font-mono mt-0.5; }
-.tt-last-commit { @apply text-gray-400 text-xs mt-0.5; }
+.tt-last-commit    { @apply text-gray-400 text-xs mt-0.5; }
+.tt-contribs-label { @apply text-gray-400 text-xs mt-1.5 mb-0.5; }
 .tt-detail { @apply text-gray-500 text-xs mt-0.5; }
 .tt-of-folder { font-style: normal; color: var(--brand-blue); font-weight: 600; }
 .tt-action { @apply text-brand-blue text-xs mt-1 font-medium; }
