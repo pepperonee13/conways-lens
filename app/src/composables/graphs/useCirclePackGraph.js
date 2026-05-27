@@ -136,13 +136,18 @@ export function useCirclePackGraph({
     const repoOwnerMap = Object.fromEntries(
       data.nodes.filter(n => n.type === 'repo').map(n => [n.id, n.owningTeamId])
     );
+    const repoCommitMap = Object.fromEntries(
+      data.nodes.filter(n => n.type === 'repo').map(n => [n.id, n.commits ?? 0])
+    );
     const teamColorMap = Object.fromEntries(teams.map(t => [`team:${t.id}`, t.color]));
 
-    // Cross-team links only
-    const crossLinks = data.links.filter(l =>
-      repoOwnerMap[l.target] !== undefined &&
-      l.source.replace('team:', '') !== repoOwnerMap[l.target]
-    );
+    // Cross-team links above the violation threshold only
+    const crossLinks = data.links.filter(l => {
+      if (repoOwnerMap[l.target] === undefined) return false;
+      if (l.source.replace('team:', '') === repoOwnerMap[l.target]) return false;
+      const repoTotal = repoCommitMap[l.target] ?? 0;
+      return repoTotal > 0 && (l.commits / repoTotal) * 100 >= threshold;
+    });
 
     // ── Edge helpers ─────────────────────────────────────────────────────────
     const edgeLayer = g.append('g').attr('class', 'edge-layer');
@@ -236,7 +241,7 @@ export function useCirclePackGraph({
     repoGs.append('circle')
       .attr('r', d => d.r)
       .attr('fill', d => d.data.teamColor)
-      .attr('fill-opacity', 0.78)
+      .attr('fill-opacity', 0.35)
       .attr('stroke', '#fff')
       .attr('stroke-width', 1.5)
       .attr('cursor', 'pointer');
@@ -275,7 +280,7 @@ export function useCirclePackGraph({
         d3.select(this).insert('path', 'text')
           .attr('d', arcGen({ innerRadius: innerR, outerRadius: outerR, startAngle: angle, endAngle: angle + sweep }))
           .attr('fill', s.teamColor)
-          .attr('fill-opacity', s.isOwner ? 0.45 : 0.9)
+          .attr('fill-opacity', s.isOwner ? 0.85 : 0.9)
           .attr('pointer-events', 'none');
         angle += sweep;
       }
