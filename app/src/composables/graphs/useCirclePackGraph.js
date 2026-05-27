@@ -130,7 +130,8 @@ export function useCirclePackGraph({
     }
     const allRepoPackNodes = root.descendants().filter(d => d.depth === 2);
     for (const d of allRepoPackNodes) {
-      posMap[d.data.id] = { x: d.x, y: d.y, r: d.r, color: d.data.teamColor ?? d.parent?.data.color };
+      // Use outer ring radius so edge endpoints (and arrowheads) land at the ring edge
+      posMap[d.data.id] = { x: d.x, y: d.y, r: d.r + RING_OUTER, color: d.data.teamColor ?? d.parent?.data.color };
     }
 
     const repoOwnerMap = Object.fromEntries(
