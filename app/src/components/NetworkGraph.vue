@@ -193,15 +193,31 @@
           <div class="tt-name">{{ tooltipName }}</div>
           <div v-if="tooltip.type === 'folder' && tooltip.folderFullPath" class="tt-path">{{ tooltip.folderFullPath }}</div>
           <div class="tt-detail">{{ tooltipDetail }}</div>
-          <div v-if="tooltip.inboundCommits != null || tooltip.outboundCommits != null" class="tt-xteam">
-            <div v-if="tooltip.inboundCommits != null" class="tt-xteam-row tt-xteam-in">
-              <span class="tt-xteam-arrow">↙</span>{{ tooltip.inboundCommits.toLocaleString() }} from other teams
+          <div v-if="tooltip.context === 'folder' && tooltip.folderLastCommit" class="tt-last-commit">last commit {{ tooltip.folderLastCommit }}</div>
+          <template v-if="tooltip.teamInboundBreakdown?.length || tooltip.teamOutboundBreakdown?.length">
+            <div class="tt-cb-section">
+              <template v-if="tooltip.teamInboundBreakdown?.length">
+                <div class="tt-cb-header">Contributing to this team's repos</div>
+                <ul class="tt-cb-list">
+                  <li v-for="item in tooltip.teamInboundBreakdown" :key="item.teamId">
+                    <span class="tt-contrib-dot" :style="{ background: teamColorById(item.teamId) }"></span>
+                    <span class="tt-contrib-name">{{ teamNameById(item.teamId) }}</span>
+                    <span class="tt-contrib-pct">{{ item.pct }}%</span>
+                  </li>
+                </ul>
+              </template>
+              <template v-if="tooltip.teamOutboundBreakdown?.length">
+                <div class="tt-cb-header" :class="{ 'tt-cb-header--gap': tooltip.teamInboundBreakdown?.length }">This team in other teams' repos</div>
+                <ul class="tt-cb-list">
+                  <li v-for="item in tooltip.teamOutboundBreakdown" :key="item.teamId">
+                    <span class="tt-contrib-dot" :style="{ background: teamColorById(item.teamId) }"></span>
+                    <span class="tt-contrib-name">{{ teamNameById(item.teamId) }}</span>
+                    <span class="tt-contrib-pct">{{ item.pct }}%</span>
+                  </li>
+                </ul>
+              </template>
             </div>
-            <div v-if="tooltip.outboundCommits != null" class="tt-xteam-row tt-xteam-out">
-              <span class="tt-xteam-arrow">↗</span>{{ tooltip.outboundCommits.toLocaleString() }} to other teams
-            </div>
-          </div>
-          <div v-if="tooltip.folderLastCommit" class="tt-last-commit">last commit {{ tooltip.folderLastCommit }}</div>
+          </template>
           <ul v-if="tooltip.type === 'repo' && tooltipContributions.length" class="tt-contribs">
             <li v-for="c in tooltipContributions" :key="c.teamId"
                 :class="{ 'tt-contrib-owner': c.teamId === tooltip.owningTeamId }">
@@ -306,8 +322,8 @@ const tooltip = reactive({
   folderLastCommit: null,
   context: '',
   contribsLabel: null,
-  inboundCommits: null,
-  outboundCommits: null,
+  teamInboundBreakdown: null,
+  teamOutboundBreakdown: null,
 });
 
 const tooltipName = computed(() => {
@@ -358,6 +374,13 @@ const tooltipContributions = computed(() => {
     });
 });
 
+function teamNameById(id) {
+  return effectiveTeams.value.find(t => t.id === id)?.name ?? id;
+}
+function teamColorById(id) {
+  return effectiveTeams.value.find(t => t.id === id)?.color ?? '#9CA3AF';
+}
+
 function displayNodeName(id) {
   if (!id) return '';
   if (id.startsWith('team:')) {
@@ -396,7 +419,8 @@ const renderer = useSwimlaneGraph({
       contributions: d.contributions ?? [],
       owningTeamId: d.owningTeamId ?? null,
       authorContributions: displayAuthors.value && (d.type === 'repo' || d.type === 'team') ? d.authorContributions ?? null : null,
-      inboundCommits: null, outboundCommits: null,
+      folderLastCommit: null, folderFullPath: null, context: '',
+      teamInboundBreakdown: null, teamOutboundBreakdown: null,
     });
   },
   onShowLinkTooltip: (d, x, y) => {
@@ -427,8 +451,9 @@ const circlePackRenderer = useCirclePackGraph({
       contributions: d.contributions ?? [],
       owningTeamId: d.owningTeamId ?? null,
       authorContributions: displayAuthors.value && (d.type === 'repo' || d.type === 'team') ? d.authorContributions ?? null : null,
-      inboundCommits: d.inboundCommits ?? null,
-      outboundCommits: d.outboundCommits ?? null,
+      folderLastCommit: null, folderFullPath: null, context: '',
+      teamInboundBreakdown: d.teamInboundBreakdown ?? null,
+      teamOutboundBreakdown: d.teamOutboundBreakdown ?? null,
     });
   },
   onMoveTooltip: (x, y) => { tooltip.x = x; tooltip.y = y; },
@@ -453,6 +478,7 @@ const detailRenderer = useRepoDetailGraph({
       teamName: d.teamName ?? '', repoCount: 0, authorCount: d.authors?.length ?? 0,
       action: d.action ?? '', contributions: d.contributions ?? [], owningTeamId: d.owningTeamId ?? null,
       authorContributions: d.authorContributions ?? null,
+      teamInboundBreakdown: null, teamOutboundBreakdown: null,
     });
   },
   onShowLinkTooltip: (d, x, y) => {
@@ -795,11 +821,11 @@ onMounted(() => {
   to   { opacity: 1; transform: translateX(-100%) translateY(0); }
 }
 .tt-name    { @apply font-bold text-brand-gray text-base; }
-.tt-xteam   { margin-top: 5px; padding-top: 5px; border-top: 1px solid #e2e8f0; display: flex; flex-direction: column; gap: 2px; }
-.tt-xteam-row { display: flex; align-items: center; gap: 5px; font-size: 11px; font-family: 'JetBrains Mono', monospace; font-weight: 600; }
-.tt-xteam-arrow { font-size: 12px; flex-shrink: 0; }
-.tt-xteam-in  { color: #F08223; }
-.tt-xteam-out { color: #225EA9; }
+.tt-cb-section { margin-top: 6px; padding-top: 6px; border-top: 1px solid #e2e8f0; }
+.tt-cb-header { font-size: 10px; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 3px; }
+.tt-cb-header--gap { margin-top: 8px; }
+.tt-cb-list { margin: 0; padding: 0; list-style: none; }
+.tt-cb-list li { display: grid; grid-template-columns: 10px 1fr auto; align-items: center; gap: 6px; font-size: 11px; line-height: 1.75; color: #374151; }
 .tt-path        { @apply text-gray-400 text-xs font-mono mt-0.5; }
 .tt-last-commit    { @apply text-gray-400 text-xs mt-0.5; }
 .tt-contribs-label { @apply text-gray-400 text-xs mt-1.5 mb-0.5; }

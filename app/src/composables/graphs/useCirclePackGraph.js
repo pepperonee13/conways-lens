@@ -252,17 +252,42 @@ export function useCirclePackGraph({
           l.source === teamNodeId || repoOwnerMap[l.target] === teamId
         );
         drawEdges(links);
-        const outboundCommits = crossLinks
-          .filter(l => l.source === teamNodeId)
-          .reduce((s, l) => s + (l.commits ?? 0), 0);
-        const inboundCommits = crossLinks
-          .filter(l => repoOwnerMap[l.target] === teamId)
-          .reduce((s, l) => s + (l.commits ?? 0), 0);
+        // Inbound: other teams' share of THIS team's total repo commits
+        const thisTeamRepoTotal = data.nodes
+          .filter(n => n.type === 'repo' && n.owningTeamId === teamId)
+          .reduce((s, n) => s + (n.commits ?? 0), 0);
+        const inboundMap = {};
+        for (const l of crossLinks.filter(l => repoOwnerMap[l.target] === teamId)) {
+          const srcId = l.source.replace('team:', '');
+          inboundMap[srcId] = (inboundMap[srcId] ?? 0) + (l.commits ?? 0);
+        }
+        const teamInboundBreakdown = Object.entries(inboundMap)
+          .map(([tid, commits]) => ({
+            teamId: tid, commits,
+            pct: thisTeamRepoTotal > 0 ? +((commits / thisTeamRepoTotal) * 100).toFixed(1) : 0,
+          }))
+          .sort((a, b) => b.commits - a.commits);
+
+        // Outbound: this team's share of each target team's total repo commits
+        const outboundMap = {};
+        for (const l of crossLinks.filter(l => l.source === teamNodeId)) {
+          const tgtTeamId = repoOwnerMap[l.target];
+          if (tgtTeamId) outboundMap[tgtTeamId] = (outboundMap[tgtTeamId] ?? 0) + (l.commits ?? 0);
+        }
+        const teamOutboundBreakdown = Object.entries(outboundMap)
+          .map(([tid, commits]) => {
+            const tgtTotal = data.nodes
+              .filter(n => n.type === 'repo' && n.owningTeamId === tid)
+              .reduce((s, n) => s + (n.commits ?? 0), 0);
+            return { teamId: tid, commits, pct: tgtTotal > 0 ? +((commits / tgtTotal) * 100).toFixed(1) : 0 };
+          })
+          .sort((a, b) => b.commits - a.commits);
+
         onShowNodeTooltip({
           id: teamNodeId, type: 'team', name: d.data.name,
           commits: d.data.commits, repoCount: d.data.repoCount, authorCount: d.data.authorCount,
-          inboundCommits: inboundCommits || null,
-          outboundCommits: outboundCommits || null,
+          teamInboundBreakdown: teamInboundBreakdown.length ? teamInboundBreakdown : null,
+          teamOutboundBreakdown: teamOutboundBreakdown.length ? teamOutboundBreakdown : null,
         }, event.pageX + TOOLTIP_OFFSET.x, event.pageY + TOOLTIP_OFFSET.y);
       })
       .on('mousemove', e => onMoveTooltip(e.pageX + TOOLTIP_OFFSET.x, e.pageY + TOOLTIP_OFFSET.y))
@@ -273,14 +298,7 @@ export function useCirclePackGraph({
       .on('mouseover', (event, d) => {
         event.stopPropagation();
         drawEdges(crossLinks.filter(l => l.target === d.data.id));
-        const inboundCommits = (d.data.contributions ?? [])
-          .filter(c => c.teamId !== d.data.owningTeamId)
-          .reduce((s, c) => s + (c.commits ?? 0), 0);
-        onShowNodeTooltip({
-          ...d.data,
-          inboundCommits: inboundCommits || null,
-          outboundCommits: null,
-        }, event.pageX + TOOLTIP_OFFSET.x, event.pageY + TOOLTIP_OFFSET.y);
+        onShowNodeTooltip(d.data, event.pageX + TOOLTIP_OFFSET.x, event.pageY + TOOLTIP_OFFSET.y);
       })
       .on('mousemove', e => onMoveTooltip(e.pageX + TOOLTIP_OFFSET.x, e.pageY + TOOLTIP_OFFSET.y))
       .on('mouseout', () => { clearEdges(); onHideTooltip(); })
