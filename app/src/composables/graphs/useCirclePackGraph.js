@@ -216,24 +216,6 @@ export function useCirclePackGraph({
       .attr('stroke-width', 1.5)
       .attr('cursor', 'pointer');
 
-    // Violation ring — orange dashed outline when cross-team commits exceed threshold
-    repoGs.each(function(d) {
-      const hasViolation = d.data.contributions?.some(c =>
-        c.teamId !== d.data.owningTeamId && d.data.commits > 0 &&
-        (c.commits / d.data.commits) * 100 >= threshold
-      );
-      if (hasViolation) {
-        d3.select(this).append('circle')
-          .attr('r', d.r + 3.5)
-          .attr('fill', 'none')
-          .attr('stroke', '#F08223')
-          .attr('stroke-width', 2)
-          .attr('stroke-dasharray', '4,3')
-          .attr('opacity', 0.9)
-          .attr('pointer-events', 'none');
-      }
-    });
-
     repoGs.append('text')
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'middle')

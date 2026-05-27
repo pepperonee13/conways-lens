@@ -24,8 +24,7 @@
           <p v-else class="graph-desc">
             <span class="legend"><span class="legend-bubble-team"></span>Team</span>
             <span class="legend"><span class="legend-bubble-repo"></span>Bounded Context</span>
-            <span class="legend"><span class="legend-ring"></span>Violation ring</span>
-            &nbsp;·&nbsp; Bubble size = commit volume &nbsp;·&nbsp; Click a repo for author details
+            &nbsp;·&nbsp; Bubble size = commit volume &nbsp;·&nbsp; Hover to see cross-team edges &nbsp;·&nbsp; Click a repo for author details
           </p>
           <div v-if="effectiveTeams.length > 0" class="view-toggle">
             <button :class="['view-toggle-btn', { active: graphView === 'swimlane' }]" @click="setGraphView('swimlane')">Swimlane</button>
