@@ -151,9 +151,11 @@ export function useCirclePackGraph({
     });
 
     // ── Edge helpers ─────────────────────────────────────────────────────────
-    const edgeLayer = g.append('g').attr('class', 'edge-layer');
+    // edgeLayer is appended after all circle groups so SVG DOM order puts
+    // edges on top of bubbles (SVG z-order = DOM order, no z-index support)
+    let edgeLayer;
 
-    function clearEdges() { edgeLayer.selectAll('*').remove(); }
+    function clearEdges() { edgeLayer?.selectAll('*').remove(); }
 
     // Quadratic bezier from the boundary of src to the boundary of tgt
     function edgePath(src, tgt) {
@@ -300,6 +302,9 @@ export function useCirclePackGraph({
         const maxChars = Math.max(1, Math.floor(d.r * 1.5 / 6));
         return name.length > maxChars ? name.slice(0, maxChars) + '…' : name;
       });
+
+    // Append edge layer last so it renders on top of all bubbles
+    edgeLayer = g.append('g').attr('class', 'edge-layer');
 
     // ── Team interactions ─────────────────────────────────────────────────
     teamGs
