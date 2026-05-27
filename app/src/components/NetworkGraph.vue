@@ -193,6 +193,14 @@
           <div class="tt-name">{{ tooltipName }}</div>
           <div v-if="tooltip.type === 'folder' && tooltip.folderFullPath" class="tt-path">{{ tooltip.folderFullPath }}</div>
           <div class="tt-detail">{{ tooltipDetail }}</div>
+          <div v-if="tooltip.inboundCommits != null || tooltip.outboundCommits != null" class="tt-xteam">
+            <div v-if="tooltip.inboundCommits != null" class="tt-xteam-row tt-xteam-in">
+              <span class="tt-xteam-arrow">↙</span>{{ tooltip.inboundCommits.toLocaleString() }} from other teams
+            </div>
+            <div v-if="tooltip.outboundCommits != null" class="tt-xteam-row tt-xteam-out">
+              <span class="tt-xteam-arrow">↗</span>{{ tooltip.outboundCommits.toLocaleString() }} to other teams
+            </div>
+          </div>
           <div v-if="tooltip.folderLastCommit" class="tt-last-commit">last commit {{ tooltip.folderLastCommit }}</div>
           <ul v-if="tooltip.type === 'repo' && tooltipContributions.length" class="tt-contribs">
             <li v-for="c in tooltipContributions" :key="c.teamId"
@@ -296,8 +304,10 @@ const tooltip = reactive({
   authorContributions: null,
   folderFullPath: null,
   folderLastCommit: null,
-  context: '',        // 'folder' when shown by the folder drill-down renderer
-  contribsLabel: null, // optional label above the author contributions list
+  context: '',
+  contribsLabel: null,
+  inboundCommits: null,
+  outboundCommits: null,
 });
 
 const tooltipName = computed(() => {
@@ -386,6 +396,7 @@ const renderer = useSwimlaneGraph({
       contributions: d.contributions ?? [],
       owningTeamId: d.owningTeamId ?? null,
       authorContributions: displayAuthors.value && (d.type === 'repo' || d.type === 'team') ? d.authorContributions ?? null : null,
+      inboundCommits: null, outboundCommits: null,
     });
   },
   onShowLinkTooltip: (d, x, y) => {
@@ -416,6 +427,8 @@ const circlePackRenderer = useCirclePackGraph({
       contributions: d.contributions ?? [],
       owningTeamId: d.owningTeamId ?? null,
       authorContributions: displayAuthors.value && (d.type === 'repo' || d.type === 'team') ? d.authorContributions ?? null : null,
+      inboundCommits: d.inboundCommits ?? null,
+      outboundCommits: d.outboundCommits ?? null,
     });
   },
   onMoveTooltip: (x, y) => { tooltip.x = x; tooltip.y = y; },
@@ -781,7 +794,12 @@ onMounted(() => {
   from { opacity: 0; transform: translateX(-100%) translateY(-4px); }
   to   { opacity: 1; transform: translateX(-100%) translateY(0); }
 }
-.tt-name   { @apply font-bold text-brand-gray text-base; }
+.tt-name    { @apply font-bold text-brand-gray text-base; }
+.tt-xteam   { margin-top: 5px; padding-top: 5px; border-top: 1px solid #e2e8f0; display: flex; flex-direction: column; gap: 2px; }
+.tt-xteam-row { display: flex; align-items: center; gap: 5px; font-size: 11px; font-family: 'JetBrains Mono', monospace; font-weight: 600; }
+.tt-xteam-arrow { font-size: 12px; flex-shrink: 0; }
+.tt-xteam-in  { color: #F08223; }
+.tt-xteam-out { color: #225EA9; }
 .tt-path        { @apply text-gray-400 text-xs font-mono mt-0.5; }
 .tt-last-commit    { @apply text-gray-400 text-xs mt-0.5; }
 .tt-contribs-label { @apply text-gray-400 text-xs mt-1.5 mb-0.5; }

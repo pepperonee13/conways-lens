@@ -86,7 +86,7 @@ export function useCirclePackGraph({
 
     d3.pack()
       .size([w - 8, h - 8])
-      .padding(d => d.depth === 0 ? 18 : 5)(root);
+      .padding(d => d.depth === 0 ? 36 : 6)(root);
 
     svg.attr('width', w).attr('height', h);
 
@@ -246,13 +246,23 @@ export function useCirclePackGraph({
       })
       .on('mouseover', (event, d) => {
         event.stopPropagation();
+        const teamNodeId = d.data.id;
+        const teamId     = d.data.teamId;
         const links = crossLinks.filter(l =>
-          l.source === d.data.id || repoOwnerMap[l.target] === d.data.teamId
+          l.source === teamNodeId || repoOwnerMap[l.target] === teamId
         );
         drawEdges(links);
+        const outboundCommits = crossLinks
+          .filter(l => l.source === teamNodeId)
+          .reduce((s, l) => s + (l.commits ?? 0), 0);
+        const inboundCommits = crossLinks
+          .filter(l => repoOwnerMap[l.target] === teamId)
+          .reduce((s, l) => s + (l.commits ?? 0), 0);
         onShowNodeTooltip({
-          id: d.data.id, type: 'team', name: d.data.name,
+          id: teamNodeId, type: 'team', name: d.data.name,
           commits: d.data.commits, repoCount: d.data.repoCount, authorCount: d.data.authorCount,
+          inboundCommits: inboundCommits || null,
+          outboundCommits: outboundCommits || null,
         }, event.pageX + TOOLTIP_OFFSET.x, event.pageY + TOOLTIP_OFFSET.y);
       })
       .on('mousemove', e => onMoveTooltip(e.pageX + TOOLTIP_OFFSET.x, e.pageY + TOOLTIP_OFFSET.y))
@@ -263,7 +273,14 @@ export function useCirclePackGraph({
       .on('mouseover', (event, d) => {
         event.stopPropagation();
         drawEdges(crossLinks.filter(l => l.target === d.data.id));
-        onShowNodeTooltip(d.data, event.pageX + TOOLTIP_OFFSET.x, event.pageY + TOOLTIP_OFFSET.y);
+        const inboundCommits = (d.data.contributions ?? [])
+          .filter(c => c.teamId !== d.data.owningTeamId)
+          .reduce((s, c) => s + (c.commits ?? 0), 0);
+        onShowNodeTooltip({
+          ...d.data,
+          inboundCommits: inboundCommits || null,
+          outboundCommits: null,
+        }, event.pageX + TOOLTIP_OFFSET.x, event.pageY + TOOLTIP_OFFSET.y);
       })
       .on('mousemove', e => onMoveTooltip(e.pageX + TOOLTIP_OFFSET.x, e.pageY + TOOLTIP_OFFSET.y))
       .on('mouseout', () => { clearEdges(); onHideTooltip(); })
