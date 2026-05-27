@@ -226,8 +226,8 @@ export function useCirclePackGraph({
       .attr('font-weight', '600')
       .attr('fill', '#374151')
       .attr('pointer-events', 'none')
-      .attr('dominant-baseline', d => expandedTeams.has(d.data.teamId) ? 'auto' : 'middle')
-      .attr('y', d => expandedTeams.has(d.data.teamId) ? -(d.r - 16) : 0)
+      .attr('dominant-baseline', 'hanging')
+      .attr('y', d => expandedTeams.has(d.data.teamId) ? -(d.r - 16) : d.r + 6)
       .text(d => d.data.name);
 
     // ── Repo circles (hidden until team is expanded) ──────────────────────
@@ -320,8 +320,8 @@ export function useCirclePackGraph({
         g.selectAll('g.team-bubble')
           .filter(td => td.data.teamId === teamId)
           .select('text.team-label')
-          .attr('dominant-baseline', expanded ? 'auto' : 'middle')
-          .attr('y', expanded ? -(d.r - 16) : 0);
+          .attr('dominant-baseline', 'hanging')
+          .attr('y', expanded ? -(d.r - 16) : d.r + 6);
       })
       .on('mouseover', (event, d) => {
         event.stopPropagation();
