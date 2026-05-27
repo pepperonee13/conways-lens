@@ -3,23 +3,35 @@
     <div class="graph-header">
       <h3 v-if="!isFullscreen" class="graph-title">Team ownership lens</h3>
       <div class="graph-desc-row">
-        <p v-if="!isFullscreen && !detailRepoId" class="graph-desc">
-          <span class="legend"><span class="legend-team"></span>Team lane</span>
-          <span class="legend"><span class="legend-repo"></span>Bounded Context</span>
-          <span class="legend"><span class="legend-ring"></span>Violation ring</span>
-          &nbsp;·&nbsp;
-          <span class="info-wrap">
-            Lanes sorted by violation severity
-            <span class="info-icon" tabindex="0" aria-label="What is severity?">i</span>
-            <span class="info-tooltip" role="tooltip">
-              <strong>Severity</strong> = total cross-team commits touching a team, in both directions:
-              <span class="info-line"><em>Inbound</em> — commits made by other teams into repos this team owns.</span>
-              <span class="info-line"><em>Outbound</em> — commits made by this team into repos other teams own.</span>
-              Lanes are ordered by inbound + outbound, descending. The threshold setting does not affect ordering.
+        <template v-if="!isFullscreen && !detailRepoId">
+          <p v-if="graphView === 'swimlane'" class="graph-desc">
+            <span class="legend"><span class="legend-team"></span>Team lane</span>
+            <span class="legend"><span class="legend-repo"></span>Bounded Context</span>
+            <span class="legend"><span class="legend-ring"></span>Violation ring</span>
+            &nbsp;·&nbsp;
+            <span class="info-wrap">
+              Lanes sorted by violation severity
+              <span class="info-icon" tabindex="0" aria-label="What is severity?">i</span>
+              <span class="info-tooltip" role="tooltip">
+                <strong>Severity</strong> = total cross-team commits touching a team, in both directions:
+                <span class="info-line"><em>Inbound</em> — commits made by other teams into repos this team owns.</span>
+                <span class="info-line"><em>Outbound</em> — commits made by this team into repos other teams own.</span>
+                Lanes are ordered by inbound + outbound, descending. The threshold setting does not affect ordering.
+              </span>
             </span>
-          </span>
-          &nbsp;·&nbsp; Edge crossing a lane = cross-team contribution
-        </p>
+            &nbsp;·&nbsp; Edge crossing a lane = cross-team contribution
+          </p>
+          <p v-else class="graph-desc">
+            <span class="legend"><span class="legend-bubble-team"></span>Team</span>
+            <span class="legend"><span class="legend-bubble-repo"></span>Bounded Context</span>
+            <span class="legend"><span class="legend-ring"></span>Violation ring</span>
+            &nbsp;·&nbsp; Bubble size = commit volume &nbsp;·&nbsp; Click a repo for author details
+          </p>
+          <div v-if="effectiveTeams.length > 0" class="view-toggle">
+            <button :class="['view-toggle-btn', { active: graphView === 'swimlane' }]" @click="setGraphView('swimlane')">Swimlane</button>
+            <button :class="['view-toggle-btn', { active: graphView === 'circlepack' }]" @click="setGraphView('circlepack')">Bubbles</button>
+          </div>
+        </template>
         <p v-if="!isFullscreen && detailRepoId && folderPath === null" class="graph-desc">
           <span class="legend"><span class="legend-detail-repo"></span>Bounded Context</span>
           <span class="legend"><span class="legend-detail-team"></span>Team (click to expand)</span>
@@ -209,6 +221,7 @@ import { storeToRefs } from 'pinia';
 import { Maximize2, Minimize2 } from 'lucide-vue-next';
 import { useLensStore } from '../stores/useLensStore';
 import { useSwimlaneGraph } from '../composables/graphs/useSwimlaneGraph.js';
+import { useCirclePackGraph } from '../composables/graphs/useCirclePackGraph.js';
 import { useRepoDetailGraph } from '../composables/graphs/useRepoDetailGraph.js';
 import { useRepoFolderGraph } from '../composables/graphs/useRepoFolderGraph.js';
 import { useAnonymize } from '../composables/useAnonymize.js';
@@ -242,6 +255,7 @@ const VIZ_DEFAULTS = {
 
 const vizOpen            = ref(false);
 const isFullscreen       = ref(false);
+const graphView          = ref('swimlane'); // 'swimlane' | 'circlepack'
 const edgeWeight         = ref(VIZ_DEFAULTS.edgeWeight);
 const violationThreshold = ref(VIZ_DEFAULTS.violationThreshold);
 const violatingOnly      = ref(VIZ_DEFAULTS.violatingOnly);
@@ -386,6 +400,29 @@ const renderer = useSwimlaneGraph({
   violatingOnly,
 });
 
+// ── Circle pack renderer ──────────────────────────────────────────────────
+const circlePackRenderer = useCirclePackGraph({
+  svgRef,
+  effectiveTeams,
+  onShowNodeTooltip: (d, x, y) => {
+    Object.assign(tooltip, {
+      show: true, x, y, isLink: false,
+      anchorRight: d.type === 'team',
+      name: d.id, type: d.type, commits: d.commits,
+      teamName: d.name ?? '', repoCount: d.repoCount ?? 0, authorCount: d.authorCount ?? 0,
+      action: d.type === 'repo' ? 'Click to see author contributions' : '',
+      contributions: d.contributions ?? [],
+      owningTeamId: d.owningTeamId ?? null,
+      authorContributions: displayAuthors.value && (d.type === 'repo' || d.type === 'team') ? d.authorContributions ?? null : null,
+    });
+  },
+  onMoveTooltip: (x, y) => { tooltip.x = x; tooltip.y = y; },
+  onHideTooltip: () => { tooltip.show = false; tooltip.anchorRight = false; },
+  onNodeClick: (d) => openDetail(d),
+  violationThreshold,
+  violatingOnly,
+});
+
 // ── Detail (repo contributor radial) renderer ────────────────────────────
 const detailRenderer = useRepoDetailGraph({
   svgRef: detailSvgRef,
@@ -506,7 +543,19 @@ function redrawFolder() {
 }
 
 function redraw() {
-  renderer.draw({ dims, data: ownershipGraphData.value });
+  if (graphView.value === 'circlepack') {
+    renderer.teardown();
+    circlePackRenderer.draw({ dims, data: ownershipGraphData.value });
+  } else {
+    circlePackRenderer.teardown();
+    renderer.draw({ dims, data: ownershipGraphData.value });
+  }
+}
+
+function setGraphView(view) {
+  if (graphView.value === view) return;
+  graphView.value = view;
+  nextTick(() => redraw());
 }
 
 watch(ownershipGraphData, () => redraw(), { deep: true, flush: 'post' });
@@ -518,15 +567,17 @@ watch(edgeWeight, () => {
     renderer.updateEdgeStyles();
   }
 });
-watch(nodeColors,         () => renderer.updateNodeColors());
+watch(nodeColors, () => {
+  if (graphView.value === 'swimlane') renderer.updateNodeColors();
+});
 watch(violationThreshold, () => {
   if (detailRepoId.value) {
     if (folderPath.value !== null) redrawFolder();
     else openDetail(detailRepoId.value);
-  } else if (violatingOnly.value) redraw();
+  } else if (violatingOnly.value || graphView.value === 'circlepack') redraw();
   else renderer.drawOverlays();
 });
-watch(violatingOnly,      () => redraw());
+watch(violatingOnly, () => redraw());
 
 // ── Resize ────────────────────────────────────────────────────────────────
 
@@ -567,6 +618,7 @@ onMounted(() => {
     document.removeEventListener('mousedown', handleDocClick);
     document.removeEventListener('keydown', handleKeyDown);
     renderer.teardown();
+    circlePackRenderer.teardown();
     detailRenderer.teardown();
   });
 });
@@ -788,6 +840,30 @@ onMounted(() => {
   transition: all 0.15s;
 }
 .viz-reset-btn:hover { border-color: #225EA9; color: #225EA9; }
+
+/* ── View toggle (Swimlane / Bubbles) ── */
+.view-toggle {
+  display: flex; border: 1.5px solid #cbd5e1; border-radius: 8px; overflow: hidden;
+  flex-shrink: 0;
+}
+.view-toggle-btn {
+  font-size: 11px; font-weight: 600; padding: 3px 12px;
+  background: transparent; color: #64748b; border: none; cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  line-height: 1.6;
+}
+.view-toggle-btn + .view-toggle-btn { border-left: 1.5px solid #cbd5e1; }
+.view-toggle-btn.active { background: #225EA9; color: #fff; }
+.view-toggle-btn:not(.active):hover { background: #f1f5f9; color: #225EA9; }
+
+.legend-bubble-team {
+  display: inline-block; width: 18px; height: 18px; border-radius: 50%;
+  background: #F08223; opacity: 0.2; border: 2px solid #F08223;
+}
+.legend-bubble-repo {
+  display: inline-block; width: 12px; height: 12px; border-radius: 50%;
+  background: #F08223; opacity: 0.78;
+}
 
 /* ── Maximize button ── */
 .maximize-btn {
