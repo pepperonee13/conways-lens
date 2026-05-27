@@ -24,8 +24,13 @@
           <span class="legend"><span class="legend-detail-repo"></span>Bounded Context</span>
           <span class="legend"><span class="legend-detail-team"></span>Team (click to expand)</span>
           <span class="legend"><span class="legend-detail-author"></span>Author</span>
-          &nbsp;·&nbsp; Edge width = commit volume &nbsp;·&nbsp; Click repo to explore folders
+          &nbsp;·&nbsp; Edge width = commit volume
+          <template v-if="!noFolderData">&nbsp;·&nbsp; Click repo to explore folders</template>
         </p>
+        <div v-if="noFolderData" class="no-folder-notice">
+          No file path data for this repo — folder drill-down is unavailable.
+          <button class="no-folder-dismiss" @click="noFolderData = false">×</button>
+        </div>
         <p v-if="!isFullscreen && detailRepoId && folderPath !== null" class="graph-desc">
           <span class="legend"><span class="legend-detail-team"></span>Team (click to expand)</span>
           <span class="legend"><span class="legend-detail-author"></span>Author</span>
@@ -226,6 +231,7 @@ const vizDropRef    = ref(null);
 const dims          = reactive({ w: 900, h: 600 });
 const detailRepoId  = ref(null);
 const folderPath    = ref(null); // null = author view, [] = folder root, ['src'] = inside src/, etc.
+const noFolderData  = ref(false); // true when repo has no FilePath data — suppresses blank folder view
 
 const VIZ_DEFAULTS = {
   edgeWeight: true,
@@ -446,6 +452,7 @@ const folderRenderer = useRepoFolderGraph({
 function openDetail(repoId) {
   folderRenderer.teardown();
   folderPath.value = null;
+  noFolderData.value = false;
   detailRepoId.value = repoId;
   nextTick(() => {
     const data = store.repoContributorsData(repoId);
@@ -462,6 +469,12 @@ function closeDetail() {
 }
 
 function openFolderMode() {
+  const probe = store.repoFolderData(detailRepoId.value, '');
+  if (!probe.nodes.some(n => n.type === 'folder')) {
+    noFolderData.value = true;
+    return;
+  }
+  noFolderData.value = false;
   detailRenderer.teardown();
   folderPath.value = [];
   nextTick(() => redrawFolder());
@@ -584,6 +597,10 @@ onMounted(() => {
 .graph-title     { @apply text-2xl font-bold text-brand-gray mb-2; }
 .graph-desc-row  { @apply flex items-center justify-center gap-4 flex-wrap; }
 .graph-desc      { @apply text-sm text-gray-500 leading-relaxed flex items-center flex-wrap gap-x-2 gap-y-1; }
+.no-folder-notice {
+  @apply text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-1.5 flex items-center gap-2;
+}
+.no-folder-dismiss { @apply ml-auto text-amber-500 hover:text-amber-700 font-bold leading-none; }
 .cross-team-btn  {
   @apply flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border transition-all duration-150;
   border-color: #94a3b8; color: #64748b; background: transparent;
