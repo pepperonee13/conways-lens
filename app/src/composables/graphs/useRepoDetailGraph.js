@@ -16,6 +16,7 @@ export function useRepoDetailGraph({
   onShowLinkTooltip,
   onMoveTooltip,
   onHideTooltip,
+  onRepoClick,
   edgeWeight,
   violationThreshold,
 }) {
@@ -463,15 +464,17 @@ export function useRepoDetailGraph({
 
       const repoG = root.append('g')
         .attr('transform', `translate(${cx},${cy})`)
-        .style('cursor', 'default')
+        .style('cursor', onRepoClick ? 'pointer' : 'default')
         .on('mouseenter', e => onShowNodeTooltip(
           { id: repoNode.id, type: 'repo', commits: repoNode.commits,
             teamName: '', repoCount: 0, authorCount: 0,
-            contributions: repoContributions, owningTeamId: repoOwningTeamId },
+            contributions: repoContributions, owningTeamId: repoOwningTeamId,
+            action: onRepoClick ? 'Click to explore folder structure' : '' },
           e.clientX + TOOLTIP_OFFSET.x, e.clientY + TOOLTIP_OFFSET.y
         ))
         .on('mousemove',  e => onMoveTooltip(e.clientX + TOOLTIP_OFFSET.x, e.clientY + TOOLTIP_OFFSET.y))
-        .on('mouseleave', () => onHideTooltip());
+        .on('mouseleave', () => onHideTooltip())
+        .on('click', () => { if (onRepoClick) { onHideTooltip(); onRepoClick(); } });
 
       repoG.append('circle')
         .attr('r', REPO_R)

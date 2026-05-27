@@ -53,3 +53,10 @@ export const VIOLATION_ARC = {
   INNER_PAD: 3,
   OUTER_PAD: 9,
 };
+
+export const FOLDER_GRAPH = {
+  FOLDER_HALF_W: 76,
+  FOLDER_H:      32,
+  FOLDER_RX:      7,
+  EDGE_GAP:      10,
+};
