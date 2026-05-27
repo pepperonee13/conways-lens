@@ -194,10 +194,20 @@
           <div v-if="tooltip.type === 'folder' && tooltip.folderFullPath" class="tt-path">{{ tooltip.folderFullPath }}</div>
           <div class="tt-detail">{{ tooltipDetail }}</div>
           <div v-if="tooltip.context === 'folder' && tooltip.folderLastCommit" class="tt-last-commit">last commit {{ tooltip.folderLastCommit }}</div>
-          <template v-if="tooltip.teamInboundBreakdown?.length || tooltip.teamOutboundBreakdown?.length">
+          <template v-if="tooltip.repoBreakdown?.length || tooltip.teamInboundBreakdown?.length || tooltip.teamOutboundBreakdown?.length">
             <div class="tt-cb-section">
+              <template v-if="tooltip.repoBreakdown?.length">
+                <div class="tt-cb-header">Team contributions</div>
+                <ul class="tt-cb-list">
+                  <li v-for="item in tooltip.repoBreakdown" :key="item.teamId" :class="{ 'tt-contrib-owner': item.isOwner }">
+                    <span class="tt-contrib-dot" :style="{ background: teamColorById(item.teamId) }"></span>
+                    <span class="tt-contrib-name">{{ teamNameById(item.teamId) }}</span>
+                    <span class="tt-contrib-pct">{{ item.pct }}%</span>
+                  </li>
+                </ul>
+              </template>
               <template v-if="tooltip.teamInboundBreakdown?.length">
-                <div class="tt-cb-header">Contributing to this team's repos</div>
+                <div class="tt-cb-header" :class="{ 'tt-cb-header--gap': tooltip.repoBreakdown?.length }">Contributing to this team's repos</div>
                 <ul class="tt-cb-list">
                   <li v-for="item in tooltip.teamInboundBreakdown" :key="item.teamId">
                     <span class="tt-contrib-dot" :style="{ background: teamColorById(item.teamId) }"></span>
@@ -218,7 +228,7 @@
               </template>
             </div>
           </template>
-          <ul v-if="tooltip.type === 'repo' && tooltipContributions.length" class="tt-contribs">
+          <ul v-if="tooltip.type === 'repo' && tooltipContributions.length && !tooltip.repoBreakdown" class="tt-contribs">
             <li v-for="c in tooltipContributions" :key="c.teamId"
                 :class="{ 'tt-contrib-owner': c.teamId === tooltip.owningTeamId }">
               <span class="tt-contrib-dot" :style="{ background: c.teamColor }"></span>
@@ -324,6 +334,7 @@ const tooltip = reactive({
   contribsLabel: null,
   teamInboundBreakdown: null,
   teamOutboundBreakdown: null,
+  repoBreakdown: null,
 });
 
 const tooltipName = computed(() => {
@@ -420,7 +431,7 @@ const renderer = useSwimlaneGraph({
       owningTeamId: d.owningTeamId ?? null,
       authorContributions: displayAuthors.value && (d.type === 'repo' || d.type === 'team') ? d.authorContributions ?? null : null,
       folderLastCommit: null, folderFullPath: null, context: '',
-      teamInboundBreakdown: null, teamOutboundBreakdown: null,
+      teamInboundBreakdown: null, teamOutboundBreakdown: null, repoBreakdown: null,
     });
   },
   onShowLinkTooltip: (d, x, y) => {
@@ -454,6 +465,7 @@ const circlePackRenderer = useCirclePackGraph({
       folderLastCommit: null, folderFullPath: null, context: '',
       teamInboundBreakdown: d.teamInboundBreakdown ?? null,
       teamOutboundBreakdown: d.teamOutboundBreakdown ?? null,
+      repoBreakdown: d.repoBreakdown ?? null,
     });
   },
   onMoveTooltip: (x, y) => { tooltip.x = x; tooltip.y = y; },
@@ -478,7 +490,7 @@ const detailRenderer = useRepoDetailGraph({
       teamName: d.teamName ?? '', repoCount: 0, authorCount: d.authors?.length ?? 0,
       action: d.action ?? '', contributions: d.contributions ?? [], owningTeamId: d.owningTeamId ?? null,
       authorContributions: d.authorContributions ?? null,
-      teamInboundBreakdown: null, teamOutboundBreakdown: null,
+      teamInboundBreakdown: null, teamOutboundBreakdown: null, repoBreakdown: null,
     });
   },
   onShowLinkTooltip: (d, x, y) => {

@@ -90,6 +90,29 @@ export function useCirclePackGraph({
 
     svg.attr('width', w).attr('height', h);
 
+    // Arrowhead markers — one per team color, keyed by sanitised color hex
+    const defs = svg.append('defs');
+    const markerFor = (color) => {
+      const id = 'arrow-' + color.replace('#', '');
+      if (defs.select(`#${id}`).empty()) {
+        defs.append('marker')
+          .attr('id', id)
+          .attr('viewBox', '0 -4 8 8')
+          .attr('refX', 8)
+          .attr('refY', 0)
+          .attr('markerWidth', 6)
+          .attr('markerHeight', 6)
+          .attr('orient', 'auto')
+          .append('path')
+            .attr('d', 'M0,-4L8,0L0,4Z')
+            .attr('fill', color)
+            .attr('opacity', 0.72);
+      }
+      return `url(#${id})`;
+    };
+    // Pre-create a marker for each team color so they're ready before edges are drawn
+    for (const team of teams) markerFor(team.color);
+
     const zoom = d3.zoom()
       .scaleExtent([0.3, 5])
       .on('zoom', e => g.attr('transform', e.transform));
@@ -154,12 +177,14 @@ export function useCirclePackGraph({
         if (!src || !tgt) continue;
         const path = edgePath(src, tgt);
         if (!path) continue;
+        const color = teamColorMap[l.source] ?? src.color;
         edgeLayer.append('path')
           .attr('d', path)
           .attr('fill', 'none')
-          .attr('stroke', teamColorMap[l.source] ?? src.color)
+          .attr('stroke', color)
           .attr('stroke-width', 2)
           .attr('stroke-opacity', 0.72)
+          .attr('marker-end', markerFor(color))
           .attr('pointer-events', 'none');
       }
     }
@@ -298,7 +323,15 @@ export function useCirclePackGraph({
       .on('mouseover', (event, d) => {
         event.stopPropagation();
         drawEdges(crossLinks.filter(l => l.target === d.data.id));
-        onShowNodeTooltip(d.data, event.pageX + TOOLTIP_OFFSET.x, event.pageY + TOOLTIP_OFFSET.y);
+        const repoBreakdown = (d.data.contributions ?? [])
+          .map(c => ({
+            teamId:  c.teamId,
+            commits: c.commits,
+            pct:     d.data.commits > 0 ? +((c.commits / d.data.commits) * 100).toFixed(1) : 0,
+            isOwner: c.teamId === d.data.owningTeamId,
+          }))
+          .sort((a, b) => (b.isOwner - a.isOwner) || (b.commits - a.commits));
+        onShowNodeTooltip({ ...d.data, repoBreakdown }, event.pageX + TOOLTIP_OFFSET.x, event.pageY + TOOLTIP_OFFSET.y);
       })
       .on('mousemove', e => onMoveTooltip(e.pageX + TOOLTIP_OFFSET.x, e.pageY + TOOLTIP_OFFSET.y))
       .on('mouseout', () => { clearEdges(); onHideTooltip(); })
