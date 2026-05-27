@@ -168,7 +168,10 @@
         </div>
       </template>
       <template v-else>
-        <p v-if="!isFullscreen" class="hint">Scroll to zoom · Hover nodes or edges to inspect · Click a repo for author details</p>
+        <p v-if="!isFullscreen" class="hint">
+          <template v-if="graphView === 'swimlane'">Scroll to zoom · Hover nodes or edges to inspect · Click a repo for author details</template>
+          <template v-else>Scroll to zoom · Click a team to expand · Hover to see cross-team edges · Click a repo for author details</template>
+        </p>
         <div class="svg-wrap">
           <svg ref="svgRef" class="graph-svg"></svg>
         </div>

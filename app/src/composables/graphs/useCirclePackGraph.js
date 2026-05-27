@@ -4,15 +4,14 @@ import { TOOLTIP_OFFSET } from './graphConstants.js';
 /**
  * Hierarchical bubble chart renderer — Circle Pack Layout.
  *
- * Teams are large circles; the repos they own are smaller circles packed
- * inside. Bubble area encodes commit volume. An orange dashed ring marks
- * repos with cross-team contributions above the violation threshold.
+ * Default state: team circles only (sized by total commit volume).
+ * Click a team to expand it and reveal its repos packed inside.
+ * Click again to collapse.
  *
- * On hover over any bubble, curved edges appear showing cross-team links:
- * - Team hover → all edges where this team contributed to another team's repos
- *   (outbound) plus all edges from other teams into this team's repos (inbound).
- * - Repo hover → all edges from contributing teams to this repo.
- * Edge color = contributing team's color.
+ * Hovering any bubble draws curved cross-team edges that originate and
+ * terminate at circle boundaries (not centers). Edge color = contributing
+ * team's color. If the target repo's owning team is collapsed the edge
+ * routes to that team's circle boundary instead.
  */
 export function useCirclePackGraph({
   svgRef,
@@ -24,6 +23,8 @@ export function useCirclePackGraph({
   violationThreshold,
   violatingOnly,
 }) {
+  // Persists across redraws so expansion state survives data/filter changes
+  const expandedTeams = new Set();
 
   function draw({ dims, data }) {
     if (!svgRef.value) return;
@@ -45,16 +46,13 @@ export function useCirclePackGraph({
     for (const team of teams) {
       const teamNode  = teamNodeMap[`team:${team.id}`];
       const teamRepos = data.nodes.filter(n => n.type === 'repo' && n.owningTeamId === team.id);
-
       const filteredRepos = filterViolating
         ? teamRepos.filter(r => r.contributions?.some(c =>
             c.teamId !== r.owningTeamId && r.commits > 0 &&
             (c.commits / r.commits) * 100 >= threshold
           ))
         : teamRepos;
-
       if (filteredRepos.length === 0 && filterViolating) continue;
-
       children.push({
         id:          `team:${team.id}`,
         name:        team.name,
@@ -99,8 +97,7 @@ export function useCirclePackGraph({
 
     const g = svg.append('g').attr('transform', 'translate(4,4)');
 
-    // ── Position map for edge drawing ────────────────────────────────────────
-    // Keyed by node id → absolute {x, y, r, color}
+    // ── Position map (absolute coords for all pack nodes) ────────────────────
     const posMap = {};
     for (const d of root.children ?? []) {
       posMap[d.data.id] = { x: d.x, y: d.y, r: d.r, color: d.data.color };
@@ -110,49 +107,63 @@ export function useCirclePackGraph({
       posMap[d.data.id] = { x: d.x, y: d.y, r: d.r, color: d.data.teamColor ?? d.parent?.data.color };
     }
 
-    // Cross-team links only: contributing team ≠ owning team of target repo
     const repoOwnerMap = Object.fromEntries(
       data.nodes.filter(n => n.type === 'repo').map(n => [n.id, n.owningTeamId])
     );
-    const teamColorMap = Object.fromEntries(
-      teams.map(t => [`team:${t.id}`, t.color])
-    );
+    const teamColorMap = Object.fromEntries(teams.map(t => [`team:${t.id}`, t.color]));
+
+    // Cross-team links only
     const crossLinks = data.links.filter(l =>
       repoOwnerMap[l.target] !== undefined &&
       l.source.replace('team:', '') !== repoOwnerMap[l.target]
     );
 
-    // ── Edge layer (below everything) ────────────────────────────────────────
+    // ── Edge helpers ─────────────────────────────────────────────────────────
     const edgeLayer = g.append('g').attr('class', 'edge-layer');
 
-    function clearEdges() {
-      edgeLayer.selectAll('*').remove();
+    function clearEdges() { edgeLayer.selectAll('*').remove(); }
+
+    // Quadratic bezier from the boundary of src to the boundary of tgt
+    function edgePath(src, tgt) {
+      const dx = tgt.x - src.x, dy = tgt.y - src.y;
+      const len = Math.sqrt(dx * dx + dy * dy);
+      if (len < 1) return '';
+      const ux = dx / len, uy = dy / len;
+      const x1 = src.x + src.r * ux,  y1 = src.y + src.r * uy;
+      const x2 = tgt.x - tgt.r * ux,  y2 = tgt.y - tgt.r * uy;
+      const bend = Math.min(len * 0.22, 55);
+      const cpx = (x1 + x2) / 2 - uy * bend;
+      const cpy = (y1 + y2) / 2 + ux * bend;
+      return `M${x1},${y1} Q${cpx},${cpy} ${x2},${y2}`;
+    }
+
+    // Route an edge targeting repoId to the repo (if its team is expanded)
+    // or to the owning team circle (if collapsed)
+    function resolveTarget(repoId) {
+      const owningTeamId = repoOwnerMap[repoId];
+      return expandedTeams.has(owningTeamId)
+        ? posMap[repoId]
+        : posMap[`team:${owningTeamId}`];
     }
 
     function drawEdges(links) {
       clearEdges();
       for (const l of links) {
         const src = posMap[l.source];
-        const tgt = posMap[l.target];
+        const tgt = resolveTarget(l.target);
         if (!src || !tgt) continue;
-
-        // Offset control point perpendicular to the chord for a gentle curve
-        const dx  = tgt.x - src.x;
-        const dy  = tgt.y - src.y;
-        const cpx = (src.x + tgt.x) / 2 - dy * 0.3;
-        const cpy = (src.y + tgt.y) / 2 + dx * 0.3;
-
+        const path = edgePath(src, tgt);
+        if (!path) continue;
         edgeLayer.append('path')
-          .attr('d', `M${src.x},${src.y} Q${cpx},${cpy} ${tgt.x},${tgt.y}`)
+          .attr('d', path)
           .attr('fill', 'none')
           .attr('stroke', teamColorMap[l.source] ?? src.color)
           .attr('stroke-width', 2)
-          .attr('stroke-opacity', 0.7)
+          .attr('stroke-opacity', 0.72)
           .attr('pointer-events', 'none');
       }
     }
 
-    // Dismiss edges when cursor leaves the graph entirely
     g.on('mouseleave', clearEdges);
 
     // ── Team circles ────────────────────────────────────────────────────────
@@ -168,45 +179,31 @@ export function useCirclePackGraph({
       .attr('fill-opacity', 0.13)
       .attr('stroke', d => d.data.color)
       .attr('stroke-width', 2)
-      .attr('stroke-opacity', 0.5);
+      .attr('stroke-opacity', 0.5)
+      .attr('cursor', 'pointer');
 
     teamGs.append('text')
-      .attr('y', d => -(d.r - 14))
+      .attr('class', 'team-label')
       .attr('text-anchor', 'middle')
       .attr('font-family', 'Inter, sans-serif')
       .attr('font-size', d => Math.min(13, Math.max(9, d.r * 0.12)) + 'px')
       .attr('font-weight', '600')
       .attr('fill', '#374151')
       .attr('pointer-events', 'none')
+      .attr('dominant-baseline', d => expandedTeams.has(d.data.teamId) ? 'auto' : 'middle')
+      .attr('y', d => expandedTeams.has(d.data.teamId) ? -(d.r - 16) : 0)
       .text(d => d.data.name);
 
-    teamGs
-      .on('mouseover', (event, d) => {
-        event.stopPropagation();
-        const teamNodeId = d.data.id;
-        const teamId     = d.data.teamId;
-        // Outbound: this team → repos in other teams
-        // Inbound:  other teams → repos this team owns
-        const links = crossLinks.filter(l =>
-          l.source === teamNodeId || repoOwnerMap[l.target] === teamId
-        );
-        drawEdges(links);
-        onShowNodeTooltip({
-          id: teamNodeId, type: 'team', name: d.data.name,
-          commits: d.data.commits, repoCount: d.data.repoCount, authorCount: d.data.authorCount,
-        }, event.pageX + TOOLTIP_OFFSET.x, event.pageY + TOOLTIP_OFFSET.y);
-      })
-      .on('mousemove', e => onMoveTooltip(e.pageX + TOOLTIP_OFFSET.x, e.pageY + TOOLTIP_OFFSET.y))
-      .on('mouseout', () => { clearEdges(); onHideTooltip(); });
-
-    // ── Repo circles ─────────────────────────────────────────────────────────
+    // ── Repo circles (hidden until team is expanded) ──────────────────────
     const repoNodes = allRepoPackNodes.filter(d => d.data.type === 'repo');
 
     const repoGs = g.selectAll('g.repo-bubble')
       .data(repoNodes)
       .join('g')
       .attr('class', 'repo-bubble')
-      .attr('transform', d => `translate(${d.x},${d.y})`);
+      .attr('data-team-id', d => d.data.owningTeamId)
+      .attr('transform', d => `translate(${d.x},${d.y})`)
+      .style('display', d => expandedTeams.has(d.data.owningTeamId) ? null : 'none');
 
     repoGs.append('circle')
       .attr('r', d => d.r)
@@ -230,12 +227,42 @@ export function useCirclePackGraph({
         return name.length > maxChars ? name.slice(0, maxChars) + '…' : name;
       });
 
+    // ── Team interactions ─────────────────────────────────────────────────
+    teamGs
+      .on('click', (event, d) => {
+        event.stopPropagation();
+        const teamId   = d.data.teamId;
+        const expanded = !expandedTeams.has(teamId);
+        if (expanded) expandedTeams.add(teamId); else expandedTeams.delete(teamId);
+
+        g.selectAll(`g.repo-bubble[data-team-id="${teamId}"]`)
+          .style('display', expanded ? null : 'none');
+
+        g.selectAll('g.team-bubble')
+          .filter(td => td.data.teamId === teamId)
+          .select('text.team-label')
+          .attr('dominant-baseline', expanded ? 'auto' : 'middle')
+          .attr('y', expanded ? -(d.r - 16) : 0);
+      })
+      .on('mouseover', (event, d) => {
+        event.stopPropagation();
+        const links = crossLinks.filter(l =>
+          l.source === d.data.id || repoOwnerMap[l.target] === d.data.teamId
+        );
+        drawEdges(links);
+        onShowNodeTooltip({
+          id: d.data.id, type: 'team', name: d.data.name,
+          commits: d.data.commits, repoCount: d.data.repoCount, authorCount: d.data.authorCount,
+        }, event.pageX + TOOLTIP_OFFSET.x, event.pageY + TOOLTIP_OFFSET.y);
+      })
+      .on('mousemove', e => onMoveTooltip(e.pageX + TOOLTIP_OFFSET.x, e.pageY + TOOLTIP_OFFSET.y))
+      .on('mouseout', () => { clearEdges(); onHideTooltip(); });
+
+    // ── Repo interactions ─────────────────────────────────────────────────
     repoGs
       .on('mouseover', (event, d) => {
         event.stopPropagation();
-        // Show all cross-team edges into this repo
-        const links = crossLinks.filter(l => l.target === d.data.id);
-        drawEdges(links);
+        drawEdges(crossLinks.filter(l => l.target === d.data.id));
         onShowNodeTooltip(d.data, event.pageX + TOOLTIP_OFFSET.x, event.pageY + TOOLTIP_OFFSET.y);
       })
       .on('mousemove', e => onMoveTooltip(e.pageX + TOOLTIP_OFFSET.x, e.pageY + TOOLTIP_OFFSET.y))
