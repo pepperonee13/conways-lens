@@ -23,8 +23,9 @@ export function useCirclePackGraph({
   violationThreshold,
   violatingOnly,
 }) {
-  // Persists across redraws so expansion state survives data/filter changes
-  const expandedTeams = new Set();
+  // Persist across redraws so state survives data/filter changes
+  const expandedTeams   = new Set();
+  const teamDragOffsets = {}; // { teamId: { dx, dy } }
 
   function draw({ dims, data }) {
     if (!svgRef.value) return;
@@ -123,6 +124,18 @@ export function useCirclePackGraph({
 
     const g = svg.append('g').attr('transform', 'translate(4,4)');
 
+    // Apply any persisted drag offsets so positions survive redraws
+    for (const teamD of root.children ?? []) {
+      const off = teamDragOffsets[teamD.data.teamId];
+      if (!off) continue;
+      teamD.x += off.dx;
+      teamD.y += off.dy;
+      for (const child of teamD.children ?? []) {
+        child.x += off.dx;
+        child.y += off.dy;
+      }
+    }
+
     // ── Position map (absolute coords for all pack nodes) ────────────────────
     const posMap = {};
     for (const d of root.children ?? []) {
@@ -216,7 +229,7 @@ export function useCirclePackGraph({
       .attr('stroke', d => d.data.color)
       .attr('stroke-width', 2)
       .attr('stroke-opacity', 0.5)
-      .attr('cursor', 'pointer');
+      .attr('cursor', 'grab');
 
     teamGs.append('text')
       .attr('class', 'team-label')
@@ -306,9 +319,58 @@ export function useCirclePackGraph({
     // Append edge layer last so it renders on top of all bubbles
     edgeLayer = g.append('g').attr('class', 'edge-layer');
 
+    // ── Drag behaviour (team bubbles only) ───────────────────────────────────
+    const teamDrag = d3.drag()
+      .on('start', function(event, d) {
+        d._dragMoved = false;
+        d3.select(this).raise(); // bring dragged team on top
+        d3.select(this).select('circle').attr('cursor', 'grabbing');
+        event.sourceEvent.stopPropagation();
+      })
+      .on('drag', function(event, d) {
+        d._dragMoved = true;
+        const k = d3.zoomTransform(svg.node()).k;
+        const ddx = event.dx / k;
+        const ddy = event.dy / k;
+        const teamId = d.data.teamId;
+
+        // Accumulate offset so it survives redraws
+        if (!teamDragOffsets[teamId]) teamDragOffsets[teamId] = { dx: 0, dy: 0 };
+        teamDragOffsets[teamId].dx += ddx;
+        teamDragOffsets[teamId].dy += ddy;
+
+        // Move pack node coords (used by posMap and child lookups)
+        d.x += ddx; d.y += ddy;
+        for (const child of d.children ?? []) { child.x += ddx; child.y += ddy; }
+
+        // Update DOM
+        d3.select(this).attr('transform', `translate(${d.x},${d.y})`);
+        g.selectAll(`g.repo-bubble[data-team-id="${teamId}"]`)
+          .each(function(rd) {
+            d3.select(this).attr('transform', `translate(${rd.x},${rd.y})`);
+          });
+
+        // Keep posMap in sync so edge drawing stays correct
+        posMap[`team:${teamId}`].x = d.x;
+        posMap[`team:${teamId}`].y = d.y;
+        for (const rd of allRepoPackNodes) {
+          if (rd.data.owningTeamId === teamId && posMap[rd.data.id]) {
+            posMap[rd.data.id].x = rd.x;
+            posMap[rd.data.id].y = rd.y;
+          }
+        }
+      })
+      .on('end', function(event, d) {
+        d3.select(this).select('circle').attr('cursor', 'grab');
+      });
+
+    teamGs.call(teamDrag);
+
     // ── Team interactions ─────────────────────────────────────────────────
     teamGs
       .on('click', (event, d) => {
+        // Suppress click when the mousedown was part of a drag
+        if (d._dragMoved) { d._dragMoved = false; return; }
         event.stopPropagation();
         const teamId   = d.data.teamId;
         const expanded = !expandedTeams.has(teamId);
@@ -324,6 +386,7 @@ export function useCirclePackGraph({
           .attr('y', expanded ? -(d.r - 16) : 0);
       })
       .on('mouseover', (event, d) => {
+        if (d._dragMoved) return;
         event.stopPropagation();
         const teamNodeId = d.data.id;
         const teamId     = d.data.teamId;
