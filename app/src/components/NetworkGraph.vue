@@ -473,6 +473,7 @@ const circlePackRenderer = useCirclePackGraph({
   onNodeClick: (d) => openDetail(d),
   violationThreshold,
   violatingOnly,
+  edgeWeight,
 });
 
 // ── Detail (repo contributor radial) renderer ────────────────────────────
@@ -616,6 +617,8 @@ watch(dims,               () => redraw(), { flush: 'post' });
 watch(edgeWeight, () => {
   if (detailRepoId.value) {
     (folderPath.value !== null ? folderRenderer : detailRenderer).updateEdgeStyles();
+  } else if (graphView.value === 'circlepack') {
+    redraw();
   } else {
     renderer.updateEdgeStyles();
   }

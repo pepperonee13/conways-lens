@@ -1,5 +1,6 @@
 import * as d3 from 'd3';
 import { TOOLTIP_OFFSET } from './graphConstants.js';
+import { calcEdgeWidth } from './graphUtils.js';
 
 /**
  * Hierarchical bubble chart renderer — Circle Pack Layout.
@@ -22,6 +23,7 @@ export function useCirclePackGraph({
   onNodeClick,
   violationThreshold,
   violatingOnly,
+  edgeWeight,
 }) {
   // Persists across redraws so expansion state survives data/filter changes
   const expandedTeams = new Set();
@@ -41,6 +43,10 @@ export function useCirclePackGraph({
       data.nodes.filter(n => n.type === 'team').map(n => [n.id, n])
     );
 
+    // Pre-computed before the hierarchy loop so outbound-only teams can be detected
+    const repoOwnerMap  = Object.fromEntries(data.nodes.filter(n => n.type === 'repo').map(n => [n.id, n.owningTeamId]));
+    const repoCommitMap = Object.fromEntries(data.nodes.filter(n => n.type === 'repo').map(n => [n.id, n.commits ?? 0]));
+
     // Build hierarchy: root → teams → repos
     const children = [];
     for (const team of teams) {
@@ -52,7 +58,17 @@ export function useCirclePackGraph({
             (c.commits / r.commits) * 100 >= threshold
           ))
         : teamRepos;
-      if (filteredRepos.length === 0 && filterViolating) continue;
+      if (filteredRepos.length === 0 && filterViolating) {
+        // Still include if this team contributes outbound to another team's violating repo —
+        // without a posMap entry the edge would be silently dropped in drawEdges.
+        const hasOutbound = data.links.some(l =>
+          l.source === `team:${team.id}` &&
+          repoOwnerMap[l.target] && repoOwnerMap[l.target] !== team.id &&
+          (repoCommitMap[l.target] ?? 0) > 0 &&
+          (l.commits / repoCommitMap[l.target]) * 100 >= threshold
+        );
+        if (!hasOutbound) continue;
+      }
       children.push({
         id:          `team:${team.id}`,
         name:        team.name,
@@ -134,12 +150,6 @@ export function useCirclePackGraph({
       posMap[d.data.id] = { x: d.x, y: d.y, r: d.r + RING_OUTER, color: d.data.teamColor ?? d.parent?.data.color };
     }
 
-    const repoOwnerMap = Object.fromEntries(
-      data.nodes.filter(n => n.type === 'repo').map(n => [n.id, n.owningTeamId])
-    );
-    const repoCommitMap = Object.fromEntries(
-      data.nodes.filter(n => n.type === 'repo').map(n => [n.id, n.commits ?? 0])
-    );
     const teamColorMap = Object.fromEntries(teams.map(t => [`team:${t.id}`, t.color]));
 
     // Cross-team links above the violation threshold only
@@ -182,6 +192,7 @@ export function useCirclePackGraph({
 
     function drawEdges(links) {
       clearEdges();
+      const weightOn = edgeWeight?.value ?? true;
       for (const l of links) {
         const src = posMap[l.source];
         const tgt = resolveTarget(l.target);
@@ -193,7 +204,7 @@ export function useCirclePackGraph({
           .attr('d', path)
           .attr('fill', 'none')
           .attr('stroke', color)
-          .attr('stroke-width', 2)
+          .attr('stroke-width', calcEdgeWidth(l.commits, weightOn))
           .attr('stroke-opacity', 0.72)
           .attr('marker-end', markerFor(color))
           .attr('pointer-events', 'none');
