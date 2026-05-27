@@ -294,8 +294,7 @@ const tooltipDetail = computed(() => {
     return `${devs} ${devs === 1 ? 'dev' : 'devs'} · ${commitLabel} · click to expand`;
   }
   if (tooltip.type === 'folder') {
-    const pctStr = tooltip.pct != null ? `${tooltip.pct}% of this level's commits` : `${c} commits`;
-    return `${c} commits · ${pctStr}`;
+    return `${c} commits`;
   }
   const team = tooltip.teamName ? ` · ${tooltip.teamName}` : '';
   const pctStr = tooltip.pct != null
