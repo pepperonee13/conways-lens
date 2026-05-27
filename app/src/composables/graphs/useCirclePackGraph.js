@@ -84,9 +84,12 @@ export function useCirclePackGraph({
       .sum(d => d.value ?? 0)
       .sort((a, b) => b.value - a.value);
 
+    const RING_OUTER = 7; // ring extends this many px beyond the circle edge
     d3.pack()
       .size([w - 8, h - 8])
-      .padding(d => d.depth === 0 ? 36 : 6)(root);
+      // depth-0: gap between team circles; depth-1: must fit the ring on each
+      // side of adjacent repos (RING_OUTER * 2) plus a small visual gap
+      .padding(d => d.depth === 0 ? 36 : RING_OUTER * 2 + 6)(root);
 
     svg.attr('width', w).attr('height', h);
 
@@ -238,27 +241,41 @@ export function useCirclePackGraph({
       .attr('stroke-width', 1.5)
       .attr('cursor', 'pointer');
 
-    // Violation rings — colored arc segments outside the repo circle,
-    // one per contributing team above the threshold, proportional to
-    // that team's share of the repo's total commits.
+    // Full ownership ring — a 360° donut around each repo circle.
+    // Owner's arc comes first (12 o'clock), then other teams sorted by
+    // commits desc. Arc angle = team commits / total commits * 2π.
+    // Cross-team arcs below the threshold are merged into the owner slice
+    // so the ring always completes the full circle.
     const arcGen = d3.arc();
     repoGs.each(function(d) {
       const total = d.data.commits || 0;
       if (!total) return;
-      const crossContribs = (d.data.contributions ?? [])
-        .filter(c => c.teamId !== d.data.owningTeamId && c.commits > 0 &&
+      const all = (d.data.contributions ?? []).filter(c => c.commits > 0);
+      if (!all.length) return;
+
+      // Separate owner and qualifying cross-team contributors
+      const owner  = all.find(c => c.teamId === d.data.owningTeamId);
+      const others = all
+        .filter(c => c.teamId !== d.data.owningTeamId &&
                      (c.commits / total) * 100 >= threshold)
         .sort((a, b) => b.commits - a.commits);
-      if (!crossContribs.length) return;
+
+      // Owner absorbs any below-threshold cross commits so ring stays full
+      const ownerCommits = total - others.reduce((s, c) => s + c.commits, 0);
+      const slices = [
+        { teamColor: owner?.teamColor ?? d.data.teamColor, commits: ownerCommits, isOwner: true },
+        ...others,
+      ].filter(s => s.commits > 0);
+
       const innerR = d.r + 3;
-      const outerR = d.r + 7;
+      const outerR = d.r + RING_OUTER;
       let angle = -Math.PI / 2; // start at 12 o'clock
-      for (const c of crossContribs) {
-        const sweep = (c.commits / total) * 2 * Math.PI;
-        d3.select(this).insert('path', 'text') // below label
+      for (const s of slices) {
+        const sweep = (s.commits / total) * 2 * Math.PI;
+        d3.select(this).insert('path', 'text')
           .attr('d', arcGen({ innerRadius: innerR, outerRadius: outerR, startAngle: angle, endAngle: angle + sweep }))
-          .attr('fill', c.teamColor)
-          .attr('fill-opacity', 0.9)
+          .attr('fill', s.teamColor)
+          .attr('fill-opacity', s.isOwner ? 0.45 : 0.9)
           .attr('pointer-events', 'none');
         angle += sweep;
       }
