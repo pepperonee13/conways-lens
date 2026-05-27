@@ -238,6 +238,32 @@ export function useCirclePackGraph({
       .attr('stroke-width', 1.5)
       .attr('cursor', 'pointer');
 
+    // Violation rings — colored arc segments outside the repo circle,
+    // one per contributing team above the threshold, proportional to
+    // that team's share of the repo's total commits.
+    const arcGen = d3.arc();
+    repoGs.each(function(d) {
+      const total = d.data.commits || 0;
+      if (!total) return;
+      const crossContribs = (d.data.contributions ?? [])
+        .filter(c => c.teamId !== d.data.owningTeamId && c.commits > 0 &&
+                     (c.commits / total) * 100 >= threshold)
+        .sort((a, b) => b.commits - a.commits);
+      if (!crossContribs.length) return;
+      const innerR = d.r + 3;
+      const outerR = d.r + 7;
+      let angle = -Math.PI / 2; // start at 12 o'clock
+      for (const c of crossContribs) {
+        const sweep = (c.commits / total) * 2 * Math.PI;
+        d3.select(this).insert('path', 'text') // below label
+          .attr('d', arcGen({ innerRadius: innerR, outerRadius: outerR, startAngle: angle, endAngle: angle + sweep }))
+          .attr('fill', c.teamColor)
+          .attr('fill-opacity', 0.9)
+          .attr('pointer-events', 'none');
+        angle += sweep;
+      }
+    });
+
     repoGs.append('text')
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'middle')
