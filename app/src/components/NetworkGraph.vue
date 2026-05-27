@@ -3,23 +3,34 @@
     <div class="graph-header">
       <h3 v-if="!isFullscreen" class="graph-title">Team ownership lens</h3>
       <div class="graph-desc-row">
-        <p v-if="!isFullscreen && !detailRepoId" class="graph-desc">
-          <span class="legend"><span class="legend-team"></span>Team lane</span>
-          <span class="legend"><span class="legend-repo"></span>Bounded Context</span>
-          <span class="legend"><span class="legend-ring"></span>Violation ring</span>
-          &nbsp;·&nbsp;
-          <span class="info-wrap">
-            Lanes sorted by violation severity
-            <span class="info-icon" tabindex="0" aria-label="What is severity?">i</span>
-            <span class="info-tooltip" role="tooltip">
-              <strong>Severity</strong> = total cross-team commits touching a team, in both directions:
-              <span class="info-line"><em>Inbound</em> — commits made by other teams into repos this team owns.</span>
-              <span class="info-line"><em>Outbound</em> — commits made by this team into repos other teams own.</span>
-              Lanes are ordered by inbound + outbound, descending. The threshold setting does not affect ordering.
+        <template v-if="!isFullscreen && !detailRepoId">
+          <p v-if="graphView === 'swimlane'" class="graph-desc">
+            <span class="legend"><span class="legend-team"></span>Team lane</span>
+            <span class="legend"><span class="legend-repo"></span>Bounded Context</span>
+            <span class="legend"><span class="legend-ring"></span>Violation ring</span>
+            &nbsp;·&nbsp;
+            <span class="info-wrap">
+              Lanes sorted by violation severity
+              <span class="info-icon" tabindex="0" aria-label="What is severity?">i</span>
+              <span class="info-tooltip" role="tooltip">
+                <strong>Severity</strong> = total cross-team commits touching a team, in both directions:
+                <span class="info-line"><em>Inbound</em> — commits made by other teams into repos this team owns.</span>
+                <span class="info-line"><em>Outbound</em> — commits made by this team into repos other teams own.</span>
+                Lanes are ordered by inbound + outbound, descending. The threshold setting does not affect ordering.
+              </span>
             </span>
-          </span>
-          &nbsp;·&nbsp; Edge crossing a lane = cross-team contribution
-        </p>
+            &nbsp;·&nbsp; Edge crossing a lane = cross-team contribution
+          </p>
+          <p v-else class="graph-desc">
+            <span class="legend"><span class="legend-bubble-team"></span>Team</span>
+            <span class="legend"><span class="legend-bubble-repo"></span>Bounded Context</span>
+            &nbsp;·&nbsp; Bubble size = commit volume &nbsp;·&nbsp; Hover to see cross-team edges &nbsp;·&nbsp; Click a repo for author details
+          </p>
+          <div v-if="effectiveTeams.length > 0" class="view-toggle">
+            <button :class="['view-toggle-btn', { active: graphView === 'swimlane' }]" @click="setGraphView('swimlane')">Swimlane</button>
+            <button :class="['view-toggle-btn', { active: graphView === 'circlepack' }]" @click="setGraphView('circlepack')">Bubbles</button>
+          </div>
+        </template>
         <p v-if="!isFullscreen && detailRepoId && folderPath === null" class="graph-desc">
           <span class="legend"><span class="legend-detail-repo"></span>Bounded Context</span>
           <span class="legend"><span class="legend-detail-team"></span>Team (click to expand)</span>
@@ -157,7 +168,10 @@
         </div>
       </template>
       <template v-else>
-        <p v-if="!isFullscreen" class="hint">Scroll to zoom · Hover nodes or edges to inspect · Click a repo for author details</p>
+        <p v-if="!isFullscreen" class="hint">
+          <template v-if="graphView === 'swimlane'">Scroll to zoom · Hover nodes or edges to inspect · Click a repo for author details</template>
+          <template v-else>Scroll to zoom · Click a team to expand · Hover to see cross-team edges · Click a repo for author details</template>
+        </p>
         <div class="svg-wrap">
           <svg ref="svgRef" class="graph-svg"></svg>
         </div>
@@ -179,8 +193,42 @@
           <div class="tt-name">{{ tooltipName }}</div>
           <div v-if="tooltip.type === 'folder' && tooltip.folderFullPath" class="tt-path">{{ tooltip.folderFullPath }}</div>
           <div class="tt-detail">{{ tooltipDetail }}</div>
-          <div v-if="tooltip.folderLastCommit" class="tt-last-commit">last commit {{ tooltip.folderLastCommit }}</div>
-          <ul v-if="tooltip.type === 'repo' && tooltipContributions.length" class="tt-contribs">
+          <div v-if="tooltip.context === 'folder' && tooltip.folderLastCommit" class="tt-last-commit">last commit {{ tooltip.folderLastCommit }}</div>
+          <template v-if="tooltip.repoBreakdown?.length || tooltip.teamInboundBreakdown?.length || tooltip.teamOutboundBreakdown?.length">
+            <div class="tt-cb-section">
+              <template v-if="tooltip.repoBreakdown?.length">
+                <div class="tt-cb-header">Team contributions</div>
+                <ul class="tt-cb-list">
+                  <li v-for="item in tooltip.repoBreakdown" :key="item.teamId" :class="{ 'tt-contrib-owner': item.isOwner }">
+                    <span class="tt-contrib-dot" :style="{ background: teamColorById(item.teamId) }"></span>
+                    <span class="tt-contrib-name">{{ teamNameById(item.teamId) }}</span>
+                    <span class="tt-contrib-pct">{{ item.pct }}%</span>
+                  </li>
+                </ul>
+              </template>
+              <template v-if="tooltip.teamInboundBreakdown?.length">
+                <div class="tt-cb-header" :class="{ 'tt-cb-header--gap': tooltip.repoBreakdown?.length }">Contributing to this team's repos</div>
+                <ul class="tt-cb-list">
+                  <li v-for="item in tooltip.teamInboundBreakdown" :key="item.teamId">
+                    <span class="tt-contrib-dot" :style="{ background: teamColorById(item.teamId) }"></span>
+                    <span class="tt-contrib-name">{{ teamNameById(item.teamId) }}</span>
+                    <span class="tt-contrib-pct">{{ item.pct }}%</span>
+                  </li>
+                </ul>
+              </template>
+              <template v-if="tooltip.teamOutboundBreakdown?.length">
+                <div class="tt-cb-header" :class="{ 'tt-cb-header--gap': tooltip.teamInboundBreakdown?.length }">This team in other teams' repos</div>
+                <ul class="tt-cb-list">
+                  <li v-for="item in tooltip.teamOutboundBreakdown" :key="item.teamId">
+                    <span class="tt-contrib-dot" :style="{ background: teamColorById(item.teamId) }"></span>
+                    <span class="tt-contrib-name">{{ teamNameById(item.teamId) }}</span>
+                    <span class="tt-contrib-pct">{{ item.pct }}%</span>
+                  </li>
+                </ul>
+              </template>
+            </div>
+          </template>
+          <ul v-if="tooltip.type === 'repo' && tooltipContributions.length && !tooltip.repoBreakdown" class="tt-contribs">
             <li v-for="c in tooltipContributions" :key="c.teamId"
                 :class="{ 'tt-contrib-owner': c.teamId === tooltip.owningTeamId }">
               <span class="tt-contrib-dot" :style="{ background: c.teamColor }"></span>
@@ -209,6 +257,7 @@ import { storeToRefs } from 'pinia';
 import { Maximize2, Minimize2 } from 'lucide-vue-next';
 import { useLensStore } from '../stores/useLensStore';
 import { useSwimlaneGraph } from '../composables/graphs/useSwimlaneGraph.js';
+import { useCirclePackGraph } from '../composables/graphs/useCirclePackGraph.js';
 import { useRepoDetailGraph } from '../composables/graphs/useRepoDetailGraph.js';
 import { useRepoFolderGraph } from '../composables/graphs/useRepoFolderGraph.js';
 import { useAnonymize } from '../composables/useAnonymize.js';
@@ -242,6 +291,7 @@ const VIZ_DEFAULTS = {
 
 const vizOpen            = ref(false);
 const isFullscreen       = ref(false);
+const graphView          = ref('swimlane'); // 'swimlane' | 'circlepack'
 const edgeWeight         = ref(VIZ_DEFAULTS.edgeWeight);
 const violationThreshold = ref(VIZ_DEFAULTS.violationThreshold);
 const violatingOnly      = ref(VIZ_DEFAULTS.violatingOnly);
@@ -280,8 +330,11 @@ const tooltip = reactive({
   authorContributions: null,
   folderFullPath: null,
   folderLastCommit: null,
-  context: '',        // 'folder' when shown by the folder drill-down renderer
-  contribsLabel: null, // optional label above the author contributions list
+  context: '',
+  contribsLabel: null,
+  teamInboundBreakdown: null,
+  teamOutboundBreakdown: null,
+  repoBreakdown: null,
 });
 
 const tooltipName = computed(() => {
@@ -332,6 +385,13 @@ const tooltipContributions = computed(() => {
     });
 });
 
+function teamNameById(id) {
+  return effectiveTeams.value.find(t => t.id === id)?.name ?? id;
+}
+function teamColorById(id) {
+  return effectiveTeams.value.find(t => t.id === id)?.color ?? '#9CA3AF';
+}
+
 function displayNodeName(id) {
   if (!id) return '';
   if (id.startsWith('team:')) {
@@ -370,6 +430,8 @@ const renderer = useSwimlaneGraph({
       contributions: d.contributions ?? [],
       owningTeamId: d.owningTeamId ?? null,
       authorContributions: displayAuthors.value && (d.type === 'repo' || d.type === 'team') ? d.authorContributions ?? null : null,
+      folderLastCommit: null, folderFullPath: null, context: '',
+      teamInboundBreakdown: null, teamOutboundBreakdown: null, repoBreakdown: null,
     });
   },
   onShowLinkTooltip: (d, x, y) => {
@@ -384,6 +446,34 @@ const renderer = useSwimlaneGraph({
   edgeWeight,
   violationThreshold,
   violatingOnly,
+});
+
+// ── Circle pack renderer ──────────────────────────────────────────────────
+const circlePackRenderer = useCirclePackGraph({
+  svgRef,
+  effectiveTeams,
+  onShowNodeTooltip: (d, x, y) => {
+    Object.assign(tooltip, {
+      show: true, x, y, isLink: false,
+      anchorRight: d.type === 'team',
+      name: d.id, type: d.type, commits: d.commits,
+      teamName: d.name ?? '', repoCount: d.repoCount ?? 0, authorCount: d.authorCount ?? 0,
+      action: d.type === 'repo' ? 'Click to see author contributions' : '',
+      contributions: d.contributions ?? [],
+      owningTeamId: d.owningTeamId ?? null,
+      authorContributions: displayAuthors.value && (d.type === 'repo' || d.type === 'team') ? d.authorContributions ?? null : null,
+      folderLastCommit: null, folderFullPath: null, context: '',
+      teamInboundBreakdown: d.teamInboundBreakdown ?? null,
+      teamOutboundBreakdown: d.teamOutboundBreakdown ?? null,
+      repoBreakdown: d.repoBreakdown ?? null,
+    });
+  },
+  onMoveTooltip: (x, y) => { tooltip.x = x; tooltip.y = y; },
+  onHideTooltip: () => { tooltip.show = false; tooltip.anchorRight = false; },
+  onNodeClick: (d) => openDetail(d),
+  violationThreshold,
+  violatingOnly,
+  edgeWeight,
 });
 
 // ── Detail (repo contributor radial) renderer ────────────────────────────
@@ -401,6 +491,7 @@ const detailRenderer = useRepoDetailGraph({
       teamName: d.teamName ?? '', repoCount: 0, authorCount: d.authors?.length ?? 0,
       action: d.action ?? '', contributions: d.contributions ?? [], owningTeamId: d.owningTeamId ?? null,
       authorContributions: d.authorContributions ?? null,
+      teamInboundBreakdown: null, teamOutboundBreakdown: null, repoBreakdown: null,
     });
   },
   onShowLinkTooltip: (d, x, y) => {
@@ -506,7 +597,19 @@ function redrawFolder() {
 }
 
 function redraw() {
-  renderer.draw({ dims, data: ownershipGraphData.value });
+  if (graphView.value === 'circlepack') {
+    renderer.teardown();
+    circlePackRenderer.draw({ dims, data: ownershipGraphData.value });
+  } else {
+    circlePackRenderer.teardown();
+    renderer.draw({ dims, data: ownershipGraphData.value });
+  }
+}
+
+function setGraphView(view) {
+  if (graphView.value === view) return;
+  graphView.value = view;
+  nextTick(() => redraw());
 }
 
 watch(ownershipGraphData, () => redraw(), { deep: true, flush: 'post' });
@@ -514,19 +617,23 @@ watch(dims,               () => redraw(), { flush: 'post' });
 watch(edgeWeight, () => {
   if (detailRepoId.value) {
     (folderPath.value !== null ? folderRenderer : detailRenderer).updateEdgeStyles();
+  } else if (graphView.value === 'circlepack') {
+    redraw();
   } else {
     renderer.updateEdgeStyles();
   }
 });
-watch(nodeColors,         () => renderer.updateNodeColors());
+watch(nodeColors, () => {
+  if (graphView.value === 'swimlane') renderer.updateNodeColors();
+});
 watch(violationThreshold, () => {
   if (detailRepoId.value) {
     if (folderPath.value !== null) redrawFolder();
     else openDetail(detailRepoId.value);
-  } else if (violatingOnly.value) redraw();
+  } else if (violatingOnly.value || graphView.value === 'circlepack') redraw();
   else renderer.drawOverlays();
 });
-watch(violatingOnly,      () => redraw());
+watch(violatingOnly, () => redraw());
 
 // ── Resize ────────────────────────────────────────────────────────────────
 
@@ -567,6 +674,7 @@ onMounted(() => {
     document.removeEventListener('mousedown', handleDocClick);
     document.removeEventListener('keydown', handleKeyDown);
     renderer.teardown();
+    circlePackRenderer.teardown();
     detailRenderer.teardown();
   });
 });
@@ -727,7 +835,12 @@ onMounted(() => {
   from { opacity: 0; transform: translateX(-100%) translateY(-4px); }
   to   { opacity: 1; transform: translateX(-100%) translateY(0); }
 }
-.tt-name   { @apply font-bold text-brand-gray text-base; }
+.tt-name    { @apply font-bold text-brand-gray text-base; }
+.tt-cb-section { margin-top: 6px; padding-top: 6px; border-top: 1px solid #e2e8f0; }
+.tt-cb-header { font-size: 10px; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 3px; }
+.tt-cb-header--gap { margin-top: 8px; }
+.tt-cb-list { margin: 0; padding: 0; list-style: none; }
+.tt-cb-list li { display: grid; grid-template-columns: 10px 1fr auto; align-items: center; gap: 6px; font-size: 11px; line-height: 1.75; color: #374151; }
 .tt-path        { @apply text-gray-400 text-xs font-mono mt-0.5; }
 .tt-last-commit    { @apply text-gray-400 text-xs mt-0.5; }
 .tt-contribs-label { @apply text-gray-400 text-xs mt-1.5 mb-0.5; }
@@ -788,6 +901,30 @@ onMounted(() => {
   transition: all 0.15s;
 }
 .viz-reset-btn:hover { border-color: #225EA9; color: #225EA9; }
+
+/* ── View toggle (Swimlane / Bubbles) ── */
+.view-toggle {
+  display: flex; border: 1.5px solid #cbd5e1; border-radius: 8px; overflow: hidden;
+  flex-shrink: 0;
+}
+.view-toggle-btn {
+  font-size: 11px; font-weight: 600; padding: 3px 12px;
+  background: transparent; color: #64748b; border: none; cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  line-height: 1.6;
+}
+.view-toggle-btn + .view-toggle-btn { border-left: 1.5px solid #cbd5e1; }
+.view-toggle-btn.active { background: #225EA9; color: #fff; }
+.view-toggle-btn:not(.active):hover { background: #f1f5f9; color: #225EA9; }
+
+.legend-bubble-team {
+  display: inline-block; width: 18px; height: 18px; border-radius: 50%;
+  background: #F08223; opacity: 0.2; border: 2px solid #F08223;
+}
+.legend-bubble-repo {
+  display: inline-block; width: 12px; height: 12px; border-radius: 50%;
+  background: #F08223; opacity: 0.78;
+}
 
 /* ── Maximize button ── */
 .maximize-btn {
