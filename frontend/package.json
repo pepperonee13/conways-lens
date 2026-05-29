@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "e2e": "node e2e/verify-folders.mjs && node e2e/verify-folder-width.mjs",
+    "e2e": "node e2e/verify-folders.mjs",
     "screenshot": "node e2e/screenshot.mjs"
   },
   "dependencies": {

@@ -14,7 +14,7 @@ mkdir -p out
 ## Running
 
 ```bash
-npm run e2e        # verify-folders + verify-folder-width
+npm run e2e        # runs verify-folders.mjs
 npm run screenshot # capture canonical screenshots to out/
 ```
 
