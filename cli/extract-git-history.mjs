@@ -181,7 +181,7 @@ const COLS = ['Date', 'DateTime', 'Product', 'Author', 'ChangesetId', 'ChangeTyp
 async function processRepo(repo) {
   const repoName = repo.name;
   const repoUrl  = repo.url;
-  const branch   = repo.branch || 'main';
+  const branch   = repo.branch ?? null;
   const local    = join(workDir, repoName);
   const rows     = [];
   const log      = makeLogger();
@@ -189,24 +189,26 @@ async function processRepo(repo) {
   log.line('');
   log.line(c('cyan', `=== ${repoName} ===`));
   log.line(`    URL   : ${repoUrl}`);
-  log.line(`    Branch: ${branch}`);
+  if (branch) log.line(`    Branch: ${branch}`);
   log.line(`    Local : ${local}`);
 
   try {
     const hasGit = await access(join(local, '.git')).then(() => true, () => false);
     if (hasGit) {
       log.line(c('gray', '    Pulling latest changes...'));
-      await git(['fetch', 'origin', branch, '--quiet'], { cwd: local, log, label: 'git fetch' });
-      await git(['checkout', branch, '--quiet'],         { cwd: local, log, label: 'git checkout' });
-      await git(['reset', '--hard', `origin/${branch}`, '--quiet'], { cwd: local, log, label: 'git reset' });
+      const ref = branch ?? 'HEAD';
+      await git(['fetch', 'origin', ref, '--quiet'], { cwd: local, log, label: 'git fetch' });
+      await git(['checkout', ref, '--quiet'],         { cwd: local, log, label: 'git checkout' });
+      if (branch) await git(['reset', '--hard', `origin/${branch}`, '--quiet'], { cwd: local, log, label: 'git reset' });
     } else {
       log.line(c('gray', '    Cloning...'));
-      await git(['clone', '--branch', branch, '--single-branch', repoUrl, local], { log, label: 'git clone' });
+      const branchArgs = branch ? ['--branch', branch, '--single-branch'] : [];
+      await git(['clone', ...branchArgs, repoUrl, local], { log, label: 'git clone' });
     }
 
     log.line(c('gray', `    Extracting history since ${since}...`));
     const { stdout } = await git([
-      'log', branch,
+      'log', branch ?? 'HEAD',
       `--since=${since}`,
       `--until=${until}`,
       '--date=iso',

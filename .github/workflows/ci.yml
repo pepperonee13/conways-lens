@@ -64,8 +64,7 @@ jobs:
           node-version: '22'
       - name: Run extract-git-history against this repo
         run: |
-          BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
-          echo "[{\"name\":\"conways-lens\",\"url\":\"$GITHUB_WORKSPACE\",\"branch\":\"$BRANCH\"}]" > /tmp/repos-ci.json
+          echo "[{\"name\":\"conways-lens\",\"url\":\"$GITHUB_WORKSPACE\"}]" > /tmp/repos-ci.json
           node cli/extract-git-history.mjs \
             --repos /tmp/repos-ci.json \
             --output /tmp/TimelineData-ci.csv \
