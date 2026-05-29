@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
+
+  e2e:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Start dev server
+        run: npx vite --port 5174 &
+      - name: Wait for dev server
+        run: timeout 30 bash -c 'until curl -sf http://localhost:5174; do sleep 1; done'
+      - name: Run e2e
+        run: mkdir -p out && npm run e2e
+        env:
+          PLAYWRIGHT_VIEWPORT_WIDTH: 1024
+          PLAYWRIGHT_VIEWPORT_HEIGHT: 768
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screenshots
+          path: frontend/out/*.png
+          retention-days: 7
+
+  cli-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run extract-git-history against this repo
+        run: |
+          echo "[{\"name\":\"conways-lens\",\"url\":\"$GITHUB_WORKSPACE\"}]" > /tmp/repos-ci.json
+          node cli/extract-git-history.mjs \
+            --repos /tmp/repos-ci.json \
+            --output /tmp/TimelineData-ci.csv \
+            --since $(date -d '90 days ago' +%Y-%m-%d)
+      - name: Verify CSV has data rows
+        run: |
+          test -f /tmp/TimelineData-ci.csv || (echo "CSV not created — extraction failed" && exit 1)
+          rows=$(grep -c ',' /tmp/TimelineData-ci.csv)
+          echo "Rows in CSV: $rows"
+          test "$rows" -gt 1

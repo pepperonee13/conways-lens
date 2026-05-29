@@ -1,5 +1,7 @@
-app/public/TimelineData*.csv
+frontend/.env
+frontend/public/TimelineData*.csv
 node_modules/
 out/
-verify-filter.mjs
-verify-filter2.mjs
+cli/repos.json
+cli/repos.*.json
+!cli/repos.example.json
