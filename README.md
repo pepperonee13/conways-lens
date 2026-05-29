@@ -103,3 +103,7 @@ The PowerShell script produces `TimelineData.csv` with one row per file per comm
 | `FilePath` | File path within the repository |
 | `Source` | Always `git` |
 | `CommitMessage` | Commit subject line |
+
+## Contributing
+
+See [docs/architecture.md](docs/architecture.md) for an overview of the data flow, key source files, and store state shape.
