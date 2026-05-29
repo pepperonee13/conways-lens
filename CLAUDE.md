@@ -33,7 +33,7 @@ The analysis script (Windows/PowerShell only):
 ### Data Flow
 
 ```
-repos.json → Analyse-Repositories.ps1 → TimelineData.csv
+repos.json (copy of repos.example.json) → Analyse-Repositories.ps1 → TimelineData.csv
                                                 ↓
                                     (user uploads via drag-drop)
                                                 ↓

@@ -13,7 +13,7 @@ Validates whether your team structure and code ownership boundaries match real c
 
 ### 1. Configure repositories
 
-Edit `analysis/repos.json`:
+Copy `analysis/repos.example.json` to `analysis/repos.json` and edit it:
 
 ```json
 [

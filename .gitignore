@@ -2,3 +2,5 @@ app/.env
 app/public/TimelineData*.csv
 node_modules/
 out/
+analysis/repos.json
+analysis/repos.*.json
