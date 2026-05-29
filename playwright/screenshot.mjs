@@ -1,9 +1,9 @@
 import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
 import { LensPage }  from './lens-page.mjs';
 
-const OUT  = 'sample-data';
-const CSV  = `${OUT}/TimelineData.csv`;
-const JSON = `${OUT}/mappings.json`;
+const OUT  = 'out';
+const CSV  = 'playwright/TimelineData.csv';
+const JSON = 'playwright/mappings.json';
 
 const browser = await chromium.launch({ args: ['--no-sandbox'] });
 const lens    = await LensPage.open(browser);
@@ -31,4 +31,4 @@ await lens.screenshot(`${OUT}/05-backend-collapsed.png`);
 console.log('✓ 05-backend-collapsed.png');
 
 await browser.close();
-console.log('\nAll screenshots saved to sample-data/');
+console.log('\nAll screenshots saved to out/');

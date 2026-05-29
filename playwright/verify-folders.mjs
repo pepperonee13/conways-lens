@@ -10,8 +10,8 @@ function check(label, cond, detail = '') {
   else       { console.log(`  ❌ ${label}${detail ? ` — ${detail}` : ''}`); failed++; }
 }
 
-await lens.loadCSV('sample-data/TimelineData.csv');
-await lens.importMappings('sample-data/mappings.json');
+await lens.loadCSV('playwright/TimelineData.csv');
+await lens.importMappings('playwright/mappings.json');
 await lens.page.waitForTimeout(600);
 await lens.screenshot('out/f00-swimlane.png');
 

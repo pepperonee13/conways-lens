@@ -4,8 +4,8 @@
  * Usage:
  *   import { LensPage } from './playwright/lens-page.mjs';
  *   const lens = await LensPage.open(page, 'http://localhost:5174');
- *   await lens.loadCSV('sample-data/TimelineData.csv');
- *   await lens.importMappings('sample-data/mappings.json');
+ *   await lens.loadCSV('playwright/TimelineData.csv');
+ *   await lens.importMappings('playwright/mappings.json');
  *   await lens.expandNode('Backend');
  *   await lens.screenshot('out.png');
  */
