@@ -66,7 +66,9 @@ export class LensPage {
     await this.page.waitForTimeout(400);
     await this.page.locator('input[type=file][accept=".json"]').setInputFiles(abs);
     await this.page.waitForTimeout(IMPORT_MS);
-    await this.page.click('.backdrop', { force: true });
+    // Dispatch the click directly on the element to avoid the panel (z-50) intercepting
+    // a coordinate-based click when the viewport is narrow (≤1040px).
+    await this.page.locator('.backdrop').dispatchEvent('click');
     await this.page.waitForSelector('.backdrop', { state: 'detached', timeout: 8000 });
   }
 
