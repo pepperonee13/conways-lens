@@ -18,7 +18,7 @@
     "vue": "^3.4.0"
   },
   "devDependencies": {
-    "playwright": "^1.56.1",
+    "playwright": "1.56.1",
     "@vitejs/plugin-vue": "^5.0.4",
     "autoprefixer": "^10.4.22",
     "postcss": "^8.5.6",
