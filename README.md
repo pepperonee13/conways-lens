@@ -26,16 +26,16 @@ Copy `cli/repos.example.json` to `cli/repos.json` and edit it:
 
 By default the script reads `repos.json` from its own directory. Use `-ReposFile` to point it at a different file (useful when managing multiple environment configs).
 
-### 2. Run the analysis
+### 2. Extract git history
 
 **Node.js (cross-platform, parallel — recommended for many repos):**
 
 ```bash
-node cli/analyse-repositories.mjs
+node cli/extract-git-history.mjs
 # Optional parameters:
-node cli/analyse-repositories.mjs --since 2024-01-01 --until 2024-12-31
-node cli/analyse-repositories.mjs --concurrency 8 --workdir /tmp/repos
-node cli/analyse-repositories.mjs --repos team-a-repos.json --output team-a.csv
+node cli/extract-git-history.mjs --since 2024-01-01 --until 2024-12-31
+node cli/extract-git-history.mjs --concurrency 8 --workdir /tmp/repos
+node cli/extract-git-history.mjs --repos team-a-repos.json --output team-a.csv
 ```
 
 Clones in parallel (default `--concurrency 4`, no npm dependencies needed). Output defaults to
@@ -45,9 +45,9 @@ that can be merged in the frontend (see step 5).
 **PowerShell (Windows, sequential):**
 
 ```powershell
-.\cli\Analyse-Repositories.ps1
-.\cli\Analyse-Repositories.ps1 -Since 2024-01-01 -Until 2024-12-31
-.\cli\Analyse-Repositories.ps1 -ReposFile C:\projects\my-repos.json
+.\cli\extract-git-history.ps1
+.\cli\extract-git-history.ps1 -Since 2024-01-01 -Until 2024-12-31
+.\cli\extract-git-history.ps1 -ReposFile C:\projects\my-repos.json
 ```
 
 Both produce the same CSV schema and metadata footer.

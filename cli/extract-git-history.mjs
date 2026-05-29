@@ -1,14 +1,13 @@
 #!/usr/bin/env node
-// Parallel git-history scraper for ConwayLens.
-//
-// Drop-in alternative to Analyse-Repositories.ps1 for large repository sets.
-// Same CSV schema and metadata footer.
+// Extracts git commit history from one or more repositories into a CSV for ConwayLens.
+// Clones/updates repos in parallel, then emits one row per file per commit.
+// Cross-platform alternative to extract-git-history.ps1 with parallel execution.
 //
 // Usage:
-//   node analysis/analyse-repositories.mjs
-//   node analysis/analyse-repositories.mjs --since 2024-01-01 --until 2024-12-31
-//   node analysis/analyse-repositories.mjs --repos team-a-repos.json --output team-a.csv
-//   node analysis/analyse-repositories.mjs --concurrency 8 --workdir /tmp/repos
+//   node cli/extract-git-history.mjs
+//   node cli/extract-git-history.mjs --since 2024-01-01 --until 2024-12-31
+//   node cli/extract-git-history.mjs --repos team-a-repos.json --output team-a.csv
+//   node cli/extract-git-history.mjs --concurrency 8 --workdir /tmp/repos
 
 import { spawn } from 'node:child_process';
 import { mkdir, writeFile, access, readdir, rm } from 'node:fs/promises';

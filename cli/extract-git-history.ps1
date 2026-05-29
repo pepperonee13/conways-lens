@@ -16,10 +16,10 @@
     Local directory used for cloning repositories (default: %TEMP%\conwaylens-repos)
 
 .EXAMPLE
-    .\Analyse-Repositories.ps1
-    .\Analyse-Repositories.ps1 -ReposFile C:\projects\my-repos.json
-    .\Analyse-Repositories.ps1 -Since 2024-01-01
-    .\Analyse-Repositories.ps1 -Since 2024-01-01 -Until 2024-12-31
+    .\extract-git-history.ps1
+    .\extract-git-history.ps1 -ReposFile C:\projects\my-repos.json
+    .\extract-git-history.ps1 -Since 2024-01-01
+    .\extract-git-history.ps1 -Since 2024-01-01 -Until 2024-12-31
 #>
 param(
     [string]$Since = (Get-Date).AddYears(-1).ToString('yyyy-MM-dd'),
