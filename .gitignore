@@ -3,5 +3,3 @@ app/public/TimelineData*.csv
 node_modules/
 playwright/node_modules/
 out/
-verify-filter.mjs
-verify-filter2.mjs
