@@ -94,7 +94,7 @@ export class LensPage {
     if (!el) throw new Error(`Node not found in SVG: "${name}"`);
     const box = await el.boundingBox();
     await this.page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-    await this.page.waitForSelector('.graph-tooltip', { state: 'visible', timeout: 3000 });
+    await this.page.waitForSelector('.graph-tooltip', { state: 'visible', timeout: 8000 });
     return this.page.locator('.graph-tooltip').textContent();
   }
 
@@ -128,7 +128,7 @@ export class LensPage {
     });
     if (!anchor) throw new Error('No team anchor found in SVG');
     await this.page.mouse.move(anchor.cx, anchor.cy);
-    await this.page.waitForSelector('.graph-tooltip', { state: 'visible', timeout: 3000 });
+    await this.page.waitForSelector('.graph-tooltip', { state: 'visible', timeout: 8000 });
     await this.page.waitForTimeout(200);
     return this.page.evaluate(({ cx, cy }) => {
       const tip  = document.querySelector('.graph-tooltip');

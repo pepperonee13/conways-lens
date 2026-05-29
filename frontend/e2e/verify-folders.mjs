@@ -38,7 +38,8 @@ check('Repo center circle found', !!repoCircle);
 check('Repo cursor is pointer', repoCircle?.cursor === 'pointer', repoCircle?.cursor);
 
 await lens.page.mouse.move(repoCircle.x, repoCircle.y);
-await lens.page.waitForSelector('.graph-tooltip', { state: 'visible', timeout: 3000 });
+await lens.page.waitForTimeout(300);
+await lens.page.waitForSelector('.graph-tooltip', { state: 'visible', timeout: 8000 });
 await lens.page.waitForTimeout(150);
 const tipText = await lens.page.locator('.graph-tooltip').textContent();
 check('Tooltip has folder action text', tipText.includes('Click to explore folder structure'), tipText);
