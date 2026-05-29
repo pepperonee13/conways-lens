@@ -45,7 +45,7 @@ const reposFile   = resolve(args.repos    ?? join(__dirname, 'repos.json'));
 const workDir     = resolve(args.workdir  ?? join(tmpdir(), 'conwaylens-repos'));
 const concurrency = Math.max(1, parseInt(args.concurrency ?? '4', 10));
 const outputFile  = resolve(
-  args.output ?? join(__dirname, '..', 'app', 'public', `TimelineData-${basename(reposFile, '.json')}.csv`)
+  args.output ?? join(__dirname, '..', 'frontend', 'public', `TimelineData-${basename(reposFile, '.json')}.csv`)
 );
 
 // ---------------------------------------------------------------------------
