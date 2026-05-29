@@ -13,7 +13,7 @@ Validates whether your team structure and code ownership boundaries match real c
 
 ### 1. Configure repositories
 
-Copy `analysis/repos.example.json` to `analysis/repos.json` and edit it:
+Copy `cli/repos.example.json` to `cli/repos.json` and edit it:
 
 ```json
 [
@@ -31,23 +31,23 @@ By default the script reads `repos.json` from its own directory. Use `-ReposFile
 **Node.js (cross-platform, parallel — recommended for many repos):**
 
 ```bash
-node analysis/analyse-repositories.mjs
+node cli/analyse-repositories.mjs
 # Optional parameters:
-node analysis/analyse-repositories.mjs --since 2024-01-01 --until 2024-12-31
-node analysis/analyse-repositories.mjs --concurrency 8 --workdir /tmp/repos
-node analysis/analyse-repositories.mjs --repos team-a-repos.json --output team-a.csv
+node cli/analyse-repositories.mjs --since 2024-01-01 --until 2024-12-31
+node cli/analyse-repositories.mjs --concurrency 8 --workdir /tmp/repos
+node cli/analyse-repositories.mjs --repos team-a-repos.json --output team-a.csv
 ```
 
 Clones in parallel (default `--concurrency 4`, no npm dependencies needed). Output defaults to
-`app/public/TimelineData-<reposFileName>.csv`, so different team configs produce different files
+`frontend/public/TimelineData-<reposFileName>.csv`, so different team configs produce different files
 that can be merged in the frontend (see step 5).
 
 **PowerShell (Windows, sequential):**
 
 ```powershell
-.\analysis\Analyse-Repositories.ps1
-.\analysis\Analyse-Repositories.ps1 -Since 2024-01-01 -Until 2024-12-31
-.\analysis\Analyse-Repositories.ps1 -ReposFile C:\projects\my-repos.json
+.\cli\Analyse-Repositories.ps1
+.\cli\Analyse-Repositories.ps1 -Since 2024-01-01 -Until 2024-12-31
+.\cli\Analyse-Repositories.ps1 -ReposFile C:\projects\my-repos.json
 ```
 
 Both produce the same CSV schema and metadata footer.
@@ -55,7 +55,7 @@ Both produce the same CSV schema and metadata footer.
 ### 3. Start the app
 
 ```bash
-cd app
+cd frontend
 npm install
 npm run dev
 ```

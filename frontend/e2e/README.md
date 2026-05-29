@@ -1,6 +1,6 @@
 # e2e scripts
 
-Playwright scripts for verifying ConwayLens visually. All commands run from `app/`.
+Playwright scripts for verifying ConwayLens visually. All commands run from `frontend/`.
 
 ## Setup
 
@@ -20,7 +20,7 @@ npm run screenshot # capture canonical screenshots to out/
 
 ## Writing ad-hoc scripts
 
-Create a `.mjs` file and run it with `node` from `app/`:
+Create a `.mjs` file and run it with `node` from `frontend/`:
 
 ```js
 import { chromium } from 'playwright';
@@ -53,4 +53,4 @@ node my-script.mjs
 | `await lens.measureTeamTooltipDirection()` | Hover team anchor, return `{ isBelow, isLeft, anchorX, tipLeft, … }` |
 | `await lens.measureBadgeGeometry()` | Return `[{ label, r, textHalfW, gap }]` for pct badge circles in detail view |
 | `await lens.getRepoLabels()` | Return `[{ label }]` for all repo nodes in swimlane (shows truncation) |
-| `await lens.screenshot('out/foo.png')` | Save a screenshot (path relative to `app/`) |
+| `await lens.screenshot('out/foo.png')` | Save a screenshot (path relative to `frontend/`) |

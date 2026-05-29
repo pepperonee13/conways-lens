@@ -1,7 +1,7 @@
-app/.env
-app/public/TimelineData*.csv
+frontend/.env
+frontend/public/TimelineData*.csv
 node_modules/
 out/
-analysis/repos.json
-analysis/repos.*.json
-!analysis/repos.example.json
+cli/repos.json
+cli/repos.*.json
+!cli/repos.example.json
