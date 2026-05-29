@@ -1,4 +1,4 @@
-import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright';
 import { LensPage }  from './lens-page.mjs';
 
 const browser = await chromium.launch({ args: ['--no-sandbox'] });

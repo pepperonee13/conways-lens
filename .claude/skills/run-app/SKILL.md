@@ -14,14 +14,17 @@ sleep 4 && curl -s -o /dev/null -w "%{http_code}" http://localhost:5174
 mkdir -p out
 ```
 
-Playwright is installed globally at `/opt/node22/lib/node_modules/playwright`.
+Install dependencies if not already present:
+```bash
+cd playwright && npm install
+```
 
 ## Page Object Model
 
 All Playwright automation uses the `LensPage` class at `playwright/lens-page.mjs`.
 
 ```js
-import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright';
 import { LensPage }  from './playwright/lens-page.mjs';
 
 const browser = await chromium.launch({ args: ['--no-sandbox'] });
@@ -46,7 +49,7 @@ const lens    = await LensPage.open(browser);          // opens http://localhost
 ### Full example
 
 ```js
-import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright';
 import { LensPage }  from './playwright/lens-page.mjs';
 
 const browser = await chromium.launch({ args: ['--no-sandbox'] });

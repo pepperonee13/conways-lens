@@ -82,7 +82,7 @@ console.log('Failing badges (gap < 4px):', failing.length);  // expect 0
 ## Full verification script template
 
 ```js
-import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright';
 import { LensPage }  from './playwright/lens-page.mjs';
 
 const browser = await chromium.launch({ args: ['--no-sandbox'] });
