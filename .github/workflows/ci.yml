@@ -64,13 +64,15 @@ jobs:
           node-version: '22'
       - name: Run extract-git-history against this repo
         run: |
-          echo "[{\"name\":\"conways-lens\",\"url\":\"$GITHUB_WORKSPACE\"}]" > /tmp/repos-ci.json
+          BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
+          echo "[{\"name\":\"conways-lens\",\"url\":\"$GITHUB_WORKSPACE\",\"branch\":\"$BRANCH\"}]" > /tmp/repos-ci.json
           node cli/extract-git-history.mjs \
             --repos /tmp/repos-ci.json \
             --output /tmp/TimelineData-ci.csv \
             --since $(date -d '90 days ago' +%Y-%m-%d)
       - name: Verify CSV has data rows
         run: |
-          rows=$(grep -c ',' /tmp/TimelineData-ci.csv || true)
+          test -f /tmp/TimelineData-ci.csv || (echo "CSV not created — extraction failed" && exit 1)
+          rows=$(grep -c ',' /tmp/TimelineData-ci.csv)
           echo "Rows in CSV: $rows"
           test "$rows" -gt 1

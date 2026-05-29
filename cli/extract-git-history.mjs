@@ -250,8 +250,9 @@ async function processRepo(repo) {
     log.flush();
     return rows;
   } catch (err) {
-    log.line(c('red', `    Skipping ${repoName} — ${err.message}`));
+    log.line(c('red', `    Failed: ${repoName} — ${err.message}`));
     log.flush();
+    process.exit(1);
     return [];
   }
 }
@@ -282,8 +283,8 @@ const start = Date.now();
 const allRows = (await runPool(repos, concurrency, processRepo)).flat();
 
 if (allRows.length === 0) {
-  console.warn('\nNo data extracted. Check that the repositories are accessible and have commits in the given date range.');
-  process.exit(0);
+  console.error('\nNo data extracted. Check that the repositories are accessible and have commits in the given date range.');
+  process.exit(1);
 }
 
 await mkdir(dirname(outputFile), { recursive: true });
