@@ -150,7 +150,7 @@ import MappingEditor from '../components/MappingEditor.vue';
 import FilterPanel from '../components/FilterPanel.vue';
 import {
   FolderOpen, Inbox, FlaskConical, Plus, RefreshCw, FileText, Download,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 
 const store = useLensStore();
 const { dataLoaded, dataError, dateInfo, teams } = storeToRefs(store);

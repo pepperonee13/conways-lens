@@ -254,7 +254,7 @@
 <script setup>
 import { ref, computed, watch, reactive, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { storeToRefs } from 'pinia';
-import { Maximize2, Minimize2 } from 'lucide-vue-next';
+import { Maximize2, Minimize2 } from '@lucide/vue';
 import { useLensStore } from '../stores/useLensStore';
 import { useSwimlaneGraph } from '../composables/graphs/useSwimlaneGraph.js';
 import { useCirclePackGraph } from '../composables/graphs/useCirclePackGraph.js';

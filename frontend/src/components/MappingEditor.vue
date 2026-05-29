@@ -342,7 +342,7 @@ import { useLensStore } from '../stores/useLensStore';
 import {
   Map as MapIcon, X, ChevronRight, Trash2, AlertTriangle,
   Upload, Download,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 
 const store = useLensStore();
 const { teams, authorNormalizations, ignoredAuthors, allRawAuthors, allAuthors, allRepos, nodeColors } = storeToRefs(store);

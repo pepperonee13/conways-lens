@@ -168,7 +168,7 @@
 import { ref, computed, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useLensStore } from '../stores/useLensStore';
-import { SlidersHorizontal, X, Check, Search, ChevronRight, Info } from 'lucide-vue-next';
+import { SlidersHorizontal, X, Check, Search, ChevronRight, Info } from '@lucide/vue';
 import { useAnonymize } from '../composables/useAnonymize.js';
 
 const store = useLensStore();
