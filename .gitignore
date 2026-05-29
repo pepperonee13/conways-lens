@@ -4,3 +4,4 @@ node_modules/
 out/
 analysis/repos.json
 analysis/repos.*.json
+!analysis/repos.example.json
