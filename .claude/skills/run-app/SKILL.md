@@ -5,37 +5,50 @@ description: Run the ConwayLens app and interact with it via Playwright using th
 
 # Run ConwayLens app
 
-## Prerequisites
+## Setup
 
-The dev server must already be running on port 5174:
+Start the dev server and install dependencies:
 ```bash
-cd app && npx vite --port 5174 > /tmp/vite.log 2>&1 &
+cd app && npm install
+npx vite --port 5174 > /tmp/vite.log 2>&1 &
 sleep 4 && curl -s -o /dev/null -w "%{http_code}" http://localhost:5174
 mkdir -p out
 ```
 
-Install dependencies if not already present:
+## Running e2e scripts
+
 ```bash
-cd app cd playwright && npm installcd playwright && npm install npm install
+cd app && npm run e2e        # runs verify-folders + verify-folder-width
+cd app && npm run screenshot # captures canonical screenshots to out/
 ```
 
-## Page Object Model
+## Writing ad-hoc scripts
 
-All Playwright automation uses the `LensPage` class at `e2e/lens-page.mjs`.
+For one-off verification, create a `.mjs` file and run it with `node` from the `app/` directory:
 
 ```js
 import { chromium } from 'playwright';
 import { LensPage }  from './e2e/lens-page.mjs';
 
 const browser = await chromium.launch({ args: ['--no-sandbox'] });
-const lens    = await LensPage.open(browser);          // opens http://localhost:5174
+const lens    = await LensPage.open(browser);
+await lens.loadCSV('e2e/TimelineData.csv');
+await lens.importMappings('e2e/mappings.json');
+
+// ... your verification here ...
+
+await browser.close();
 ```
 
-### Available operations
+```bash
+node my-script.mjs  # run from app/
+```
+
+### LensPage API
 
 | Method | What it does |
 |--------|-------------|
-| `await lens.loadCSV('e2e/TimelineData.csv')` | Upload CSV via the Load file button |
+| `await lens.loadCSV('e2e/TimelineData.csv')` | Upload CSV via drag-drop simulation |
 | `await lens.importMappings('e2e/mappings.json')` | Open Mapping panel, import JSON, close panel |
 | `await lens.expandNode('Backend')` | Click a named SVG node to expand it; waits for simulation |
 | `await lens.collapseNode('Backend')` | Click a named SVG node to collapse it; waits for simulation |
@@ -44,36 +57,4 @@ const lens    = await LensPage.open(browser);          // opens http://localhost
 | `await lens.measureTeamTooltipDirection()` | Hover team anchor, return `{ isBelow, isLeft, anchorX, tipLeft, … }` |
 | `await lens.measureBadgeGeometry()` | Return `[{ label, r, textHalfW, gap }]` for pct badge circles in detail view |
 | `await lens.getRepoLabels()` | Return `[{ label }]` for all repo nodes in swimlane (shows truncation) |
-| `await lens.screenshot('out/foo.png')` | Save a screenshot (path relative to repo root) |
-
-### Full example
-
-```js
-import { chromium } from 'playwright';
-import { LensPage }  from './e2e/lens-page.mjs';
-
-const browser = await chromium.launch({ args: ['--no-sandbox'] });
-const lens    = await LensPage.open(browser);
-
-await lens.loadCSV('e2e/TimelineData.csv');
-await lens.importMappings('e2e/mappings.json');
-await lens.screenshot('out/01-loaded.png');
-
-await lens.expandNode('Backend');
-await lens.screenshot('out/02-backend-expanded.png');
-
-const tip = await lens.hoverNode('backend-api');
-console.log('tooltip:', tip);
-
-await lens.collapseNode('Backend');
-await lens.screenshot('out/03-collapsed.png');
-
-await browser.close();
-```
-
-Run any ad-hoc script with:
-```bash
-node my-script.mjs
-```
-
-The existing demo script `e2e/screenshot.mjs` uses this page object and captures five canonical screenshots to `out/`.
+| `await lens.screenshot('out/foo.png')` | Save a screenshot (path relative to `app/`) |

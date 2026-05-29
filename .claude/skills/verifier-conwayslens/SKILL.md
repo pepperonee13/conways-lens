@@ -5,25 +5,18 @@ description: Verify visual behaviour of the ConwayLens swimlane and repo-detail 
 
 # ConwayLens Visual Verifier
 
-> For server startup, Playwright import, POM basics, and the standard data-load sequence
-> see the **run-app** skill. This skill only documents the graph-specific measurement
-> patterns built on top of `LensPage`.
+> For server startup, dependencies, and the LensPage API see the **run-app** skill.
+
+Run the full suite:
+```bash
+cd app && npm run e2e
+```
 
 ---
 
-## Verification patterns
+## Measurement patterns for ad-hoc verification
 
-### 1 · Swimlane screenshot
-
-Captures the swimlane at rest. Use to confirm layout, initial position, node count.
-
-```js
-await lens.screenshot('out/swimlane.png');
-```
-
-### 2 · Repo label truncation
-
-Confirms long repo names are truncated with `…` and short names are untouched.
+### Repo label truncation
 
 ```js
 const labels = await lens.getRepoLabels();
@@ -32,91 +25,32 @@ const truncated = labels.filter(l => l.label.includes('…'));
 console.log('Truncated count:', truncated.length);
 ```
 
-### 3 · Team tooltip direction (bottom-left)
-
-Hovers the first team anchor in the swimlane and checks the tooltip opens
-below and to the left of the cursor.
+### Team tooltip direction (expect: below and to the left)
 
 ```js
 const pos = await lens.measureTeamTooltipDirection();
-console.log('anchorX:', pos.anchorX.toFixed(0), 'anchorY:', pos.anchorY.toFixed(0));
-console.log('tipLeft:', pos.tipLeft.toFixed(0), 'tipRight:', pos.tipRight.toFixed(0));
-console.log('isBelow:', pos.isBelow, '  isLeft:', pos.isLeft);
-// PASS when isBelow === true && isLeft === true
+console.log('isBelow:', pos.isBelow, ' isLeft:', pos.isLeft);
 ```
 
-### 4 · Repo detail — center node size
-
-Opens the detail graph for the first repo and checks the central circle radius.
+### Repo detail — center node radius (expect: 44)
 
 ```js
-await lens.openRepoDetail();                  // or openRepoDetail('backend-api')
+await lens.openRepoDetail();   // or openRepoDetail('backend-api')
 const repoR = await lens.page.evaluate(() => {
   const c = Array.from(document.querySelectorAll('svg circle'))
     .find(c => parseFloat(c.getAttribute('r')) > 30
             && c.getAttribute('fill-opacity') === '0.45');
   return c ? parseFloat(c.getAttribute('r')) : null;
 });
-console.log('Center repo radius:', repoR);    // expect 44
-await lens.screenshot('out/repo-detail.png');
+console.log('Center repo radius:', repoR);
 ```
 
-### 5 · Pct badge padding
-
-Checks every pct badge circle in the detail graph: the gap between the text
-edge and the circle boundary must be ≥ 4 px.
+### Pct badge padding (expect: gap ≥ 4 px on every badge)
 
 ```js
-// Optionally expand a team first to get individual-author badges:
 await lens.expandNode('Backend');
 await lens.page.waitForTimeout(600);
-
 const badges = await lens.measureBadgeGeometry();
-badges.forEach(b => console.log(`  "${b.label}"  r=${b.r}  gap=${b.gap}px`));
 const failing = badges.filter(b => b.gap < 4);
-console.log('Failing badges (gap < 4px):', failing.length);  // expect 0
-```
-
----
-
-## Full verification script template
-
-```js
-import { chromium } from 'playwright';
-import { LensPage }  from './e2e/lens-page.mjs';
-
-const browser = await chromium.launch({ args: ['--no-sandbox'] });
-const lens    = await LensPage.open(browser);
-await lens.loadCSV('e2e/TimelineData.csv');
-await lens.importMappings('e2e/mappings.json');
-await lens.page.waitForTimeout(800);
-
-// ── Swimlane ──────────────────────────────────────────────────────────────
-await lens.screenshot('out/01-swimlane.png');
-
-const labels = await lens.getRepoLabels();
-console.log('Repo labels:', labels.map(l => l.label));
-
-const ttPos = await lens.measureTeamTooltipDirection();
-console.log('Team tooltip isBelow:', ttPos.isBelow, ' isLeft:', ttPos.isLeft);
-
-// ── Repo detail ───────────────────────────────────────────────────────────
-await lens.openRepoDetail();
-await lens.screenshot('out/02-detail.png');
-
-await lens.expandNode('Backend');
-await lens.page.waitForTimeout(600);
-await lens.screenshot('out/03-detail-expanded.png');
-
-const badges = await lens.measureBadgeGeometry();
-badges.forEach(b => console.log(`badge "${b.label}": r=${b.r} gap=${b.gap}px`));
-const failing = badges.filter(b => b.gap < 4);
-console.log('PASS:', !failing.length);
-
-await browser.close();
-```
-
-Run with:
-```bash
-node verify.mjs
+console.log('Failing badges:', failing.length);  // expect 0
 ```
