@@ -1,30 +1,26 @@
----
-name: run-app
-description: Run the ConwayLens app and interact with it via Playwright using the LensPage page object model
----
+# e2e scripts
 
-# Run ConwayLens app
+Playwright scripts for verifying ConwayLens visually. All commands run from `app/`.
 
 ## Setup
 
-Start the dev server and install dependencies:
 ```bash
-cd app && npm install
+npm install
 npx vite --port 5174 > /tmp/vite.log 2>&1 &
 sleep 4 && curl -s -o /dev/null -w "%{http_code}" http://localhost:5174
 mkdir -p out
 ```
 
-## Running e2e scripts
+## Running
 
 ```bash
-cd app && npm run e2e        # runs verify-folders + verify-folder-width
-cd app && npm run screenshot # captures canonical screenshots to out/
+npm run e2e        # verify-folders + verify-folder-width
+npm run screenshot # capture canonical screenshots to out/
 ```
 
 ## Writing ad-hoc scripts
 
-For one-off verification, create a `.mjs` file and run it with `node` from the `app/` directory:
+Create a `.mjs` file and run it with `node` from `app/`:
 
 ```js
 import { chromium } from 'playwright';
@@ -41,10 +37,10 @@ await browser.close();
 ```
 
 ```bash
-node my-script.mjs  # run from app/
+node my-script.mjs
 ```
 
-### LensPage API
+## LensPage API
 
 | Method | What it does |
 |--------|-------------|
