@@ -1,5 +1,5 @@
 import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
-import { LensPage }  from './playwright/lens-page.mjs';
+import { LensPage }  from './lens-page.mjs';
 
 const OUT  = 'sample-data';
 const CSV  = `${OUT}/TimelineData.csv`;
