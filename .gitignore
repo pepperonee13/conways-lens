@@ -1,5 +1,4 @@
 app/.env
 app/public/TimelineData*.csv
 node_modules/
-playwright/node_modules/
 out/

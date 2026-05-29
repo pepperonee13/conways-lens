@@ -4,8 +4,8 @@ import { LensPage }  from './lens-page.mjs';
 const browser = await chromium.launch({ args: ['--no-sandbox'] });
 const lens    = await LensPage.open(browser);
 
-await lens.loadCSV('playwright/TimelineData.csv');
-await lens.importMappings('playwright/mappings.json');
+await lens.loadCSV('e2e/TimelineData.csv');
+await lens.importMappings('e2e/mappings.json');
 await lens.page.waitForTimeout(600);
 
 // Open detail and enter folder mode

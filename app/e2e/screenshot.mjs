@@ -2,8 +2,8 @@ import { chromium } from 'playwright';
 import { LensPage }  from './lens-page.mjs';
 
 const OUT  = 'out';
-const CSV  = 'playwright/TimelineData.csv';
-const JSON = 'playwright/mappings.json';
+const CSV  = 'e2e/TimelineData.csv';
+const JSON = 'e2e/mappings.json';
 
 const browser = await chromium.launch({ args: ['--no-sandbox'] });
 const lens    = await LensPage.open(browser);

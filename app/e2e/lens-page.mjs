@@ -2,10 +2,10 @@
  * ConwayLens Page Object Model
  *
  * Usage:
- *   import { LensPage } from './playwright/lens-page.mjs';
+ *   import { LensPage } from './e2e/lens-page.mjs';
  *   const lens = await LensPage.open(page, 'http://localhost:5174');
- *   await lens.loadCSV('playwright/TimelineData.csv');
- *   await lens.importMappings('playwright/mappings.json');
+ *   await lens.loadCSV('e2e/TimelineData.csv');
+ *   await lens.importMappings('e2e/mappings.json');
  *   await lens.expandNode('Backend');
  *   await lens.screenshot('out.png');
  */

@@ -83,12 +83,12 @@ console.log('Failing badges (gap < 4px):', failing.length);  // expect 0
 
 ```js
 import { chromium } from 'playwright';
-import { LensPage }  from './playwright/lens-page.mjs';
+import { LensPage }  from './e2e/lens-page.mjs';
 
 const browser = await chromium.launch({ args: ['--no-sandbox'] });
 const lens    = await LensPage.open(browser);
-await lens.loadCSV('playwright/TimelineData.csv');
-await lens.importMappings('playwright/mappings.json');
+await lens.loadCSV('e2e/TimelineData.csv');
+await lens.importMappings('e2e/mappings.json');
 await lens.page.waitForTimeout(800);
 
 // ── Swimlane ──────────────────────────────────────────────────────────────

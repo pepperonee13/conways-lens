@@ -16,16 +16,16 @@ mkdir -p out
 
 Install dependencies if not already present:
 ```bash
-cd playwright && npm install
+cd app cd playwright && npm installcd playwright && npm install npm install
 ```
 
 ## Page Object Model
 
-All Playwright automation uses the `LensPage` class at `playwright/lens-page.mjs`.
+All Playwright automation uses the `LensPage` class at `e2e/lens-page.mjs`.
 
 ```js
 import { chromium } from 'playwright';
-import { LensPage }  from './playwright/lens-page.mjs';
+import { LensPage }  from './e2e/lens-page.mjs';
 
 const browser = await chromium.launch({ args: ['--no-sandbox'] });
 const lens    = await LensPage.open(browser);          // opens http://localhost:5174
@@ -35,8 +35,8 @@ const lens    = await LensPage.open(browser);          // opens http://localhost
 
 | Method | What it does |
 |--------|-------------|
-| `await lens.loadCSV('playwright/TimelineData.csv')` | Upload CSV via the Load file button |
-| `await lens.importMappings('playwright/mappings.json')` | Open Mapping panel, import JSON, close panel |
+| `await lens.loadCSV('e2e/TimelineData.csv')` | Upload CSV via the Load file button |
+| `await lens.importMappings('e2e/mappings.json')` | Open Mapping panel, import JSON, close panel |
 | `await lens.expandNode('Backend')` | Click a named SVG node to expand it; waits for simulation |
 | `await lens.collapseNode('Backend')` | Click a named SVG node to collapse it; waits for simulation |
 | `await lens.hoverNode('Backend')` | Hover over a node and return tooltip text |
@@ -50,13 +50,13 @@ const lens    = await LensPage.open(browser);          // opens http://localhost
 
 ```js
 import { chromium } from 'playwright';
-import { LensPage }  from './playwright/lens-page.mjs';
+import { LensPage }  from './e2e/lens-page.mjs';
 
 const browser = await chromium.launch({ args: ['--no-sandbox'] });
 const lens    = await LensPage.open(browser);
 
-await lens.loadCSV('playwright/TimelineData.csv');
-await lens.importMappings('playwright/mappings.json');
+await lens.loadCSV('e2e/TimelineData.csv');
+await lens.importMappings('e2e/mappings.json');
 await lens.screenshot('out/01-loaded.png');
 
 await lens.expandNode('Backend');
@@ -76,4 +76,4 @@ Run any ad-hoc script with:
 node my-script.mjs
 ```
 
-The existing demo script `playwright/screenshot.mjs` uses this page object and captures five canonical screenshots to `out/`.
+The existing demo script `e2e/screenshot.mjs` uses this page object and captures five canonical screenshots to `out/`.
