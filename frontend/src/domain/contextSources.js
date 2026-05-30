@@ -95,3 +95,43 @@ export function contextForSource(source, contexts, getFilePaths = () => []) {
     (c.sources ?? []).some(s => sourcesOverlap(source, s, getFilePaths))
   ) ?? null;
 }
+
+/**
+ * Maps a (repoId, filePath) pair to the id of the context that owns it.
+ *
+ * Only user-defined contexts are checked; the auto-context fallback (id === repoId)
+ * is the caller's responsibility (store returns `repoId` when nothing matches).
+ *
+ * Scoring — most-specific wins:
+ *   type 'repo'  → score 0   (whole repo; only beats "no match")
+ *   type 'path'  → score = path.length
+ *   type 'glob'  → score = pattern.length
+ *
+ * @param {string}   repoId   - the repository the row came from
+ * @param {string}   filePath - the file path within the repo ('' if unknown)
+ * @param {object[]} contexts - user-defined contexts only (auto-contexts are the fallback)
+ * @returns {string|null} context id, or null if no user-defined context matches
+ */
+export function resolveContextId(repoId, filePath, contexts) {
+  const fp = filePath ?? '';
+  let bestId    = null;
+  let bestScore = -1;
+  for (const ctx of contexts) {
+    for (const src of (ctx.sources ?? [])) {
+      if (src.repo !== repoId) continue;
+      if (src.type === 'repo') {
+        if (bestScore < 0) { bestId = ctx.id; bestScore = 0; }
+      } else if (src.type === 'path') {
+        const p = src.path;
+        if (fp === p || fp.startsWith(p + '/')) {
+          if (p.length > bestScore) { bestId = ctx.id; bestScore = p.length; }
+        }
+      } else if (src.type === 'glob') {
+        if (globToRegex(src.pattern).test(fp)) {
+          if (src.pattern.length > bestScore) { bestId = ctx.id; bestScore = src.pattern.length; }
+        }
+      }
+    }
+  }
+  return bestId;
+}

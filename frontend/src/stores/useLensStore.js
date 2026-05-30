@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed, watch } from 'vue';
 import Papa from 'papaparse';
-import { sameSource, globToRegex, contextForSource as contextForSourceFn } from '../domain/contextSources.js';
+import { sameSource, globToRegex, contextForSource as contextForSourceFn, resolveContextId as resolveContextIdFn } from '../domain/contextSources.js';
 
 const STORAGE = {
   teams:            'conwaylens:teams',
@@ -151,27 +151,7 @@ export const useLensStore = defineStore('lens', () => {
   // Resolve which context a (repoId, filePath) row belongs to.
   // Checks user-defined contexts first; falls back to the auto-context (id = repoId).
   function resolveContextId(repoId, filePath) {
-    const fp = filePath ?? '';
-    let bestId    = null;
-    let bestScore = -1;
-    for (const ctx of contexts.value) {
-      for (const src of (ctx.sources ?? [])) {
-        if (src.repo !== repoId) continue;
-        if (src.type === 'repo') {
-          if (bestScore < 0) { bestId = ctx.id; bestScore = 0; }
-        } else if (src.type === 'path') {
-          const p = src.path;
-          if (fp === p || fp.startsWith(p + '/')) {
-            if (p.length > bestScore) { bestId = ctx.id; bestScore = p.length; }
-          }
-        } else if (src.type === 'glob') {
-          if (globToRegex(src.pattern).test(fp)) {
-            if (src.pattern.length > bestScore) { bestId = ctx.id; bestScore = src.pattern.length; }
-          }
-        }
-      }
-    }
-    return bestId ?? repoId;
+    return resolveContextIdFn(repoId, filePath, contexts.value) ?? repoId;
   }
 
   const ignoredSet = computed(() => new Set(ignoredAuthors.value));

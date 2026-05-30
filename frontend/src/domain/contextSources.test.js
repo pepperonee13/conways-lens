@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sameSource, matchesSource, sourcesOverlap, contextForSource } from './contextSources.js';
+import { sameSource, matchesSource, sourcesOverlap, contextForSource, resolveContextId } from './contextSources.js';
 
 // ── sameSource ────────────────────────────────────────────────────────────────
 
@@ -230,5 +230,66 @@ describe('contextForSource', () => {
   it('returns the first conflicting context when multiple match', () => {
     const dupe = { id: 'ctx-d', name: 'Dupe', sources: [{ type: 'repo', repo: 'auth' }] };
     expect(contextForSource({ type: 'repo', repo: 'auth' }, [ctxA, dupe])).toBe(ctxA);
+  });
+});
+
+// ── resolveContextId ──────────────────────────────────────────────────────────
+
+const auth  = { id: 'ctx-auth',    sources: [{ type: 'repo', repo: 'auth' }] };
+const front = { id: 'ctx-front',   sources: [{ type: 'path', repo: 'mono', path: 'frontend' }] };
+const back  = { id: 'ctx-back',    sources: [{ type: 'path', repo: 'mono', path: 'backend' }] };
+const api   = { id: 'ctx-api',     sources: [{ type: 'path', repo: 'mono', path: 'backend/api' }] };
+const sql   = { id: 'ctx-sql',     sources: [{ type: 'glob', repo: 'mono', pattern: '**/*.sql' }] };
+
+describe('resolveContextId', () => {
+  it('returns the context id when a repo source matches', () => {
+    expect(resolveContextId('auth', 'src/login.ts', [auth])).toBe('ctx-auth');
+  });
+
+  it('returns null when no user-defined context matches (auto-context fallback is caller\'s job)', () => {
+    expect(resolveContextId('payments', 'src/pay.ts', [auth])).toBeNull();
+  });
+
+  it('returns null for an empty context list', () => {
+    expect(resolveContextId('auth', 'anything', [])).toBeNull();
+  });
+
+  it('matches a path source on the exact path', () => {
+    expect(resolveContextId('mono', 'frontend', [front, back])).toBe('ctx-front');
+  });
+
+  it('matches a path source on a child path', () => {
+    expect(resolveContextId('mono', 'frontend/App.vue', [front, back])).toBe('ctx-front');
+  });
+
+  it('does not match a path source on a sibling prefix (src vs src2)', () => {
+    const ctx = { id: 'ctx-src', sources: [{ type: 'path', repo: 'A', path: 'src' }] };
+    expect(resolveContextId('A', 'src2/foo.ts', [ctx])).toBeNull();
+  });
+
+  it('path source beats repo source for the same repo (higher score)', () => {
+    expect(resolveContextId('mono', 'frontend/App.vue', [auth, front, back])).toBe('ctx-front');
+  });
+
+  it('longer path beats shorter path when both match', () => {
+    expect(resolveContextId('mono', 'backend/api/routes.ts', [back, api])).toBe('ctx-api');
+  });
+
+  it('glob source matches the pattern', () => {
+    expect(resolveContextId('mono', 'db/schema.sql', [front, sql])).toBe('ctx-sql');
+  });
+
+  it('glob source beats repo source', () => {
+    const repoCtx = { id: 'ctx-whole', sources: [{ type: 'repo', repo: 'mono' }] };
+    expect(resolveContextId('mono', 'db/schema.sql', [repoCtx, sql])).toBe('ctx-sql');
+  });
+
+  it('treats a null filePath the same as an empty string', () => {
+    const rootFile = { id: 'ctx-root', sources: [{ type: 'path', repo: 'A', path: '' }] };
+    expect(resolveContextId('A', null, [rootFile])).toBe('ctx-root');
+  });
+
+  it('does not match a context whose source is for a different repo', () => {
+    expect(resolveContextId('other', 'src/x.ts', [auth, front])).toBeNull();
   });
 });
