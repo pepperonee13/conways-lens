@@ -24,7 +24,7 @@
           <p v-else class="graph-desc">
             <span class="legend"><span class="legend-bubble-team"></span>Team</span>
             <span class="legend"><span class="legend-bubble-repo"></span>Bounded Context</span>
-            &nbsp;·&nbsp; Bubble size = commit volume &nbsp;·&nbsp; Hover to see cross-team edges &nbsp;·&nbsp; Click a repo for author details
+            &nbsp;·&nbsp; Bubble size = commit volume &nbsp;·&nbsp; Hover to see cross-team edges &nbsp;·&nbsp; Click a context for author details
           </p>
           <div v-if="effectiveTeams.length > 0" class="view-toggle">
             <button :class="['view-toggle-btn', { active: graphView === 'swimlane' }]" @click="setGraphView('swimlane')">Swimlane</button>
@@ -133,7 +133,7 @@
       <div v-if="!detailRepoId && violationSummary.violating > 0" class="violation-banner">
         <strong>{{ violationSummary.violating }}</strong> out of
         <strong>{{ violationSummary.total }}</strong>
-        {{ violationSummary.total === 1 ? 'repository violates' : 'repositories violate' }}
+        {{ violationSummary.total === 1 ? 'bounded context violates' : 'bounded contexts violate' }}
         the <strong>{{ violationThreshold }}%</strong> threshold
       </div>
       <template v-if="detailRepoId">
@@ -169,8 +169,8 @@
       </template>
       <template v-else>
         <p v-if="!isFullscreen" class="hint">
-          <template v-if="graphView === 'swimlane'">Scroll to zoom · Hover nodes or edges to inspect · Click a repo for author details</template>
-          <template v-else>Scroll to zoom · Click a team to expand · Hover to see cross-team edges · Click a repo for author details</template>
+          <template v-if="graphView === 'swimlane'">Scroll to zoom · Hover nodes or edges to inspect · Click a context for author details</template>
+          <template v-else>Scroll to zoom · Click a team to expand · Hover to see cross-team edges · Click a context for author details</template>
         </p>
         <div class="svg-wrap">
           <svg ref="svgRef" class="graph-svg"></svg>
