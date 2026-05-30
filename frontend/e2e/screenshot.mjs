@@ -2,7 +2,7 @@ import { chromium } from 'playwright';
 import { LensPage }  from './lens-page.mjs';
 
 const OUT  = 'out';
-const CSV  = 'e2e/TimelineData.csv';
+const CSV  = 'e2e/CommitHistory.csv';
 const JSON = 'e2e/mappings.json';
 
 const browser = await chromium.launch({ args: ['--no-sandbox'] });

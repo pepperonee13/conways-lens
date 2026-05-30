@@ -87,7 +87,7 @@ export function sourcesOverlap(a, b, getFilePaths = () => []) {
  * @param {object}   source       - the source to check
  * @param {object[]} contexts     - array of { id, name, sources[] }
  * @param {function(string):Iterable<string>} getFilePaths
- *   Injected file-path provider; the store passes a function over timelineData,
+ *   Injected file-path provider; the store passes a function over commits,
  *   tests pass a function over a fixed array.
  */
 export function contextForSource(source, contexts, getFilePaths = () => []) {

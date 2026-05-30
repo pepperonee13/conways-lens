@@ -38,7 +38,7 @@ function load(key, fallback) {
 // Convert a glob pattern to a RegExp.
 
 export const useLensStore = defineStore('lens', () => {
-  const timelineData = ref([]);
+  const commits = ref([]);
   const dataLoaded   = ref(false);
   const dataError    = ref(null);
   const dateInfo     = ref(null);
@@ -70,7 +70,7 @@ export const useLensStore = defineStore('lens', () => {
     return parseCSVText(text);
   }
 
-  async function loadTimelineData(fileOrFiles, { append = false } = {}) {
+  async function loadCommits(fileOrFiles, { append = false } = {}) {
     dataError.value = null;
     const files = Array.isArray(fileOrFiles) ? fileOrFiles : [fileOrFiles];
     if (files.length === 0) return;
@@ -80,10 +80,10 @@ export const useLensStore = defineStore('lens', () => {
       const newRanges  = parsed.map(p => p.dateRange).filter(Boolean);
 
       if (append && dataLoaded.value) {
-        timelineData.value = mergeCommits(timelineData.value, newCommits);
+        commits.value = mergeCommits(commits.value, newCommits);
         dateInfo.value     = mergeDateRanges([dateInfo.value, ...newRanges]);
       } else {
-        timelineData.value = mergeCommits([], newCommits);
+        commits.value = mergeCommits([], newCommits);
         dateInfo.value     = mergeDateRanges(newRanges);
       }
 
@@ -99,13 +99,13 @@ export const useLensStore = defineStore('lens', () => {
   function normalizeAuthor(name) { return authorNormalizations.value[name] ?? name; }
 
   const allRawAuthors = computed(() =>
-    [...new Set(timelineData.value.map(r => r.author))].sort()
+    [...new Set(commits.value.map(r => r.author))].sort()
   );
   const allAuthors = computed(() =>
     [...new Set(allRawAuthors.value.map(normalizeAuthor))].sort()
   );
   const allRepos = computed(() =>
-    [...new Set(timelineData.value.map(r => r.repo))].filter(Boolean).sort()
+    [...new Set(commits.value.map(r => r.repo))].filter(Boolean).sort()
   );
 
   // Merge user-defined contexts with auto-generated 1:1 contexts for repos not
@@ -134,7 +134,7 @@ export const useLensStore = defineStore('lens', () => {
 
   const dateBounds = computed(() => {
     let min = null, max = null;
-    for (const row of timelineData.value) {
+    for (const row of commits.value) {
       if (!row.date) continue;
       if (!min || row.date < min) min = row.date;
       if (!max || row.date > max) max = row.date;
@@ -198,7 +198,7 @@ export const useLensStore = defineStore('lens', () => {
     // Pre-pass: count total unique commit SHAs per team (includes within-team work).
     const teamTotalShas = {};
     if (hasTeamSetup) {
-      for (const row of timelineData.value) {
+      for (const row of commits.value) {
         if (!row.author || !row.repo || !row.commitHash) continue;
         if (since && row.date < since) continue;
         if (until && row.date > until) continue;
@@ -220,7 +220,7 @@ export const useLensStore = defineStore('lens', () => {
       (edgeMap[key] ??= new Set()).add(sha);
     }
 
-    for (const row of timelineData.value) {
+    for (const row of commits.value) {
       if (!row.author || !row.repo || !row.commitHash) continue;
       if (since && row.date < since) continue;
       if (until && row.date > until) continue;
@@ -373,7 +373,7 @@ export const useLensStore = defineStore('lens', () => {
     const contextContribShas = {};
     const contextAuthorShas  = {};
 
-    for (const row of timelineData.value) {
+    for (const row of commits.value) {
       if (!row.author || !row.repo || !row.commitHash) continue;
       if (since && row.date < since) continue;
       if (until && row.date > until) continue;
@@ -555,7 +555,7 @@ export const useLensStore = defineStore('lens', () => {
   function contextForSource(source) {
     function* repoPaths(repo) {
       const seen = new Set();
-      for (const row of timelineData.value) {
+      for (const row of commits.value) {
         if (row.repo === repo && row.filePath && !seen.has(row.filePath)) {
           seen.add(row.filePath);
           yield row.filePath;
@@ -628,7 +628,7 @@ export const useLensStore = defineStore('lens', () => {
 
   // Simulation
   function clearData() {
-    timelineData.value  = [];
+    commits.value  = [];
     dataLoaded.value    = false;
     dataError.value     = null;
     dateInfo.value      = null;
@@ -670,7 +670,7 @@ export const useLensStore = defineStore('lens', () => {
       contexts: repos.filter((_, j) => j % teamCount === i),
     }));
 
-    timelineData.value  = rows;
+    commits.value  = rows;
     teams.value         = simTeams;
     dateInfo.value      = { since: yearAgo.toISOString().slice(0, 10), until: now.toISOString().slice(0, 10) };
     dataLoaded.value    = true;
@@ -734,7 +734,7 @@ export const useLensStore = defineStore('lens', () => {
     const until = activeRange.value.until;
     const edgeMap = {}; // author → commits (Set<sha>)
     const repoShas = new Set();
-    for (const row of timelineData.value) {
+    for (const row of commits.value) {
       if (!row.author || !row.repo || !row.commitHash) continue;
       if (row.repo !== repoId) continue;
       if (since && row.date < since) continue;
@@ -764,7 +764,7 @@ export const useLensStore = defineStore('lens', () => {
     const until = activeRange.value.until;
     const edgeMap = {};
     const ctxShas = new Set();
-    for (const row of timelineData.value) {
+    for (const row of commits.value) {
       if (!row.author || !row.repo || !row.commitHash) continue;
       if (resolveContextId(row.repo, row.filePath) !== contextId) continue;
       if (since && row.date < since) continue;
@@ -801,7 +801,7 @@ export const useLensStore = defineStore('lens', () => {
     const segmentHasChildren = {};
     const segmentLastDate    = {};
 
-    for (const row of timelineData.value) {
+    for (const row of commits.value) {
       if (!row.author || !row.repo || !row.commitHash) continue;
       if (row.repo !== repoId) continue;
       if (since && row.date < since) continue;
@@ -861,7 +861,7 @@ export const useLensStore = defineStore('lens', () => {
   }
 
   return {
-    timelineData, dataLoaded, dataError, dateInfo,
+    commits, dataLoaded, dataError, dateInfo,
     teams, syntheticTeam, authorNormalizations, ignoredAuthors,
     contexts, allContexts,
     dateBounds, activeRange,
@@ -871,7 +871,7 @@ export const useLensStore = defineStore('lens', () => {
     allRawAuthors, allAuthors, allRepos,
     graphData, ownershipGraphData, nodeColors, getNodeColor,
     repoContributorsData, contextContributorsData, repoFolderData,
-    loadTimelineData, loadSimulatedData, clearData,
+    loadCommits, loadSimulatedData, clearData,
     addTeam, removeTeam,
     addContext, removeContext, updateContext, addContextSource, removeContextSource, contextForSource,
     pendingContextSource, beginAddToContext, clearPendingContextSource,

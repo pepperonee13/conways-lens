@@ -4,7 +4,7 @@
  * Usage:
  *   import { LensPage } from './e2e/lens-page.mjs';
  *   const lens = await LensPage.open(page, 'http://localhost:5174');
- *   await lens.loadCSV('e2e/TimelineData.csv');
+ *   await lens.loadCSV('e2e/CommitHistory.csv');
  *   await lens.importMappings('e2e/mappings.json');
  *   await lens.expandNode('Backend');
  *   await lens.screenshot('out.png');
