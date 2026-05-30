@@ -226,7 +226,8 @@ export function useCirclePackGraph({
       .attr('fill-opacity', 0.13)
       .attr('stroke', d => d.data.color)
       .attr('stroke-width', 2)
-      .attr('stroke-opacity', 0.5)
+      .attr('stroke-opacity', 0.6)
+      .attr('stroke-dasharray', '6 4')
       .attr('cursor', 'pointer');
 
     teamGs.append('text')

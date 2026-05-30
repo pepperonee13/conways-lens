@@ -954,7 +954,7 @@ onMounted(() => {
 
 .legend-bubble-team {
   display: inline-block; width: 18px; height: 18px; border-radius: 50%;
-  background: #F08223; opacity: 0.2; border: 2px solid #F08223;
+  background: rgba(240,130,35,0.13); border: 2px dashed rgba(240,130,35,0.6);
 }
 .legend-bubble-repo {
   display: inline-block; width: 12px; height: 12px; border-radius: 50%;
