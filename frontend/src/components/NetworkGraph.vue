@@ -237,12 +237,13 @@
             </li>
           </ul>
           <div v-if="tooltip.contribsLabel" class="tt-contribs-label">{{ tooltip.contribsLabel }}</div>
-          <ul v-if="tooltip.authorContributions?.length" class="tt-contribs tt-contribs--authors">
-            <li v-for="a in tooltip.authorContributions" :key="a.authorId">
+          <ul v-if="tooltipDisplayedAuthors.length" class="tt-contribs tt-contribs--authors">
+            <li v-for="a in tooltipDisplayedAuthors" :key="a.authorId">
               <span class="tt-contrib-dot" :style="{ background: a.teamColor || '#9CA3AF' }"></span>
               <span class="tt-contrib-name">{{ anonMap[a.authorId] ?? a.authorId }}</span>
               <span class="tt-contrib-pct">{{ a.pct }}%</span>
             </li>
+            <li v-if="tooltipHiddenAuthorCount > 0" class="tt-more">+{{ tooltipHiddenAuthorCount }} more</li>
           </ul>
           <div v-if="tooltip.action" class="tt-action">{{ tooltip.action }}</div>
         </template>
@@ -358,6 +359,7 @@ const tooltip = reactive({
 const tooltipName = computed(() => {
   if (tooltip.type === 'team' || tooltip.type === 'team-collapsed') return tooltip.teamName;
   if (tooltip.type === 'author') return anonMap.value[tooltip.name] ?? tooltip.name;
+  if (tooltip.type === 'context') return allContexts.value.find(c => c.id === tooltip.name)?.name ?? tooltip.name;
   return tooltip.name;
 });
 
@@ -372,6 +374,12 @@ const tooltipDetail = computed(() => {
   }
   if (tooltip.type === 'folder') {
     return `${c} commits`;
+  }
+  if (tooltip.type === 'context') {
+    const owningTeam = tooltip.owningTeamId
+      ? effectiveTeams.value.find(t => t.id === tooltip.owningTeamId)?.name
+      : null;
+    return owningTeam ? `${c} commits · ${owningTeam}` : `${c} commits`;
   }
   const team = tooltip.teamName ? ` · ${tooltip.teamName}` : '';
   const pctStr = tooltip.pct != null
@@ -402,6 +410,14 @@ const tooltipContributions = computed(() => {
       return b.commits - a.commits;
     });
 });
+
+const MAX_TOOLTIP_AUTHORS = 3;
+const tooltipDisplayedAuthors = computed(() =>
+  (tooltip.authorContributions ?? []).slice(0, MAX_TOOLTIP_AUTHORS)
+);
+const tooltipHiddenAuthorCount = computed(() =>
+  Math.max(0, (tooltip.authorContributions?.length ?? 0) - MAX_TOOLTIP_AUTHORS)
+);
 
 function teamNameById(id) {
   return effectiveTeams.value.find(t => t.id === id)?.name ?? id;
@@ -884,6 +900,7 @@ onMounted(() => {
 .tt-contribs--authors li { grid-template-columns: 10px 1fr auto; }
 .tt-contribs--authors .tt-contrib-pct { text-align: right; }
 .tt-contrib-owner .tt-contrib-name::after { content: ' · owner'; font-weight: 500; font-size: 9px; color: #94a3b8; }
+.tt-more { color: #94a3b8; font-size: 10px; grid-column: 1 / -1; padding-top: 1px; white-space: nowrap; }
 
 /* ── Visualization dropdown ── */
 .viz-dropdown-wrap  { position: relative; }
