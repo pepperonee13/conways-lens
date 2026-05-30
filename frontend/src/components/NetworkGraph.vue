@@ -249,6 +249,19 @@
         </template>
       </div>
     </teleport>
+
+    <teleport to="body">
+      <template v-if="contextMenu.show">
+        <div class="ctx-menu-backdrop" @click="closeContextMenu" @contextmenu.prevent="closeContextMenu"></div>
+        <div class="ctx-menu" :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }">
+          <div class="ctx-menu-label">{{ contextMenu.label }}</div>
+          <button class="ctx-menu-item" :disabled="!contextMenu.source" @click="confirmAddToContext">
+            Add to bounded context…
+          </button>
+          <div v-if="contextMenu.reason" class="ctx-menu-reason">{{ contextMenu.reason }}</div>
+        </div>
+      </template>
+    </teleport>
   </div>
 </template>
 
@@ -343,7 +356,7 @@ const tooltip = reactive({
   show: false, x: 0, y: 0, anchorRight: false,
   isLink: false,
   name: '', type: '', commits: 0, pct: null,
-  teamName: '', repoCount: 0, authorCount: 0,
+  teamName: '', contextCount: 0, authorCount: 0,
   source: '', target: '', action: '',
   contributions: [], owningTeamId: null,
   authorContributions: null,
@@ -366,7 +379,7 @@ const tooltipName = computed(() => {
 const tooltipDetail = computed(() => {
   const c = tooltip.commits.toLocaleString();
   if (tooltip.type === 'team')
-    return `Team · ${tooltip.repoCount} ${tooltip.repoCount === 1 ? 'repo' : 'repos'} · ${tooltip.authorCount} ${tooltip.authorCount === 1 ? 'dev' : 'devs'} · ${c} commits`;
+    return `Team · ${tooltip.contextCount} ${tooltip.contextCount === 1 ? 'context' : 'contexts'} · ${tooltip.authorCount} ${tooltip.authorCount === 1 ? 'dev' : 'devs'} · ${c} commits`;
   if (tooltip.type === 'team-collapsed') {
     const devs = tooltip.authorCount;
     const commitLabel = tooltip.context === 'folder' ? `${c} commits at this level` : `${c} commits`;
@@ -459,7 +472,7 @@ const renderer = useSwimlaneGraph({
       show: true, x, y, isLink: false,
       anchorRight: d.type === 'team',
       name: d.id, type: d.type, commits: d.commits,
-      teamName: d.name ?? '', repoCount: d.repoCount ?? 0, authorCount: d.authorCount ?? 0,
+      teamName: d.name ?? '', contextCount: d.contextCount ?? 0, authorCount: d.authorCount ?? 0,
       action: d.type === 'context' ? 'Click to see author contributions' : '',
       contributions: d.contributions ?? [],
       owningTeamId: d.owningTeamId ?? null,
@@ -477,6 +490,7 @@ const renderer = useSwimlaneGraph({
   onMoveTooltip: (x, y) => { tooltip.x = x; tooltip.y = y; },
   onHideTooltip: () => { tooltip.show = false; tooltip.anchorRight = false; },
   onNodeClick: (d) => openDetail(d.id),
+  onNodeContextMenu: (d, e) => openContextMenuForContextNode(d, e),
   edgeWeight,
   violationThreshold,
   violatingOnly,
@@ -491,7 +505,7 @@ const circlePackRenderer = useCirclePackGraph({
       show: true, x, y, isLink: false,
       anchorRight: d.type === 'team',
       name: d.id, type: d.type, commits: d.commits,
-      teamName: d.name ?? '', repoCount: d.repoCount ?? 0, authorCount: d.authorCount ?? 0,
+      teamName: d.name ?? '', contextCount: d.contextCount ?? 0, authorCount: d.authorCount ?? 0,
       action: d.type === 'context' ? 'Click to see author contributions' : '',
       contributions: d.contributions ?? [],
       owningTeamId: d.owningTeamId ?? null,
@@ -505,6 +519,7 @@ const circlePackRenderer = useCirclePackGraph({
   onMoveTooltip: (x, y) => { tooltip.x = x; tooltip.y = y; },
   onHideTooltip: () => { tooltip.show = false; tooltip.anchorRight = false; },
   onNodeClick: (d) => openDetail(d),
+  onNodeContextMenu: (d, e) => openContextMenuForContextNode(d, e),
   violationThreshold,
   violatingOnly,
   edgeWeight,
@@ -522,7 +537,7 @@ const detailRenderer = useRepoDetailGraph({
     Object.assign(tooltip, {
       show: true, x, y, isLink: false,
       name: d.id, type: d.type, commits: d.commits, pct: d.pct ?? null,
-      teamName: d.teamName ?? '', repoCount: 0, authorCount: d.authors?.length ?? 0,
+      teamName: d.teamName ?? '', contextCount: 0, authorCount: d.authors?.length ?? 0,
       action: d.action ?? '', contributions: d.contributions ?? [], owningTeamId: d.owningTeamId ?? null,
       authorContributions: d.authorContributions ?? null,
       teamInboundBreakdown: null, teamOutboundBreakdown: null, repoBreakdown: null,
@@ -548,11 +563,12 @@ const folderRenderer = useRepoFolderGraph({
   anonMap,
   violationThreshold,
   onFolderClick: (segmentId) => drillDown(segmentId),
+  onNodeContextMenu: (d, e) => openContextMenuForFolderNode(d, e),
   onShowNodeTooltip: (d, x, y) => {
     Object.assign(tooltip, {
       show: true, x, y, isLink: false,
       name: d.id, type: d.type, commits: d.commits, pct: d.pct ?? null,
-      teamName: d.teamName ?? '', repoCount: 0, authorCount: d.authors?.length ?? 0,
+      teamName: d.teamName ?? '', contextCount: 0, authorCount: d.authors?.length ?? 0,
       action: d.action ?? '', contributions: [], owningTeamId: null,
       authorContributions: d.authorContributions ?? null,
       folderFullPath: d.folderFullPath ?? null,
@@ -573,6 +589,39 @@ const folderRenderer = useRepoFolderGraph({
   onHideTooltip: () => { tooltip.show = false; tooltip.context = ''; tooltip.contribsLabel = null; },
   edgeWeight,
 });
+
+// ── Right-click "Add to bounded context" menu ──────────────────────────────
+// Node context menus record a source; confirming hands it to the store, which
+// the MappingEditor watches to open its Bounded Contexts tab for confirmation.
+const contextMenu = reactive({ show: false, x: 0, y: 0, label: '', source: null, reason: '' });
+function closeContextMenu() { contextMenu.show = false; }
+function openContextMenuForContextNode(d, e) {
+  e.preventDefault();
+  // Only auto-contexts (id === repo name, not in the user-defined list) back a
+  // single repo and can be folded into another context.
+  const isUserDefined = store.contexts.some(c => c.id === d.id);
+  Object.assign(contextMenu, {
+    show: true, x: e.clientX, y: e.clientY,
+    label: d.name ?? d.id,
+    source: isUserDefined ? null : { type: 'repo', repo: d.id },
+    reason: isUserDefined ? 'Already a bounded context' : '',
+  });
+}
+function openContextMenuForFolderNode(d, e) {
+  e.preventDefault();
+  const repo = detailRepoName.value;
+  const path = d.fullPath ?? d.folderFullPath ?? d.id;
+  Object.assign(contextMenu, {
+    show: true, x: e.clientX, y: e.clientY,
+    label: repo ? `${repo} / ${path}` : path,
+    source: repo ? { type: 'path', repo, path } : null,
+    reason: repo ? '' : 'Unknown repository',
+  });
+}
+function confirmAddToContext() {
+  if (contextMenu.source) store.beginAddToContext(contextMenu.source, contextMenu.label);
+  closeContextMenu();
+}
 
 function openDetail(contextId) {
   folderRenderer.teardown();
@@ -858,6 +907,23 @@ onMounted(() => {
   border-color: #225EA9; z-index: 9999; min-width: 160px;
   animation: fadeIn 0.12s ease-out forwards;
 }
+
+/* Right-click "Add to bounded context" menu */
+.ctx-menu-backdrop { @apply fixed inset-0; z-index: 10000; }
+.ctx-menu {
+  @apply fixed bg-white rounded-lg shadow-2xl border border-gray-200 py-1 text-sm overflow-hidden;
+  z-index: 10001; min-width: 200px;
+  animation: fadeIn 0.1s ease-out forwards;
+}
+.ctx-menu-label {
+  @apply px-3 py-1.5 text-xs font-mono text-gray-500 border-b border-gray-100 truncate max-w-[260px];
+}
+.ctx-menu-item {
+  @apply w-full text-left px-3 py-2 font-medium text-gray-700 hover:bg-orange-50 hover:text-brand-orange
+         transition-colors cursor-pointer;
+}
+.ctx-menu-item:disabled { @apply text-gray-300 cursor-not-allowed hover:bg-transparent hover:text-gray-300; }
+.ctx-menu-reason { @apply px-3 py-1 text-[11px] text-gray-400 italic; }
 .graph-tooltip--anchor-right {
   animation: fadeInRight 0.12s ease-out forwards;
 }

@@ -18,6 +18,10 @@
 
       <div class="panel-tabs">
         <button :class="['tab-btn', { active: tab === 'teams' }]"   @click="tab = 'teams'">Teams</button>
+        <button :class="['tab-btn', { active: tab === 'contexts' }]" @click="tab = 'contexts'">
+          Contexts
+          <span v-if="contexts.length" class="tab-badge">{{ contexts.length }}</span>
+        </button>
         <button :class="['tab-btn', { active: tab === 'aliases' }]" @click="tab = 'aliases'">
           Author Aliases
           <span v-if="normalizationCount" class="tab-badge">{{ normalizationCount }}</span>
@@ -65,9 +69,9 @@
                     <span
                       v-for="c in unassignedContexts"
                       :key="c.id"
-                      :class="['unassigned-chip', 'unassigned-chip--draggable', { 'unassigned-chip--dragging': unassignedDrag?.kind === 'repos' && unassignedDrag?.value === c.id }]"
+                      :class="['unassigned-chip', 'unassigned-chip--draggable', { 'unassigned-chip--dragging': unassignedDrag?.kind === 'contexts' && unassignedDrag?.value === c.id }]"
                       draggable="true"
-                      @dragstart="onUnassignedDragStart('repos', c.id, $event)"
+                      @dragstart="onUnassignedDragStart('contexts', c.id, $event)"
                       @dragend="onUnassignedDragEnd"
                     >{{ c.name }}</span>
                   </div>
@@ -102,7 +106,7 @@
                   @blur="onNameBlur(team, $event.target.value)"
                   class="team-name-input" :placeholder="'Team ' + (idx + 1)" />
                 <span v-if="!isExpanded(team.id)" class="team-summary">
-                  {{ team.authors.length }} authors · {{ team.repos.length }} contexts
+                  {{ team.authors.length }} authors · {{ team.contexts.length }} contexts
                 </span>
                 <button class="remove-team-btn" @click="askDeleteTeam(team)" title="Delete team"><Trash2 :size="16" /></button>
               </div>
@@ -135,17 +139,17 @@
                     </template>
                   </div>
 
-                  <div class="section-label">Bounded Contexts ({{ team.repos.length }})</div>
+                  <div class="section-label">Bounded Contexts ({{ team.contexts.length }})</div>
                   <div class="assigned-chips">
-                    <span v-for="r in [...team.repos].sort()" :key="r" class="assigned-chip repo-chip">
-                      {{ contextName(r) }}<button class="chip-remove" @click="removeFrom(team, 'repos', r)" title="Remove"><X :size="11" /></button>
+                    <span v-for="r in [...team.contexts].sort()" :key="r" class="assigned-chip repo-chip">
+                      {{ contextName(r) }}<button class="chip-remove" @click="removeFrom(team, 'contexts', r)" title="Remove"><X :size="11" /></button>
                     </span>
-                    <span v-if="!team.repos.length" class="empty-hint">No bounded contexts assigned</span>
+                    <span v-if="!team.contexts.length" class="empty-hint">No bounded contexts assigned</span>
                   </div>
                   <div class="available-list" v-if="availableContexts(team).length">
                     <div class="available-label">Add bounded context:</div>
                     <div class="available-pills">
-                      <button v-for="c in availableContexts(team)" :key="c.id" class="available-pill repo-pill" @click="addTo(team, 'repos', c.id)">
+                      <button v-for="c in availableContexts(team)" :key="c.id" class="available-pill repo-pill" @click="addTo(team, 'contexts', c.id)">
                         + {{ c.name }}
                       </button>
                     </div>
@@ -276,6 +280,87 @@
           </p>
         </template>
 
+        <!-- ── Bounded Contexts ── -->
+        <template v-if="tab === 'contexts'">
+          <p class="panel-hint">
+            A bounded context groups one or more repositories (or sub-paths) under a single
+            identity that teams can own. Any repository not placed in a context here maps to an
+            automatic context named after itself.
+          </p>
+
+          <!-- Pending source hand-off from a node's right-click menu -->
+          <div v-if="pendingContextSource" class="ctx-pending">
+            <div class="ctx-pending-title">
+              Add <code>{{ pendingContextSource.label }}</code> to a bounded context
+            </div>
+            <div class="ctx-pending-row">
+              <select v-model="pendingTarget" class="ctx-select">
+                <option value="__new__">➕ New context…</option>
+                <option v-for="c in contexts" :key="c.id" :value="c.id">{{ c.name }}</option>
+              </select>
+              <input
+                v-if="pendingTarget === '__new__'"
+                v-model="pendingNewName"
+                class="ctx-input"
+                placeholder="New context name"
+                @keyup.enter="canConfirmPending && confirmPending()"
+              />
+            </div>
+            <div class="ctx-pending-actions">
+              <button class="modal-btn modal-btn--confirm" :disabled="!canConfirmPending" @click="confirmPending">
+                Add source
+              </button>
+              <button class="modal-btn modal-btn--secondary" @click="store.clearPendingContextSource()">Cancel</button>
+            </div>
+          </div>
+
+          <button class="add-team-btn" @click="store.addContext('New context')">+ New bounded context</button>
+
+          <div v-for="c in contexts" :key="c.id" class="ctx-card">
+            <div class="ctx-card-header">
+              <input
+                :value="c.name"
+                @input="store.updateContext(c.id, { name: $event.target.value })"
+                class="team-name-input" placeholder="Context name" />
+              <button class="remove-team-btn" @click="store.removeContext(c.id)" title="Delete context"><Trash2 :size="16" /></button>
+            </div>
+
+            <div class="ctx-sources">
+              <div v-for="(s, i) in c.sources" :key="i" class="ctx-source-row">
+                <span class="ctx-source-type" :class="`ctx-source-type--${s.type}`">{{ s.type }}</span>
+                <span class="ctx-source-desc">{{ sourceLabel(s) }}</span>
+                <button class="chip-remove" @click="store.removeContextSource(c.id, i)" title="Remove source"><X :size="11" /></button>
+              </div>
+              <span v-if="!c.sources.length" class="empty-hint">No sources yet — this context matches nothing.</span>
+            </div>
+
+            <div class="ctx-add-source" v-if="draftSource[c.id]">
+              <select v-model="draftSource[c.id].type" class="ctx-select-sm">
+                <option value="repo">repo</option>
+                <option value="path">path</option>
+                <option value="glob">glob</option>
+              </select>
+              <select v-model="draftSource[c.id].repo" class="ctx-select-sm">
+                <option value="" disabled>repo…</option>
+                <option v-for="r in allRepos" :key="r" :value="r">{{ r }}</option>
+              </select>
+              <input
+                v-if="draftSource[c.id].type === 'path'"
+                v-model="draftSource[c.id].path" class="ctx-input-sm" placeholder="e.g. src/auth" />
+              <input
+                v-if="draftSource[c.id].type === 'glob'"
+                v-model="draftSource[c.id].pattern" class="ctx-input-sm" placeholder="e.g. **/*.sql" />
+              <button class="available-pill" :disabled="!canAddSource(c.id)" @click="addSourceFromDraft(c.id)">+ source</button>
+            </div>
+          </div>
+
+          <div v-if="!contexts.length && !pendingContextSource" class="no-teams">
+            <p>No user-defined bounded contexts yet.</p>
+            <p>Every repository maps to an automatic 1:1 context until you group them here, or
+              right-click a node in the graph and choose <strong>Add to bounded context</strong>.</p>
+          </div>
+        </template>
+
       </div>
 
       <!-- ── Footer: Import / Export ── -->
@@ -322,7 +407,7 @@
           </div>
           <p class="modal-body">
             This will remove the team <strong>{{ teamToDelete.name }}</strong>
-            ({{ teamToDelete.authors.length }} authors, {{ teamToDelete.repos.length }} contexts).
+            ({{ teamToDelete.authors.length }} authors, {{ teamToDelete.contexts.length }} contexts).
             Members are not deleted — they'll appear as Unassigned.
           </p>
           <div class="modal-actions">
@@ -345,7 +430,7 @@ import {
 } from '@lucide/vue';
 
 const store = useLensStore();
-const { teams, authorNormalizations, ignoredAuthors, allRawAuthors, allAuthors, allContexts, nodeColors } = storeToRefs(store);
+const { teams, authorNormalizations, ignoredAuthors, allRawAuthors, allAuthors, allContexts, allRepos, contexts, pendingContextSource, nodeColors } = storeToRefs(store);
 
 function contextName(id) {
   return allContexts.value.find(c => c.id === id)?.name ?? id;
@@ -487,9 +572,9 @@ function availableAuthorGroups(team) {
 
 function availableContexts(team) {
   const takenElsewhere = new Set(
-    teams.value.filter(t => t.id !== team.id).flatMap(t => t.repos)
+    teams.value.filter(t => t.id !== team.id).flatMap(t => t.contexts)
   );
-  return allContexts.value.filter(c => !team.repos.includes(c.id) && !takenElsewhere.has(c.id));
+  return allContexts.value.filter(c => !team.contexts.includes(c.id) && !takenElsewhere.has(c.id));
 }
 function addTo(team, field, value) {
   if (!team[field].includes(value)) team[field].push(value);
@@ -503,14 +588,14 @@ const unassignedAuthors = computed(() => {
   return allAuthors.value.filter(a => !assigned.has(a));
 });
 const unassignedContexts = computed(() => {
-  const assigned = new Set(teams.value.flatMap(t => t.repos));
+  const assigned = new Set(teams.value.flatMap(t => t.contexts));
   return allContexts.value.filter(c => !assigned.has(c.id));
 });
 
 const unassignedExpanded = ref(false);
 
 // ── Drag unassigned author/repo → team ──
-const unassignedDrag = ref(null); // { kind: 'authors' | 'repos', value: string }
+const unassignedDrag = ref(null); // { kind: 'authors' | 'contexts', value: string }
 const dropTargetTeamId = ref(null);
 
 function onUnassignedDragStart(kind, value, e) {
@@ -569,6 +654,65 @@ function confirmAliasMerge() {
 
 function cancelAliasMerge() {
   aliasMergeConfirm.value = null;
+}
+
+// ── Bounded Contexts ─────────────────────────────────────────────────────────
+function sourceLabel(s) {
+  if (s.type === 'repo') return s.repo;
+  if (s.type === 'path') return `${s.repo} / ${s.path}`;
+  if (s.type === 'glob') return `${s.repo} : ${s.pattern}`;
+  return s.repo;
+}
+
+// Per-context draft for the "add source" form. Kept in sync with the context
+// list the same way team name/colour drafts are.
+const draftSource = reactive({});
+function freshDraft() { return { type: 'repo', repo: '', path: '', pattern: '' }; }
+watch(contexts, (list) => {
+  const live = new Set(list.map(c => c.id));
+  for (const id of Object.keys(draftSource)) if (!live.has(id)) delete draftSource[id];
+  for (const c of list) if (!(c.id in draftSource)) draftSource[c.id] = freshDraft();
+}, { immediate: true, deep: false });
+
+function canAddSource(id) {
+  const d = draftSource[id];
+  if (!d || !d.repo) return false;
+  if (d.type === 'path') return !!d.path.trim();
+  if (d.type === 'glob') return !!d.pattern.trim();
+  return true;
+}
+function addSourceFromDraft(id) {
+  const d = draftSource[id];
+  if (!canAddSource(id)) return;
+  const source = d.type === 'path' ? { type: 'path', repo: d.repo, path: d.path.trim() }
+    : d.type === 'glob' ? { type: 'glob', repo: d.repo, pattern: d.pattern.trim() }
+    : { type: 'repo', repo: d.repo };
+  store.addContextSource(id, source);
+  draftSource[id] = freshDraft();
+}
+
+// Right-click "Add to bounded context" hand-off.
+const pendingTarget  = ref('__new__');
+const pendingNewName = ref('');
+const canConfirmPending = computed(
+  () => pendingTarget.value !== '__new__' || pendingNewName.value.trim().length > 0
+);
+watch(pendingContextSource, (p) => {
+  if (!p) return;
+  open.value = true;
+  tab.value  = 'contexts';
+  pendingTarget.value  = contexts.value.length ? contexts.value[0].id : '__new__';
+  pendingNewName.value = p.label ?? '';
+});
+function confirmPending() {
+  const p = pendingContextSource.value;
+  if (!p || !canConfirmPending.value) return;
+  if (pendingTarget.value === '__new__') {
+    store.addContext(pendingNewName.value.trim(), [p.source]);
+  } else {
+    store.addContextSource(pendingTarget.value, p.source);
+  }
+  store.clearPendingContextSource();
 }
 
 // ── Ignored Authors ──
@@ -689,6 +833,33 @@ async function handleImport(e) {
   @apply w-full py-2.5 px-4 rounded-lg font-semibold text-sm bg-brand-orange text-white
          hover:bg-brand-orange-dark transition-all duration-150 mb-4 cursor-pointer;
 }
+/* ── Bounded Contexts tab ── */
+.ctx-card { @apply bg-gray-50 border border-gray-200 rounded-xl p-4 mb-3; }
+.ctx-card-header { @apply flex items-center gap-2 mb-2; }
+.ctx-sources { @apply flex flex-col gap-1.5 mb-3; }
+.ctx-source-row { @apply flex items-center gap-2 text-sm; }
+.ctx-source-type {
+  @apply text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded
+         bg-gray-200 text-gray-600 flex-shrink-0;
+}
+.ctx-source-type--repo { @apply bg-blue-100 text-blue-700; }
+.ctx-source-type--path { @apply bg-teal-100 text-teal-700; }
+.ctx-source-type--glob { @apply bg-orange-100 text-orange-700; }
+.ctx-source-desc { @apply font-mono text-gray-700 truncate; }
+.ctx-add-source { @apply flex items-center gap-2 flex-wrap; }
+.ctx-select, .ctx-select-sm, .ctx-input, .ctx-input-sm {
+  @apply border border-gray-300 rounded px-2 py-1 text-sm bg-white;
+}
+.ctx-select-sm, .ctx-input-sm { @apply text-xs py-0.5; }
+.ctx-select, .ctx-input { @apply flex-1 min-w-0; }
+.ctx-pending {
+  @apply border border-brand-orange bg-orange-50 rounded-xl p-4 mb-4 flex flex-col gap-2;
+}
+.ctx-pending-title { @apply text-sm text-gray-700; }
+.ctx-pending-title code { @apply font-mono bg-white px-1.5 py-0.5 rounded border border-gray-200; }
+.ctx-pending-row { @apply flex items-center gap-2; }
+.ctx-pending-actions { @apply flex items-center gap-2 justify-end; }
+
 .teams-list { @apply flex flex-col gap-4; }
 .team-card { @apply bg-gray-50 border border-gray-200 rounded-xl p-4; }
 .team-card-header { @apply flex items-center gap-2 mb-1; }

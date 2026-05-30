@@ -467,7 +467,7 @@ export function useRepoDetailGraph({
         .style('cursor', onRepoClick ? 'pointer' : 'default')
         .on('mouseenter', e => onShowNodeTooltip(
           { id: repoNode.id, type: 'repo', commits: repoNode.commits,
-            teamName: '', repoCount: 0, authorCount: 0,
+            teamName: '', contextCount: 0, authorCount: 0,
             contributions: repoContributions, owningTeamId: repoOwningTeamId,
             action: onRepoClick ? 'Click to explore folder structure' : '' },
           e.clientX + TOOLTIP_OFFSET.x, e.clientY + TOOLTIP_OFFSET.y

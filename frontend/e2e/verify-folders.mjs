@@ -444,6 +444,42 @@ await lens.screenshot('out/f12b-data-platform-bubble.png');
 await lens.page.locator('button:has-text("Swimlane")').click();
 await lens.page.waitForTimeout(600);
 
+// ── Step 13: Right-click context node → Add to bounded context ────────────────
+console.log('\n[13] Right-click context node → Add to bounded context');
+const rcOk = await lens.page.evaluate(() => {
+  const textEl = Array.from(document.querySelectorAll('svg text'))
+    .filter(t => t.closest('g')?.querySelector('circle.repo-fill'))
+    .find(t => t.textContent.trim().startsWith('backend-a'));
+  const g = textEl?.closest('g');
+  if (!g) return false;
+  const box = g.getBoundingClientRect();
+  g.dispatchEvent(new MouseEvent('contextmenu', {
+    bubbles: true, cancelable: true,
+    clientX: box.x + box.width / 2, clientY: box.y + box.height / 2,
+  }));
+  return true;
+});
+check('Auto-context node found for right-click', rcOk);
+await lens.page.waitForTimeout(200);
+check('Context menu appears on right-click', await lens.page.locator('.ctx-menu').isVisible());
+
+await lens.page.locator('.ctx-menu-item').click();
+await lens.page.waitForTimeout(400);
+check('Mapping panel opens on Contexts tab', await lens.page.locator('.tab-btn.active:has-text("Contexts")').isVisible());
+check('Pending source confirmation shown', await lens.page.locator('.ctx-pending').isVisible());
+await lens.screenshot('out/f13-add-to-context.png');
+
+const ctxCardsBefore = await lens.page.locator('.ctx-card').count();
+await lens.page.locator('.ctx-pending select').selectOption('__new__');
+await lens.page.locator('.ctx-pending input').fill('Backend Bundle');
+await lens.page.locator('.ctx-pending .modal-btn--confirm').click();
+await lens.page.waitForTimeout(400);
+const ctxCardsAfter = await lens.page.locator('.ctx-card').count();
+check('New bounded context created from node', ctxCardsAfter === ctxCardsBefore + 1, `before=${ctxCardsBefore} after=${ctxCardsAfter}`);
+check('Pending confirmation cleared after confirm', !(await lens.page.locator('.ctx-pending').isVisible()));
+check('New context shows its repo source', (await lens.page.locator('.ctx-source-desc').allTextContents()).some(t => t.includes('backend-api')));
+await lens.screenshot('out/f13b-context-created.png');
+
 // ── Summary ───────────────────────────────────────────────────────────────
 console.log(`\n══════════════════════════════`);
 console.log(`Passed: ${passed}  Failed: ${failed}`);

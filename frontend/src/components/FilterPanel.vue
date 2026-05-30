@@ -58,7 +58,7 @@
             class="team-card"
             :class="{
               'is-team-selected': filterTeamIds.has(tv.id),
-              'has-partial':      !filterTeamIds.has(tv.id) && (tv.selRepos > 0 || tv.selAuthors > 0),
+              'has-partial':      !filterTeamIds.has(tv.id) && (tv.selContexts > 0 || tv.selAuthors > 0),
             }"
             :style="{ '--card-color': tv.color }"
           >
@@ -72,7 +72,7 @@
               <span class="card-chips">
                 <span v-if="filterTeamIds.has(tv.id)" class="chip chip--team">all repos</span>
                 <template v-else>
-                  <span v-if="tv.selRepos"    class="chip chip--repo">{{ tv.selRepos }} repo{{ tv.selRepos !== 1 ? 's' : '' }}</span>
+                  <span v-if="tv.selContexts" class="chip chip--repo">{{ tv.selContexts }} context{{ tv.selContexts !== 1 ? 's' : '' }}</span>
                   <span v-if="tv.selAuthors"  class="chip chip--author">{{ tv.selAuthors }} author{{ tv.selAuthors !== 1 ? 's' : '' }}</span>
                 </template>
               </span>
@@ -96,11 +96,11 @@
                 <div class="sub-section">
                   <div class="sub-header">
                     <span class="sub-label">Bounded Contexts</span>
-                    <span class="sub-count">{{ tv.repos.length }}</span>
+                    <span class="sub-count">{{ tv.contexts.length }}</span>
                   </div>
-                  <div v-if="tv.repos.length" class="item-grid">
+                  <div v-if="tv.contexts.length" class="item-grid">
                     <label
-                      v-for="repo in tv.repos"
+                      v-for="repo in tv.contexts"
                       :key="repo"
                       :class="['item-row', {
                         'item-checked':  filterContextIds.has(repo) || filterTeamIds.has(tv.id),
@@ -207,17 +207,17 @@ const filteredTeams = computed(() => {
 
   return filterableTeams.value.flatMap(team => {
     const teamHit = !q || team.name.toLowerCase().includes(q);
-    const repos   = (teamHit ? [...team.repos] : team.repos.filter(r => (contextNameMap.value[r] ?? r).toLowerCase().includes(q))).sort();
+    const contexts = (teamHit ? [...team.contexts] : team.contexts.filter(r => (contextNameMap.value[r] ?? r).toLowerCase().includes(q))).sort();
     const authors = (teamHit ? [...team.authors] : team.authors.filter(a => anonMap.value[a]?.toLowerCase().includes(q)))
       .sort((a, b) => (anonMap.value[a] ?? a).localeCompare(anonMap.value[b] ?? b));
 
-    if (q && !teamHit && repos.length === 0 && authors.length === 0) return [];
+    if (q && !teamHit && contexts.length === 0 && authors.length === 0) return [];
 
     return [{
       ...team,
-      repos,
+      contexts,
       authors,
-      selRepos:    repos.filter(r => filterContextIds.value.has(r)).length,
+      selContexts: contexts.filter(r => filterContextIds.value.has(r)).length,
       selAuthors:  authors.filter(a => filterAuthorIds.value.has(a)).length,
       autoExpand:  q && !teamHit,
     }];
@@ -263,7 +263,7 @@ function onContextToggle(contextId, tv, checked) {
   if (!checked && filterTeamIds.value.has(tv.id)) {
     const fullTeam = filterableTeams.value.find(t => t.id === tv.id);
     store.setFilterTeam(tv.id, false);
-    for (const r of (fullTeam?.repos ?? tv.repos)) {
+    for (const r of (fullTeam?.contexts ?? tv.contexts)) {
       if (r !== contextId) store.setFilterContext(r, true);
     }
   } else {

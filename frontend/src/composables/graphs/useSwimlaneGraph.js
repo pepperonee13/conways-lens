@@ -36,6 +36,7 @@ export function useSwimlaneGraph({
   onMoveTooltip,
   onHideTooltip,
   onNodeClick,
+  onNodeContextMenu,
   edgeWeight,
   violationThreshold,
   violatingOnly,
@@ -419,7 +420,8 @@ export function useSwimlaneGraph({
         }
       })
       .on('mouseleave', () => { resetHighlight(); onHideTooltip(); })
-      .on('click', (e, d) => { if (onNodeClick && d.type === 'context') { onHideTooltip(); onNodeClick(d); } });
+      .on('click', (e, d) => { if (onNodeClick && d.type === 'context') { onHideTooltip(); onNodeClick(d); } })
+      .on('contextmenu', (e, d) => { if (onNodeContextMenu && d.type === 'context') { e.preventDefault(); onHideTooltip(); onNodeContextMenu(d, e); } });
 
     // Team anchor: pill with name + sublabel
     const teamG = nodeEls.filter(d => d.type === 'team');

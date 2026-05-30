@@ -18,6 +18,7 @@ export function useRepoFolderGraph({
   onMoveTooltip,
   onHideTooltip,
   onFolderClick,
+  onNodeContextMenu,
   edgeWeight,
   violationThreshold,
 }) {
@@ -298,6 +299,12 @@ export function useRepoFolderGraph({
         if (!d.hasChildren) return;
         onHideTooltip();
         onFolderClick?.(d.id);
+      })
+      .on('contextmenu', (e, d) => {
+        if (!onNodeContextMenu) return;
+        e.preventDefault();
+        onHideTooltip();
+        onNodeContextMenu(d, e);
       });
 
     folderEls.append('rect')
