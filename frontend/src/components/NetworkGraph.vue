@@ -142,7 +142,7 @@
           <div class="detail-header">
             <button class="back-btn" @click="closeDetail">← Back to overview</button>
             <nav class="folder-breadcrumb" aria-label="Folder path">
-              <button class="breadcrumb-item breadcrumb-repo" @click="closeFolderMode">{{ detailRepoId }}</button>
+              <button class="breadcrumb-item breadcrumb-repo" @click="closeFolderMode">{{ detailContextName }}</button>
               <template v-for="(seg, idx) in folderPath" :key="idx">
                 <span class="breadcrumb-sep">/</span>
                 <button
@@ -159,7 +159,7 @@
         <template v-else>
           <div class="detail-header">
             <button class="back-btn" @click="closeDetail">← Back to overview</button>
-            <span class="detail-title">Contributors to <strong>{{ detailRepoId }}</strong></span>
+            <span class="detail-title">Contributors to <strong>{{ detailContextName }}</strong></span>
           </div>
           <p v-if="!isFullscreen" class="hint">Scroll to zoom · Hover nodes or edges to inspect · Click the repo to explore folders</p>
         </template>
@@ -267,6 +267,7 @@ const store = useLensStore();
 const {
   ownershipGraphData, nodeColors,
   dateBounds, activeRange, syntheticTeam,
+  allContexts,
 } = storeToRefs(store);
 
 const effectiveTeams = computed(() =>
@@ -278,8 +279,25 @@ const detailSvgRef  = ref(null);
 const containerRef  = ref(null);
 const vizDropRef    = ref(null);
 const dims          = reactive({ w: 900, h: 600 });
-const detailRepoId  = ref(null);
+const detailRepoId  = ref(null); // holds the context ID of the detail view
 const folderPath    = ref(null); // null = author view, [] = folder root, ['src'] = inside src/, etc.
+
+// Resolves the context's display name for the detail header.
+const detailContextName = computed(() => {
+  const id = detailRepoId.value;
+  if (!id) return null;
+  return allContexts.value.find(c => c.id === id)?.name ?? id;
+});
+
+// Resolves the first concrete repo name for drill-down functions.
+// For auto-contexts (id === repoName) this returns the id unchanged.
+const detailRepoName = computed(() => {
+  const id = detailRepoId.value;
+  if (!id) return null;
+  const ctx = allContexts.value.find(c => c.id === id);
+  const repoSrc = (ctx?.sources ?? []).find(s => s.type === 'repo');
+  return repoSrc?.repo ?? id;
+});
 const noFolderData  = ref(false); // true when repo has no FilePath data — suppresses blank folder view
 
 const VIZ_DEFAULTS = {
@@ -299,13 +317,13 @@ const displayAuthors     = ref(VIZ_DEFAULTS.displayAuthors);
 
 const violationSummary = computed(() => {
   const threshold = violationThreshold.value;
-  const repos = ownershipGraphData.value.nodes.filter(n => n.type === 'repo');
-  const violating = repos.filter(r =>
+  const contexts = ownershipGraphData.value.nodes.filter(n => n.type === 'context');
+  const violating = contexts.filter(r =>
     r.commits && r.contributions?.some(c =>
       c.teamId !== r.owningTeamId && (c.commits / r.commits) * 100 >= threshold
     )
   ).length;
-  return { violating, total: repos.length };
+  return { violating, total: contexts.length };
 });
 
 function toggleFullscreen() {
@@ -363,7 +381,7 @@ const tooltipDetail = computed(() => {
 });
 
 const tooltipContributions = computed(() => {
-  if (tooltip.type !== 'repo') return [];
+  if (tooltip.type !== 'context') return [];
   const total = tooltip.commits || 0;
   if (!total) return [];
   const threshold = violationThreshold.value;
@@ -398,7 +416,7 @@ function displayNodeName(id) {
     const teamId = id.slice(5);
     return effectiveTeams.value.find(t => t.id === teamId)?.name ?? id;
   }
-  return id;
+  return allContexts.value.find(c => c.id === id)?.name ?? id;
 }
 
 const { anonymize } = useAnonymize();
@@ -426,10 +444,10 @@ const renderer = useSwimlaneGraph({
       anchorRight: d.type === 'team',
       name: d.id, type: d.type, commits: d.commits,
       teamName: d.name ?? '', repoCount: d.repoCount ?? 0, authorCount: d.authorCount ?? 0,
-      action: d.type === 'repo' ? 'Click to see author contributions' : '',
+      action: d.type === 'context' ? 'Click to see author contributions' : '',
       contributions: d.contributions ?? [],
       owningTeamId: d.owningTeamId ?? null,
-      authorContributions: displayAuthors.value && (d.type === 'repo' || d.type === 'team') ? d.authorContributions ?? null : null,
+      authorContributions: displayAuthors.value && (d.type === 'context' || d.type === 'team') ? d.authorContributions ?? null : null,
       folderLastCommit: null, folderFullPath: null, context: '',
       teamInboundBreakdown: null, teamOutboundBreakdown: null, repoBreakdown: null,
     });
@@ -458,10 +476,10 @@ const circlePackRenderer = useCirclePackGraph({
       anchorRight: d.type === 'team',
       name: d.id, type: d.type, commits: d.commits,
       teamName: d.name ?? '', repoCount: d.repoCount ?? 0, authorCount: d.authorCount ?? 0,
-      action: d.type === 'repo' ? 'Click to see author contributions' : '',
+      action: d.type === 'context' ? 'Click to see author contributions' : '',
       contributions: d.contributions ?? [],
       owningTeamId: d.owningTeamId ?? null,
-      authorContributions: displayAuthors.value && (d.type === 'repo' || d.type === 'team') ? d.authorContributions ?? null : null,
+      authorContributions: displayAuthors.value && (d.type === 'context' || d.type === 'team') ? d.authorContributions ?? null : null,
       folderLastCommit: null, folderFullPath: null, context: '',
       teamInboundBreakdown: d.teamInboundBreakdown ?? null,
       teamOutboundBreakdown: d.teamOutboundBreakdown ?? null,
@@ -540,13 +558,13 @@ const folderRenderer = useRepoFolderGraph({
   edgeWeight,
 });
 
-function openDetail(repoId) {
+function openDetail(contextId) {
   folderRenderer.teardown();
   folderPath.value = null;
   noFolderData.value = false;
-  detailRepoId.value = repoId;
+  detailRepoId.value = contextId;
   nextTick(() => {
-    const data = store.repoContributorsData(repoId);
+    const data = store.repoContributorsData(detailRepoName.value);
     detailRenderer.draw({ dims, data });
   });
 }
@@ -560,7 +578,7 @@ function closeDetail() {
 }
 
 function openFolderMode() {
-  const probe = store.repoFolderData(detailRepoId.value, '');
+  const probe = store.repoFolderData(detailRepoName.value, '');
   if (!probe.nodes.some(n => n.type === 'folder')) {
     noFolderData.value = true;
     return;
@@ -575,7 +593,7 @@ function closeFolderMode() {
   folderRenderer.teardown();
   folderPath.value = null;
   nextTick(() => {
-    const data = store.repoContributorsData(detailRepoId.value);
+    const data = store.repoContributorsData(detailRepoName.value);
     detailRenderer.draw({ dims, data });
   });
 }
@@ -592,7 +610,7 @@ function breadcrumbNavigate(index) {
 
 function redrawFolder() {
   const prefix = (folderPath.value ?? []).join('/');
-  const data = store.repoFolderData(detailRepoId.value, prefix);
+  const data = store.repoFolderData(detailRepoName.value, prefix);
   folderRenderer.draw({ dims, data });
 }
 

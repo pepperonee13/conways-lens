@@ -36,12 +36,12 @@
             Assign authors and repositories to teams. Team color is applied to their nodes in the graph.
           </p>
 
-          <div v-if="teams.length && (unassignedAuthors.length || unassignedRepos.length)" class="unassigned-section">
+          <div v-if="teams.length && (unassignedAuthors.length || unassignedContexts.length)" class="unassigned-section">
             <button class="unassigned-title" @click="unassignedExpanded = !unassignedExpanded">
               <ChevronRight :size="14" class="chevron" :class="{ rotated: unassignedExpanded }" />
               <AlertTriangle :size="14" />
               Unassigned
-              <span class="unassigned-count">{{ unassignedAuthors.length + unassignedRepos.length }}</span>
+              <span class="unassigned-count">{{ unassignedAuthors.length + unassignedContexts.length }}</span>
             </button>
             <transition name="team-body">
               <div v-if="unassignedExpanded">
@@ -59,17 +59,17 @@
                     >{{ a }}</span>
                   </div>
                 </div>
-                <div v-if="unassignedRepos.length" class="unassigned-group">
-                  <span class="unassigned-label">Repositories not in any team:</span>
+                <div v-if="unassignedContexts.length" class="unassigned-group">
+                  <span class="unassigned-label">Bounded contexts not in any team:</span>
                   <div class="unassigned-chips">
                     <span
-                      v-for="r in unassignedRepos"
-                      :key="r"
-                      :class="['unassigned-chip', 'unassigned-chip--draggable', { 'unassigned-chip--dragging': unassignedDrag?.kind === 'repos' && unassignedDrag?.value === r }]"
+                      v-for="c in unassignedContexts"
+                      :key="c.id"
+                      :class="['unassigned-chip', 'unassigned-chip--draggable', { 'unassigned-chip--dragging': unassignedDrag?.kind === 'repos' && unassignedDrag?.value === c.id }]"
                       draggable="true"
-                      @dragstart="onUnassignedDragStart('repos', r, $event)"
+                      @dragstart="onUnassignedDragStart('repos', c.id, $event)"
                       @dragend="onUnassignedDragEnd"
-                    >{{ r }}</span>
+                    >{{ c.name }}</span>
                   </div>
                 </div>
               </div>
@@ -102,7 +102,7 @@
                   @blur="onNameBlur(team, $event.target.value)"
                   class="team-name-input" :placeholder="'Team ' + (idx + 1)" />
                 <span v-if="!isExpanded(team.id)" class="team-summary">
-                  {{ team.authors.length }} authors · {{ team.repos.length }} repos
+                  {{ team.authors.length }} authors · {{ team.repos.length }} contexts
                 </span>
                 <button class="remove-team-btn" @click="askDeleteTeam(team)" title="Delete team"><Trash2 :size="16" /></button>
               </div>
@@ -135,18 +135,18 @@
                     </template>
                   </div>
 
-                  <div class="section-label">Repositories ({{ team.repos.length }})</div>
+                  <div class="section-label">Bounded Contexts ({{ team.repos.length }})</div>
                   <div class="assigned-chips">
                     <span v-for="r in [...team.repos].sort()" :key="r" class="assigned-chip repo-chip">
-                      {{ r }}<button class="chip-remove" @click="removeFrom(team, 'repos', r)" title="Remove"><X :size="11" /></button>
+                      {{ contextName(r) }}<button class="chip-remove" @click="removeFrom(team, 'repos', r)" title="Remove"><X :size="11" /></button>
                     </span>
-                    <span v-if="!team.repos.length" class="empty-hint">No repositories assigned</span>
+                    <span v-if="!team.repos.length" class="empty-hint">No bounded contexts assigned</span>
                   </div>
-                  <div class="available-list" v-if="availableRepos(team).length">
-                    <div class="available-label">Add repository:</div>
+                  <div class="available-list" v-if="availableContexts(team).length">
+                    <div class="available-label">Add bounded context:</div>
                     <div class="available-pills">
-                      <button v-for="r in availableRepos(team)" :key="r" class="available-pill repo-pill" @click="addTo(team, 'repos', r)">
-                        + {{ r }}
+                      <button v-for="c in availableContexts(team)" :key="c.id" class="available-pill repo-pill" @click="addTo(team, 'repos', c.id)">
+                        + {{ c.name }}
                       </button>
                     </div>
                   </div>
@@ -322,7 +322,7 @@
           </div>
           <p class="modal-body">
             This will remove the team <strong>{{ teamToDelete.name }}</strong>
-            ({{ teamToDelete.authors.length }} authors, {{ teamToDelete.repos.length }} repos).
+            ({{ teamToDelete.authors.length }} authors, {{ teamToDelete.repos.length }} contexts).
             Members are not deleted — they'll appear as Unassigned.
           </p>
           <div class="modal-actions">
@@ -345,7 +345,11 @@ import {
 } from '@lucide/vue';
 
 const store = useLensStore();
-const { teams, authorNormalizations, ignoredAuthors, allRawAuthors, allAuthors, allRepos, nodeColors } = storeToRefs(store);
+const { teams, authorNormalizations, ignoredAuthors, allRawAuthors, allAuthors, allContexts, nodeColors } = storeToRefs(store);
+
+function contextName(id) {
+  return allContexts.value.find(c => c.id === id)?.name ?? id;
+}
 
 function teamColor(canonicalAuthor) {
   return nodeColors.value[`author:${canonicalAuthor}`] ?? null;
@@ -481,11 +485,11 @@ function availableAuthorGroups(team) {
   return { free, shared };
 }
 
-function availableRepos(team) {
+function availableContexts(team) {
   const takenElsewhere = new Set(
     teams.value.filter(t => t.id !== team.id).flatMap(t => t.repos)
   );
-  return allRepos.value.filter(r => !team.repos.includes(r) && !takenElsewhere.has(r));
+  return allContexts.value.filter(c => !team.repos.includes(c.id) && !takenElsewhere.has(c.id));
 }
 function addTo(team, field, value) {
   if (!team[field].includes(value)) team[field].push(value);
@@ -498,9 +502,9 @@ const unassignedAuthors = computed(() => {
   const assigned = new Set(teams.value.flatMap(t => t.authors));
   return allAuthors.value.filter(a => !assigned.has(a));
 });
-const unassignedRepos = computed(() => {
+const unassignedContexts = computed(() => {
   const assigned = new Set(teams.value.flatMap(t => t.repos));
-  return allRepos.value.filter(r => !assigned.has(r));
+  return allContexts.value.filter(c => !assigned.has(c.id));
 });
 
 const unassignedExpanded = ref(false);

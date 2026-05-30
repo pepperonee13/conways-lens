@@ -3,12 +3,13 @@ import { ref, computed, watch } from 'vue';
 import Papa from 'papaparse';
 
 const STORAGE = {
-  teams:          'conwaylens:teams',
-  normalizations: 'conwaylens:normalizations',
-  ignoredAuthors: 'conwaylens:ignoredAuthors',
-  filterTeamIds:   'conwaylens:filterTeamIds',
-  filterRepoIds:   'conwaylens:filterRepoIds',
-  filterAuthorIds: 'conwaylens:filterAuthorIds',
+  teams:            'conwaylens:teams',
+  normalizations:   'conwaylens:normalizations',
+  ignoredAuthors:   'conwaylens:ignoredAuthors',
+  contexts:         'conwaylens:contexts',
+  filterTeamIds:    'conwaylens:filterTeamIds',
+  filterContextIds: 'conwaylens:filterContextIds',
+  filterAuthorIds:  'conwaylens:filterAuthorIds',
 };
 
 const DEFAULT_COLORS  = ['#225EA9', '#088F9B', '#F08223', '#5A4A80', '#C45E0F', '#006B75', '#3A75BA', '#1A9FA9'];
@@ -32,6 +33,35 @@ function load(key, fallback) {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
 }
 
+// Convert a glob pattern to a RegExp.
+// Supports: ** (any path, including slashes), * (any chars except /), ? (one char except /)
+const REGEX_SPECIAL = new Set(['.', '+', '^', '$', '{', '}', '(', ')', '|', '[', ']', '\\']);
+function globToRegex(pattern) {
+  let result = '';
+  let i = 0;
+  while (i < pattern.length) {
+    const ch = pattern[i];
+    if (ch === '*' && pattern[i + 1] === '*') {
+      result += '.*';
+      i += 2;
+      if (pattern[i] === '/') i++;
+    } else if (ch === '*') {
+      result += '[^/]*';
+      i++;
+    } else if (ch === '?') {
+      result += '[^/]';
+      i++;
+    } else if (REGEX_SPECIAL.has(ch)) {
+      result += '\\' + ch;
+      i++;
+    } else {
+      result += ch;
+      i++;
+    }
+  }
+  return new RegExp(`^${result}$`);
+}
+
 export const useLensStore = defineStore('lens', () => {
   const timelineData = ref([]);
   const dataLoaded   = ref(false);
@@ -42,14 +72,23 @@ export const useLensStore = defineStore('lens', () => {
   const authorNormalizations = ref(load(STORAGE.normalizations, {}));
   const ignoredAuthors       = ref(load(STORAGE.ignoredAuthors, []));
 
+  // BoundedContext[] — user-defined contexts. Auto-contexts are derived in allContexts.
+  // Shape: { id: string, name: string, sources: Array<
+  //   | { type: 'repo',  repo: string }
+  //   | { type: 'path',  repo: string, path: string }
+  //   | { type: 'glob',  repo: string, pattern: string }
+  // > }
+  const contexts = ref(load(STORAGE.contexts, []));
+
   watch(teams,                v => localStorage.setItem(STORAGE.teams,         JSON.stringify(v)), { deep: true });
   watch(authorNormalizations, v => localStorage.setItem(STORAGE.normalizations, JSON.stringify(v)), { deep: true });
   watch(ignoredAuthors,       v => localStorage.setItem(STORAGE.ignoredAuthors,  JSON.stringify(v)), { deep: true });
+  watch(contexts,             v => localStorage.setItem(STORAGE.contexts,        JSON.stringify(v)), { deep: true });
 
   const activeRange = ref({ since: null, until: null });
 
   // Drill-down expansion state
-  const expandedTeams = ref(new Set()); // Set<teamId> — teams expanded to show their repo/author nodes
+  const expandedTeams = ref(new Set()); // Set<teamId> — teams expanded to show their context/author nodes
 
   async function parseTimelineFile(file) {
     const text  = new TextDecoder('utf-8').decode(await file.arrayBuffer());
@@ -119,6 +158,48 @@ export const useLensStore = defineStore('lens', () => {
     [...new Set(timelineData.value.map(r => r.Product))].filter(Boolean).sort()
   );
 
+  // Merge user-defined contexts with auto-generated 1:1 contexts for repos not
+  // wholly covered by a user context. Auto-contexts use id === repoName so that
+  // existing team.repos arrays (which store repo names) resolve without migration.
+  const allContexts = computed(() => {
+    const wholeRepoCovered = new Set();
+    for (const ctx of contexts.value) {
+      for (const src of (ctx.sources ?? [])) {
+        if (src.type === 'repo') wholeRepoCovered.add(src.repo);
+      }
+    }
+    const auto = allRepos.value
+      .filter(r => !wholeRepoCovered.has(r))
+      .map(r => ({ id: r, name: r, sources: [{ type: 'repo', repo: r }] }));
+    return [...contexts.value, ...auto];
+  });
+
+  // Resolve which context a (repoId, filePath) row belongs to.
+  // Checks user-defined contexts first; falls back to the auto-context (id = repoId).
+  function resolveContextId(repoId, filePath) {
+    const fp = filePath ?? '';
+    let bestId    = null;
+    let bestScore = -1;
+    for (const ctx of contexts.value) {
+      for (const src of (ctx.sources ?? [])) {
+        if (src.repo !== repoId) continue;
+        if (src.type === 'repo') {
+          if (bestScore < 0) { bestId = ctx.id; bestScore = 0; }
+        } else if (src.type === 'path') {
+          const p = src.path;
+          if (fp === p || fp.startsWith(p + '/')) {
+            if (p.length > bestScore) { bestId = ctx.id; bestScore = p.length; }
+          }
+        } else if (src.type === 'glob') {
+          if (globToRegex(src.pattern).test(fp)) {
+            if (src.pattern.length > bestScore) { bestId = ctx.id; bestScore = src.pattern.length; }
+          }
+        }
+      }
+    }
+    return bestId ?? repoId;
+  }
+
   const ignoredSet = computed(() => new Set(ignoredAuthors.value));
 
   const dateBounds = computed(() => {
@@ -131,26 +212,31 @@ export const useLensStore = defineStore('lens', () => {
     return min ? { since: min, until: max } : null;
   });
 
-  const crossTeamOnly   = ref(false);
-  const filterTeamIds   = ref(new Set(load(STORAGE.filterTeamIds,   [])));
-  const filterRepoIds   = ref(new Set(load(STORAGE.filterRepoIds,   [])));
-  const filterAuthorIds = ref(new Set(load(STORAGE.filterAuthorIds, [])));
-  watch(filterTeamIds,   v => localStorage.setItem(STORAGE.filterTeamIds,   JSON.stringify([...v])));
-  watch(filterRepoIds,   v => localStorage.setItem(STORAGE.filterRepoIds,   JSON.stringify([...v])));
-  watch(filterAuthorIds, v => localStorage.setItem(STORAGE.filterAuthorIds, JSON.stringify([...v])));
+  const crossTeamOnly     = ref(false);
+  const filterTeamIds     = ref(new Set(load(STORAGE.filterTeamIds,     [])));
+  // Load from new key; fall back to old filterRepoIds key for existing users.
+  const filterContextIds  = ref(new Set(
+    load(STORAGE.filterContextIds, null) ?? load('conwaylens:filterRepoIds', [])
+  ));
+  const filterAuthorIds   = ref(new Set(load(STORAGE.filterAuthorIds,   [])));
+  watch(filterTeamIds,    v => localStorage.setItem(STORAGE.filterTeamIds,    JSON.stringify([...v])));
+  watch(filterContextIds, v => localStorage.setItem(STORAGE.filterContextIds, JSON.stringify([...v])));
+  watch(filterAuthorIds,  v => localStorage.setItem(STORAGE.filterAuthorIds,  JSON.stringify([...v])));
 
-  // Virtual team for authors and repos not yet assigned to any real team.
+  // Virtual team for authors and contexts not yet assigned to any real team.
   // Only exists when at least one real team is configured.
   const syntheticTeam = computed(() => {
     if (!dataLoaded.value || teams.value.length === 0) return null;
-    const assignedAuthors = new Set(teams.value.flatMap(t => t.authors ?? []));
-    const assignedRepos   = new Set(teams.value.flatMap(t => t.repos   ?? []));
-    const freeAuthors = allAuthors.value.filter(a => !assignedAuthors.has(a) && !ignoredSet.value.has(a));
-    const freeRepos   = allRepos.value.filter(r => !assignedRepos.has(r));
-    if (freeAuthors.length === 0 && freeRepos.length === 0) return null;
+    const assignedAuthors     = new Set(teams.value.flatMap(t => t.authors ?? []));
+    const assignedContextIds  = new Set(teams.value.flatMap(t => t.repos   ?? []));
+    const freeAuthors   = allAuthors.value.filter(a => !assignedAuthors.has(a) && !ignoredSet.value.has(a));
+    const freeContextIds = allContexts.value
+      .filter(c => !assignedContextIds.has(c.id))
+      .map(c => c.id);
+    if (freeAuthors.length === 0 && freeContextIds.length === 0) return null;
     return {
       id: UNASSIGNED_ID, name: 'Outside Contributors', color: '#9CA3AF',
-      authors: freeAuthors, repos: freeRepos, isSynthetic: true,
+      authors: freeAuthors, repos: freeContextIds, isSynthetic: true,
     };
   });
 
@@ -159,14 +245,15 @@ export const useLensStore = defineStore('lens', () => {
     const until = activeRange.value.until;
 
     // Merge real teams with the synthetic "Outside Contributors" team so all
-    // unassigned authors/repos are treated identically to real-team members.
+    // unassigned authors/contexts are treated identically to real-team members.
     const syntheticT = syntheticTeam.value;
     const allTeams   = syntheticT ? [...teams.value, syntheticT] : teams.value;
     const hasTeamSetup = allTeams.length > 0;
 
-    // Build team membership lookups (synthetic team members included)
-    const authorToTeams = {}; // normalizedAuthor → Set<teamId>
-    const repoToTeam    = {}; // repoId → teamId
+    // Build team membership lookups (synthetic team members included).
+    // teams[].repos holds context IDs; auto-context IDs equal repo names.
+    const authorToTeams  = {}; // normalizedAuthor → Set<teamId>
+    const contextToTeam  = {}; // contextId → teamId
 
     if (hasTeamSetup) {
       for (const t of allTeams) {
@@ -174,12 +261,11 @@ export const useLensStore = defineStore('lens', () => {
           if (!authorToTeams[a]) authorToTeams[a] = new Set();
           authorToTeams[a].add(t.id);
         }
-        for (const r of (t.repos ?? [])) repoToTeam[r] = t.id;
+        for (const cid of (t.repos ?? [])) contextToTeam[cid] = t.id;
       }
     }
 
     // Pre-pass: count total unique commit SHAs per team (includes within-team work).
-    // Used to size and show team nodes even when they have no cross-team edges.
     const teamTotalShas = {};
     if (hasTeamSetup) {
       for (const row of timelineData.value) {
@@ -195,9 +281,9 @@ export const useLensStore = defineStore('lens', () => {
     }
 
     // Accumulate edges: `source|||target` → Set<commitSHA>
-    const edgeMap     = {};
-    const sourceTypes = {}; // id → 'author' | 'team'
-    const targetIsRepo = new Set(); // ids that appear as repo targets
+    const edgeMap        = {};
+    const sourceTypes    = {}; // id → 'author' | 'team'
+    const targetIsContext = new Set(); // ids that appear as context targets
 
     function addEdge(source, target, sha) {
       const key = `${source}|||${target}`;
@@ -211,27 +297,27 @@ export const useLensStore = defineStore('lens', () => {
       const author = normalizeAuthor(row.Author);
       if (ignoredSet.value.has(author)) continue;
 
-      const repoId = row.Product;
+      const contextId = resolveContextId(row.Product, row.FilePath);
 
-      // Resolve target: collapsed team node or plain repo
-      let targetId = repoId;
+      // Resolve target: collapsed team node or plain context
+      let targetId = contextId;
       if (hasTeamSetup) {
-        const repoTeamId = repoToTeam[repoId];
-        if (repoTeamId && !expandedTeams.value.has(repoTeamId)) {
-          targetId = `team:${repoTeamId}`;
+        const contextTeamId = contextToTeam[contextId];
+        if (contextTeamId && !expandedTeams.value.has(contextTeamId)) {
+          targetId = `team:${contextTeamId}`;
         }
       }
 
       if (!targetId.startsWith('team:')) {
-        targetIsRepo.add(targetId);
+        targetIsContext.add(targetId);
       }
 
       if (!hasTeamSetup) {
         addEdge(author, targetId, row.ChangesetId);
         sourceTypes[author] = 'author';
       } else {
-        const authorTeams = authorToTeams[author] ?? new Set();
-        const repoTeamId  = repoToTeam[repoId];
+        const authorTeams   = authorToTeams[author] ?? new Set();
+        const contextTeamId = contextToTeam[contextId];
 
         if (authorTeams.size === 0) {
           // Unassigned author — individual node, direct edge to target
@@ -245,8 +331,8 @@ export const useLensStore = defineStore('lens', () => {
               sourceTypes[author] = 'author';
             } else {
               // Author's team is collapsed — source is the team node.
-              // Skip within-team contributions (author team === repo team, both collapsed).
-              const targetTeamId = targetId.startsWith('team:') ? targetId.slice(5) : repoTeamId;
+              // Skip within-team contributions (author team === context team, both collapsed).
+              const targetTeamId = targetId.startsWith('team:') ? targetId.slice(5) : contextTeamId;
               if (authorTeamId === targetTeamId) continue;
 
               const sourceId = `team:${authorTeamId}`;
@@ -271,12 +357,12 @@ export const useLensStore = defineStore('lens', () => {
         // team → team: always cross-team (self-loops already excluded above)
         if (src.startsWith('team:') || tgt.startsWith('team:')) return true;
 
-        // individual author → repo
-        const authorTeams = authorToTeams[src] ?? new Set();
-        const repoTeamId  = repoToTeam[tgt];
-        if (!repoTeamId) return true;
+        // individual author → context
+        const authorTeams   = authorToTeams[src] ?? new Set();
+        const contextTeamId = contextToTeam[tgt];
+        if (!contextTeamId) return true;
         if (authorTeams.size === 0) return true;
-        return [...authorTeams].some(tid => tid !== repoTeamId);
+        return [...authorTeams].some(tid => tid !== contextTeamId);
       });
     }
 
@@ -312,8 +398,8 @@ export const useLensStore = defineStore('lens', () => {
           commits,
         };
       }
-      // Author or repo — authors appear only as sources, repos only as targets
-      const type = targetIsRepo.has(id) ? 'repo' : (sourceTypes[id] === 'team' ? 'team' : 'author');
+      // Author or context — authors appear only as sources, contexts only as targets
+      const type = targetIsContext.has(id) ? 'context' : (sourceTypes[id] === 'team' ? 'team' : 'author');
       return { id, type, commits };
     });
 
@@ -321,7 +407,7 @@ export const useLensStore = defineStore('lens', () => {
   });
 
   // ── Ownership graph data ─────────────────────────────────────────────────────
-  // Team-level cross-boundary view. Authors are never nodes — only teams and repos.
+  // Team-level cross-boundary view. Authors are never nodes — only teams and contexts.
   // Every edge source is a team node; edges only cross team boundaries.
   const ownershipGraphData = computed(() => {
     const empty = { nodes: [], links: [] };
@@ -334,40 +420,40 @@ export const useLensStore = defineStore('lens', () => {
     const allTeams   = syntheticT ? [...teams.value, syntheticT] : [...teams.value];
 
     // Build membership lookups
-    const authorToTeamId = {}; // normalizedAuthor → teamId (first assignment wins)
-    const repoToTeamId   = {}; // repoId → teamId
+    const authorToTeamId  = {}; // normalizedAuthor → teamId (first assignment wins)
+    const contextToTeamId = {}; // contextId → teamId
 
     for (const t of allTeams) {
       for (const a of (t.authors ?? [])) {
         if (!(a in authorToTeamId)) authorToTeamId[a] = t.id;
       }
-      for (const r of (t.repos ?? [])) repoToTeamId[r] = t.id;
+      for (const cid of (t.repos ?? [])) contextToTeamId[cid] = t.id;
     }
 
-    // edge accumulation: `srcTeamId\x00targetId` → total commits (number)
-    const edgeMap = {}; // key → commit count
+    // edge accumulation: `srcTeamId\x00targetContextId` → Set<sha>
+    const edgeMap = {};
 
     // Per-team total commit counting (for node sizing)
-    const teamTotalCommits = {}; // teamId → commit count (unique SHAs)
-    const teamTotalShas    = {}; // teamId → Set<sha>
-    const teamAuthorShas   = {}; // `${teamId}\x00${author}` → Set<sha>
+    const teamTotalCommits = {};
+    const teamTotalShas    = {};
+    const teamAuthorShas   = {};
 
-    // Per-repo commit counting
-    const repoTotalShas          = {}; // repoId → Set<sha>
-    const repoContribShas        = {}; // `${repoId}\x00${teamId}` → Set<sha>
-    const repoAuthorShas         = {}; // `${repoId}\x00${author}` → Set<sha>
+    // Per-context commit counting
+    const contextTotalShas   = {};
+    const contextContribShas = {};
+    const contextAuthorShas  = {};
 
     for (const row of timelineData.value) {
       if (!row.Author || !row.Product || !row.ChangesetId) continue;
       if (since && row.Date < since) continue;
       if (until && row.Date > until) continue;
 
-      const author     = normalizeAuthor(row.Author);
+      const author    = normalizeAuthor(row.Author);
       if (ignoredSet.value.has(author)) continue;
 
-      const repoId     = row.Product;
+      const contextId  = resolveContextId(row.Product, row.FilePath);
       const authorTeam = authorToTeamId[author];
-      const owningTeam = repoToTeamId[repoId];
+      const owningTeam = contextToTeamId[contextId];
       const sha        = row.ChangesetId;
 
       // Accumulate total commits per team (author's team)
@@ -376,19 +462,18 @@ export const useLensStore = defineStore('lens', () => {
         (teamAuthorShas[`${authorTeam}\x00${author}`] ??= new Set()).add(sha);
       }
 
-      // Accumulate per-repo totals and per-(repo,team) contributions
-      (repoTotalShas[repoId] ??= new Set()).add(sha);
-      (repoAuthorShas[`${repoId}\x00${author}`] ??= new Set()).add(sha);
+      // Accumulate per-context totals and per-(context, team) contributions
+      (contextTotalShas[contextId] ??= new Set()).add(sha);
+      (contextAuthorShas[`${contextId}\x00${author}`] ??= new Set()).add(sha);
       if (authorTeam) {
-        (repoContribShas[`${repoId}\x00${authorTeam}`] ??= new Set()).add(sha);
+        (contextContribShas[`${contextId}\x00${authorTeam}`] ??= new Set()).add(sha);
       }
 
       // Only cross-team edges: author team must differ from owning team
-      if (!authorTeam) continue;                  // author has no team — skip
-      if (authorTeam === owningTeam) continue;     // within-team — skip
+      if (!authorTeam) continue;
+      if (authorTeam === owningTeam) continue;
 
-      // Always target the repo directly so violation edges visibly cross sector boundaries.
-      const key = `${authorTeam}\x00${repoId}`;
+      const key = `${authorTeam}\x00${contextId}`;
       (edgeMap[key] ??= new Set()).add(sha);
     }
 
@@ -431,28 +516,28 @@ export const useLensStore = defineStore('lens', () => {
       };
     });
 
-    // Repo nodes: every repo that has commits in range (owned + unowned).
-    const repoNodeIds = new Set(Object.keys(repoTotalShas));
+    // Context nodes: every context that has commits in range.
+    const contextNodeIds = new Set(Object.keys(contextTotalShas));
 
-    const repoNodes = [...repoNodeIds].map(repoId => {
-      const owningTeamId  = repoToTeamId[repoId] ?? null;
-      const owningTeam    = owningTeamId ? allTeams.find(t => t.id === owningTeamId) : null;
-      const totalCommits  = repoTotalShas[repoId]?.size ?? 0;
+    const contextNodes = [...contextNodeIds].map(contextId => {
+      const owningTeamId = contextToTeamId[contextId] ?? null;
+      const owningTeam   = owningTeamId ? allTeams.find(t => t.id === owningTeamId) : null;
+      const totalCommits = contextTotalShas[contextId]?.size ?? 0;
 
       // Build contributions array sorted desc by commits
       const contributions = [];
       for (const t of allTeams) {
-        const cnt = repoContribShas[`${repoId}\x00${t.id}`]?.size ?? 0;
+        const cnt = contextContribShas[`${contextId}\x00${t.id}`]?.size ?? 0;
         if (cnt > 0) contributions.push({ teamId: t.id, teamColor: t.color, commits: cnt });
       }
       contributions.sort((a, b) => b.commits - a.commits);
 
       const authorContributions = [];
-      const repoPrefix = `${repoId}\x00`;
-      for (const key in repoAuthorShas) {
-        if (!key.startsWith(repoPrefix)) continue;
-        const author    = key.slice(repoPrefix.length);
-        const cnt       = repoAuthorShas[key].size;
+      const ctxPrefix = `${contextId}\x00`;
+      for (const key in contextAuthorShas) {
+        if (!key.startsWith(ctxPrefix)) continue;
+        const author    = key.slice(ctxPrefix.length);
+        const cnt       = contextAuthorShas[key].size;
         const pct       = totalCommits ? ((cnt / totalCommits) * 100).toFixed(1).replace(/\.0$/, '') : '0';
         const teamId    = authorToTeamId[author] ?? null;
         const teamColor = teamId ? (allTeams.find(t => t.id === teamId)?.color ?? '#9CA3AF') : '#9CA3AF';
@@ -460,9 +545,13 @@ export const useLensStore = defineStore('lens', () => {
       }
       authorContributions.sort((a, b) => b.commits - a.commits);
 
+      // Resolve context display name from allContexts
+      const ctxDef = allContexts.value.find(c => c.id === contextId);
+
       return {
-        id:           repoId,
-        type:         'repo',
+        id:           contextId,
+        type:         'context',
+        name:         ctxDef?.name ?? contextId,
         owningTeamId,
         color:        owningTeam?.color ?? '#9CA3AF',
         commits:      totalCommits,
@@ -471,43 +560,45 @@ export const useLensStore = defineStore('lens', () => {
       };
     });
 
-    // Apply filter: repos are visible if owned by a selected team, explicitly
+    // Apply filter: contexts visible if owned by a selected team, explicitly
     // selected, or touched by a selected author.
     const hasFilter = filterTeamIds.value.size > 0
-                   || filterRepoIds.value.size   > 0
+                   || filterContextIds.value.size > 0
                    || filterAuthorIds.value.size  > 0;
-    let visibleRepoNodes = repoNodes;
-    let visibleLinks     = links;
+    let visibleContextNodes = contextNodes;
+    let visibleLinks        = links;
     if (hasFilter) {
-      visibleRepoNodes = repoNodes.filter(node => {
-        if (filterRepoIds.value.has(node.id)) return true;
+      visibleContextNodes = contextNodes.filter(node => {
+        if (filterContextIds.value.has(node.id)) return true;
         const owner = node.owningTeamId ?? UNASSIGNED_ID;
         if (filterTeamIds.value.has(owner)) return true;
         for (const aid of filterAuthorIds.value) {
-          if ((repoAuthorShas[`${node.id}\x00${aid}`]?.size ?? 0) > 0) return true;
+          if ((contextAuthorShas[`${node.id}\x00${aid}`]?.size ?? 0) > 0) return true;
         }
         return false;
       });
-      const visibleRepoSet = new Set(visibleRepoNodes.map(n => n.id));
-      visibleLinks = links.filter(l => visibleRepoSet.has(l.target));
+      const visibleContextSet = new Set(visibleContextNodes.map(n => n.id));
+      visibleLinks = links.filter(l => visibleContextSet.has(l.target));
     }
 
-    return { nodes: [...teamNodes, ...visibleRepoNodes], links: visibleLinks };
+    return { nodes: [...teamNodes, ...visibleContextNodes], links: visibleLinks };
   });
 
-  // Lookup map: `${type}:${id}` → team hex color (for author/repo coloring)
+  // Lookup map: `context:${id}` or `author:${id}` → team hex color
   const nodeColors = computed(() => {
     const map = {};
     teams.value.forEach((t, i) => {
       const color = t.color || DEFAULT_COLORS[i % DEFAULT_COLORS.length];
-      for (const a of (t.authors ?? [])) map[`author:${a}`] = color;
-      for (const r of (t.repos   ?? [])) map[`repo:${r}`]   = color;
+      for (const a of (t.authors ?? [])) map[`author:${a}`]   = color;
+      for (const cid of (t.repos ?? [])) map[`context:${cid}`] = color;
     });
     return map;
   });
 
   function getNodeColor(id, type) {
-    return nodeColors.value[`${type}:${id}`] ?? '#9CA3AF';
+    // Drill-down composables still use 'repo' type; resolve to 'context' for color lookup.
+    const lookupType = type === 'repo' ? 'context' : type;
+    return nodeColors.value[`${lookupType}:${id}`] ?? '#9CA3AF';
   }
 
   // Drill-down actions
@@ -530,6 +621,25 @@ export const useLensStore = defineStore('lens', () => {
     });
   }
   function removeTeam(id) { teams.value = teams.value.filter(t => t.id !== id); }
+
+  // Context CRUD
+  function addContext(name) {
+    contexts.value = [...contexts.value, {
+      id:      `ctx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name,
+      sources: [],
+    }];
+  }
+  function removeContext(id) {
+    contexts.value = contexts.value.filter(c => c.id !== id);
+    // Un-assign the deleted context from all teams
+    for (const t of teams.value) {
+      t.repos = (t.repos ?? []).filter(cid => cid !== id);
+    }
+  }
+  function updateContext(id, patch) {
+    contexts.value = contexts.value.map(c => c.id === id ? { ...c, ...patch } : c);
+  }
 
   // Author normalization CRUD
   function setNormalization(raw, canonical) {
@@ -609,10 +719,10 @@ export const useLensStore = defineStore('lens', () => {
     if (active) next.add(id); else next.delete(id);
     filterTeamIds.value = next;
   }
-  function setFilterRepo(id, active) {
-    const next = new Set(filterRepoIds.value);
+  function setFilterContext(id, active) {
+    const next = new Set(filterContextIds.value);
     if (active) next.add(id); else next.delete(id);
-    filterRepoIds.value = next;
+    filterContextIds.value = next;
   }
   function setFilterAuthor(id, active) {
     const next = new Set(filterAuthorIds.value);
@@ -620,15 +730,16 @@ export const useLensStore = defineStore('lens', () => {
     filterAuthorIds.value = next;
   }
   function clearAllFilters() {
-    filterTeamIds.value   = new Set();
-    filterRepoIds.value   = new Set();
-    filterAuthorIds.value = new Set();
+    filterTeamIds.value    = new Set();
+    filterContextIds.value = new Set();
+    filterAuthorIds.value  = new Set();
   }
 
   // Import / Export
   function exportMappings() {
     return JSON.stringify({
-      version: 1,
+      version: 2,
+      contexts: contexts.value,
       teams: teams.value,
       authorNormalizations: authorNormalizations.value,
       ignoredAuthors: ignoredAuthors.value,
@@ -638,6 +749,9 @@ export const useLensStore = defineStore('lens', () => {
   function importMappings(data) {
     if (!data || typeof data !== 'object' || Array.isArray(data))
       throw new Error('Invalid mapping file — expected a JSON object.');
+    // v2: explicit contexts array; v1: no contexts field (auto-contexts handle backwards compat)
+    if (Array.isArray(data.contexts))
+      contexts.value = data.contexts;
     if (Array.isArray(data.teams))
       teams.value = data.teams.map(t => ({ authors: [], repos: [], ...t }));
     if (data.authorNormalizations && typeof data.authorNormalizations === 'object' && !Array.isArray(data.authorNormalizations))
@@ -684,9 +798,9 @@ export const useLensStore = defineStore('lens', () => {
     const allTeams   = syntheticT ? [...teams.value, syntheticT] : teams.value;
 
     // segment → author → Set<sha>, and whether segment has deeper paths
-    const segmentAuthorShas = {};
+    const segmentAuthorShas  = {};
     const segmentHasChildren = {};
-    const segmentLastDate = {};
+    const segmentLastDate    = {};
 
     for (const row of timelineData.value) {
       if (!row.Author || !row.Product || !row.ChangesetId) continue;
@@ -697,6 +811,7 @@ export const useLensStore = defineStore('lens', () => {
       if (ignoredSet.value.has(author)) continue;
 
       const filePath = row.FilePath ?? '';
+
       let segment;
       if (folderPrefix === '') {
         const slash = filePath.indexOf('/');
@@ -749,16 +864,18 @@ export const useLensStore = defineStore('lens', () => {
   return {
     timelineData, dataLoaded, dataError, dateInfo,
     teams, syntheticTeam, authorNormalizations, ignoredAuthors,
+    contexts, allContexts,
     dateBounds, activeRange,
     crossTeamOnly,
-    filterTeamIds, filterRepoIds, filterAuthorIds,
+    filterTeamIds, filterContextIds, filterAuthorIds,
     expandedTeams,
     allRawAuthors, allAuthors, allRepos,
     graphData, ownershipGraphData, nodeColors, getNodeColor,
     repoContributorsData, repoFolderData,
     loadTimelineData, loadSimulatedData, clearData,
     addTeam, removeTeam,
-    setFilterTeam, setFilterRepo, setFilterAuthor, clearAllFilters,
+    addContext, removeContext, updateContext,
+    setFilterTeam, setFilterContext, setFilterAuthor, clearAllFilters,
     setNormalization, removeNormalization,
     ignoreAuthor, unignoreAuthor,
     toggleTeamExpansion,

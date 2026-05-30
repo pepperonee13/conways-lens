@@ -74,7 +74,7 @@ export function useSwimlaneGraph({
 
   function updateNodeColors() {
     if (!nodeEls) return;
-    nodeEls.filter(d => d.type === 'repo').select('circle.repo-fill')
+    nodeEls.filter(d => d.type === 'context').select('circle.repo-fill')
       .attr('fill', d => d.color);
   }
 
@@ -115,7 +115,7 @@ export function useSwimlaneGraph({
     const threshold = violationThreshold.value;
     const arcGen = d3.arc();
 
-    nodeEls.filter(d => d.type === 'repo').each(function(d) {
+    nodeEls.filter(d => d.type === 'context').each(function(d) {
       const node = d3.select(this);
       node.selectAll('.violation-arc').remove();
       if (!d.contributions || d.commits === 0) return;
@@ -179,7 +179,7 @@ export function useSwimlaneGraph({
   // plus total cross-team commits this team makes to others.
   function severityFor(teamId, data) {
     let inbound = 0, outbound = 0;
-    for (const repo of data.nodes.filter(n => n.type === 'repo' && n.owningTeamId === teamId)) {
+    for (const repo of data.nodes.filter(n => n.type === 'context' && n.owningTeamId === teamId)) {
       for (const c of (repo.contributions ?? [])) {
         if (c.teamId !== teamId) inbound += c.commits;
       }
@@ -209,7 +209,7 @@ export function useSwimlaneGraph({
 
     const reposByTeam = {};
     for (const n of data.nodes) {
-      if (n.type !== 'repo') continue;
+      if (n.type !== 'context') continue;
       if (onlyViolating && !isViolating(n)) continue;
       const tid = n.owningTeamId ?? '__unowned__';
       (reposByTeam[tid] ??= []).push(n);
@@ -339,7 +339,7 @@ export function useSwimlaneGraph({
     const H = Math.max(dims.h, totalH);
 
     // Node sizing: repos by commits, team anchors fixed.
-    const repoMax = d3.max(data.nodes.filter(n => n.type === 'repo'), n => n.commits) || 1;
+    const repoMax = d3.max(data.nodes.filter(n => n.type === 'context'), n => n.commits) || 1;
     const repoScale = d3.scaleSqrt().domain([0, repoMax]).range([12, REPO_SIZE]);
 
     const nodes = data.nodes
@@ -402,7 +402,7 @@ export function useSwimlaneGraph({
     nodeEls = root.append('g')
       .selectAll('g').data(nodes).join('g')
       .attr('transform', d => `translate(${d.x},${d.y})`)
-      .style('cursor', d => (onNodeClick && d.type === 'repo') ? 'pointer' : 'default')
+      .style('cursor', d => (onNodeClick && d.type === 'context') ? 'pointer' : 'default')
       .on('mouseenter', (e, d) => {
         highlightNode(d);
         if (d.type === 'team') {
@@ -419,7 +419,7 @@ export function useSwimlaneGraph({
         }
       })
       .on('mouseleave', () => { resetHighlight(); onHideTooltip(); })
-      .on('click', (e, d) => { if (onNodeClick && d.type === 'repo') { onHideTooltip(); onNodeClick(d); } });
+      .on('click', (e, d) => { if (onNodeClick && d.type === 'context') { onHideTooltip(); onNodeClick(d); } });
 
     // Team anchor: pill with name + sublabel
     const teamG = nodeEls.filter(d => d.type === 'team');
@@ -441,10 +441,10 @@ export function useSwimlaneGraph({
       .attr('text-anchor', 'middle').attr('dy', '1em')
       .attr('fill', 'rgba(255,255,255,0.82)').attr('font-size', '9px')
       .attr('pointer-events', 'none')
-      .text(d => `${d.repoCount} ${d.repoCount === 1 ? 'repo' : 'repos'} · ${d.authorCount} ${d.authorCount === 1 ? 'dev' : 'devs'} · ${(d.commits || 0).toLocaleString()} commits`);
+      .text(d => `${d.repoCount} ${d.repoCount === 1 ? 'context' : 'contexts'} · ${d.authorCount} ${d.authorCount === 1 ? 'dev' : 'devs'} · ${(d.commits || 0).toLocaleString()} commits`);
 
     // Repo circles filled with owner team color (softened so the ring pops)
-    const repoG = nodeEls.filter(d => d.type === 'repo');
+    const repoG = nodeEls.filter(d => d.type === 'context');
     repoG.append('circle')
       .attr('class', 'repo-fill')
       .attr('r', d => d.r)
