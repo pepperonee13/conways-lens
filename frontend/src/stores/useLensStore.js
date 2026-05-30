@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed, watch } from 'vue';
 import Papa from 'papaparse';
-import { sameSource, contextForSource as contextForSourceFn } from '../utils/contextSources.js';
+import { sameSource, globToRegex, contextForSource as contextForSourceFn } from '../utils/contextSources.js';
 
 const STORAGE = {
   teams:            'conwaylens:teams',
@@ -35,33 +35,6 @@ function load(key, fallback) {
 }
 
 // Convert a glob pattern to a RegExp.
-// Supports: ** (any path, including slashes), * (any chars except /), ? (one char except /)
-const REGEX_SPECIAL = new Set(['.', '+', '^', '$', '{', '}', '(', ')', '|', '[', ']', '\\']);
-function globToRegex(pattern) {
-  let result = '';
-  let i = 0;
-  while (i < pattern.length) {
-    const ch = pattern[i];
-    if (ch === '*' && pattern[i + 1] === '*') {
-      result += '.*';
-      i += 2;
-      if (pattern[i] === '/') i++;
-    } else if (ch === '*') {
-      result += '[^/]*';
-      i++;
-    } else if (ch === '?') {
-      result += '[^/]';
-      i++;
-    } else if (REGEX_SPECIAL.has(ch)) {
-      result += '\\' + ch;
-      i++;
-    } else {
-      result += ch;
-      i++;
-    }
-  }
-  return new RegExp(`^${result}$`);
-}
 
 export const useLensStore = defineStore('lens', () => {
   const timelineData = ref([]);
@@ -624,7 +597,16 @@ export const useLensStore = defineStore('lens', () => {
   function removeTeam(id) { teams.value = teams.value.filter(t => t.id !== id); }
 
   function contextForSource(source) {
-    return contextForSourceFn(source, contexts.value);
+    function* repoPaths(repo) {
+      const seen = new Set();
+      for (const row of timelineData.value) {
+        if (row.Product === repo && row.FilePath && !seen.has(row.FilePath)) {
+          seen.add(row.FilePath);
+          yield row.FilePath;
+        }
+      }
+    }
+    return contextForSourceFn(source, contexts.value, repoPaths);
   }
 
   // Context CRUD
