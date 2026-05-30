@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed, watch } from 'vue';
 import Papa from 'papaparse';
-import { sameSource, globToRegex, contextForSource as contextForSourceFn } from '../utils/contextSources.js';
+import { sameSource, globToRegex, contextForSource as contextForSourceFn } from '../domain/contextSources.js';
 
 const STORAGE = {
   teams:            'conwaylens:teams',

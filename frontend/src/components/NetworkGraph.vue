@@ -276,6 +276,7 @@ import { useRepoDetailGraph } from '../composables/graphs/useRepoDetailGraph.js'
 import { useRepoFolderGraph } from '../composables/graphs/useRepoFolderGraph.js';
 import { useAnonymize } from '../composables/useAnonymize.js';
 import { DEFAULT_VIOLATION_THRESHOLD, DEFAULT_DISPLAY_AUTHORS } from '../config.js';
+import { isContextViolating } from '../domain/violations.js';
 
 const store = useLensStore();
 const {
@@ -333,11 +334,7 @@ const displayAuthors     = ref(VIZ_DEFAULTS.displayAuthors);
 const violationSummary = computed(() => {
   const threshold = violationThreshold.value;
   const contexts = ownershipGraphData.value.nodes.filter(n => n.type === 'context');
-  const violating = contexts.filter(r =>
-    r.commits && r.contributions?.some(c =>
-      c.teamId !== r.owningTeamId && (c.commits / r.commits) * 100 >= threshold
-    )
-  ).length;
+  const violating = contexts.filter(r => isContextViolating(r, threshold)).length;
   return { violating, total: contexts.length };
 });
 

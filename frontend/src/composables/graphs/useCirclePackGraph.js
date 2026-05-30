@@ -1,6 +1,7 @@
 import * as d3 from 'd3';
 import { TOOLTIP_OFFSET } from './graphConstants.js';
 import { calcEdgeWidth } from './graphUtils.js';
+import { exceedsThreshold, isContextViolating } from '../../domain/violations.js';
 
 /**
  * Hierarchical bubble chart renderer — Circle Pack Layout.
@@ -54,10 +55,7 @@ export function useCirclePackGraph({
       const teamNode  = teamNodeMap[`team:${team.id}`];
       const teamRepos = data.nodes.filter(n => n.type === 'context' && n.owningTeamId === team.id);
       const filteredRepos = filterViolating
-        ? teamRepos.filter(r => r.contributions?.some(c =>
-            c.teamId !== r.owningTeamId && r.commits > 0 &&
-            (c.commits / r.commits) * 100 >= threshold
-          ))
+        ? teamRepos.filter(r => isContextViolating(r, threshold))
         : teamRepos;
       if (filteredRepos.length === 0 && filterViolating) {
         // Still include if this team contributes outbound to another team's violating repo —
@@ -65,8 +63,7 @@ export function useCirclePackGraph({
         const hasOutbound = data.links.some(l =>
           l.source === `team:${team.id}` &&
           repoOwnerMap[l.target] && repoOwnerMap[l.target] !== team.id &&
-          (repoCommitMap[l.target] ?? 0) > 0 &&
-          (l.commits / repoCommitMap[l.target]) * 100 >= threshold
+          exceedsThreshold(l.commits, repoCommitMap[l.target] ?? 0, threshold)
         );
         if (!hasOutbound) continue;
       }
@@ -157,8 +154,7 @@ export function useCirclePackGraph({
     const crossLinks = data.links.filter(l => {
       if (repoOwnerMap[l.target] === undefined) return false;
       if (l.source.replace('team:', '') === repoOwnerMap[l.target]) return false;
-      const repoTotal = repoCommitMap[l.target] ?? 0;
-      return repoTotal > 0 && (l.commits / repoTotal) * 100 >= threshold;
+      return exceedsThreshold(l.commits, repoCommitMap[l.target] ?? 0, threshold);
     });
 
     // ── Edge helpers ─────────────────────────────────────────────────────────

@@ -1,6 +1,7 @@
 import * as d3 from 'd3';
 import { EDGE, NODE, ARROW, TOOLTIP_OFFSET, VIOLATION_ARC } from './graphConstants.js';
 import { calcEdgeWidth } from './graphUtils.js';
+import { exceedsThreshold, isContextViolating } from '../../domain/violations.js';
 
 // Canvas-based text measurer for accurate truncation of SVG labels.
 const _canvas = typeof document !== 'undefined' ? document.createElement('canvas') : null;
@@ -162,9 +163,7 @@ export function useSwimlaneGraph({
   }
 
   function edgeMeetsThreshold(d) {
-    const total = d.target?.commits || 0;
-    if (!total) return false;
-    return (d.commits / total) * 100 >= violationThreshold.value;
+    return exceedsThreshold(d.commits, d.target?.commits || 0, violationThreshold.value);
   }
 
   function updateEdgeVisibility() {
@@ -201,17 +200,11 @@ export function useSwimlaneGraph({
     // Repos grouped by owningTeamId
     const threshold = violationThreshold.value;
     const onlyViolating = !!violatingOnly?.value;
-    const isViolating = (repo) => {
-      if (!repo.contributions || !repo.commits) return false;
-      return repo.contributions.some(c =>
-        c.teamId !== repo.owningTeamId && (c.commits / repo.commits) * 100 >= threshold
-      );
-    };
 
     const reposByTeam = {};
     for (const n of data.nodes) {
       if (n.type !== 'context') continue;
-      if (onlyViolating && !isViolating(n)) continue;
+      if (onlyViolating && !isContextViolating(n, threshold)) continue;
       const tid = n.owningTeamId ?? '__unowned__';
       (reposByTeam[tid] ??= []).push(n);
     }
