@@ -629,10 +629,16 @@ export const useLensStore = defineStore('lens', () => {
   }
   function removeTeam(id) { teams.value = teams.value.filter(t => t.id !== id); }
 
+  // Returns the context that already owns the given source, or null.
+  function contextForSource(source) {
+    return contexts.value.find(c => (c.sources ?? []).some(s => sameSource(s, source))) ?? null;
+  }
+
   // Context CRUD
   function addContext(name, sources = []) {
     const id = `ctx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    contexts.value = [...contexts.value, { id, name, sources }];
+    const uniqueSources = sources.filter(s => !contextForSource(s));
+    contexts.value = [...contexts.value, { id, name, sources: uniqueSources }];
     return id;
   }
   function removeContext(id) {
@@ -645,12 +651,11 @@ export const useLensStore = defineStore('lens', () => {
   function updateContext(id, patch) {
     contexts.value = contexts.value.map(c => c.id === id ? { ...c, ...patch } : c);
   }
-  // Append a source to a context, skipping exact duplicates. Returns true if added.
+  // Append a source to a context. Rejects if the source is already owned by any context.
   function addContextSource(id, source) {
     const ctx = contexts.value.find(c => c.id === id);
     if (!ctx) return false;
-    const exists = (ctx.sources ?? []).some(s => sameSource(s, source));
-    if (exists) return false;
+    if (contextForSource(source)) return false;
     updateContext(id, { sources: [...(ctx.sources ?? []), source] });
     return true;
   }
@@ -937,7 +942,7 @@ export const useLensStore = defineStore('lens', () => {
     repoContributorsData, contextContributorsData, repoFolderData,
     loadTimelineData, loadSimulatedData, clearData,
     addTeam, removeTeam,
-    addContext, removeContext, updateContext, addContextSource, removeContextSource,
+    addContext, removeContext, updateContext, addContextSource, removeContextSource, contextForSource,
     pendingContextSource, beginAddToContext, clearPendingContextSource,
     setFilterTeam, setFilterContext, setFilterAuthor, clearAllFilters,
     setNormalization, removeNormalization,
