@@ -70,7 +70,7 @@
 
               <!-- selection summary chips -->
               <span class="card-chips">
-                <span v-if="filterTeamIds.has(tv.id)" class="chip chip--team">all repos</span>
+                <span v-if="filterTeamIds.has(tv.id)" class="chip chip--team">all contexts</span>
                 <template v-else>
                   <span v-if="tv.selContexts" class="chip chip--repo">{{ tv.selContexts }} context{{ tv.selContexts !== 1 ? 's' : '' }}</span>
                   <span v-if="tv.selAuthors"  class="chip chip--author">{{ tv.selAuthors }} author{{ tv.selAuthors !== 1 ? 's' : '' }}</span>
