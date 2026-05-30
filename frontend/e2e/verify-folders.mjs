@@ -369,6 +369,81 @@ const bubblesGone = await lens.page.evaluate(() =>
 );
 check('Circle-pack elements removed after returning to swimlane', bubblesGone);
 
+// ── Step 11: Verify "Data Platform" multi-repo context in swimlane ───────────
+console.log('\n[11] Verify "Data Platform" multi-repo context in swimlane');
+
+// "Data Platform" text label must appear in the swimlane graph
+const dataPlatLabel = await lens.page.evaluate(() =>
+  Array.from(document.querySelectorAll('svg text'))
+    .some(t => t.textContent.trim() === 'Data Platform')
+);
+check('"Data Platform" context label rendered in swimlane', dataPlatLabel);
+
+// The individual repo names must NOT appear as separate bold context labels
+const dataPipelineAsLabel = await lens.page.evaluate(() =>
+  Array.from(document.querySelectorAll('svg text'))
+    .filter(t => t.getAttribute('font-weight') === '600')
+    .some(t => t.textContent.trim() === 'data-pipeline')
+);
+check('"data-pipeline" not shown as a separate context label', !dataPipelineAsLabel);
+
+const analyticsDbAsLabel = await lens.page.evaluate(() =>
+  Array.from(document.querySelectorAll('svg text'))
+    .filter(t => t.getAttribute('font-weight') === '600')
+    .some(t => t.textContent.trim() === 'analytics-db')
+);
+check('"analytics-db" not shown as a separate context label', !analyticsDbAsLabel);
+
+// The violation banner reports "X out of TOTAL" — with the merge, TOTAL should be 6.
+// (violatingOnly=true by default, so not all 6 are drawn; the banner total is the reliable count.)
+const violationText = await lens.page.locator('.violation-banner').textContent();
+check('Violation banner shows 6 total contexts (7 repos → 6 after merge)', violationText.includes('out of 6 '), violationText);
+await lens.screenshot('out/f11-data-platform-swimlane.png');
+
+// ── Step 12: Verify "Data Platform" context bubble in Bubbles view ────────────
+console.log('\n[12] Verify "Data Platform" in Bubbles view');
+await lens.page.locator('button:has-text("Bubbles")').click();
+await lens.page.waitForTimeout(800);
+await lens.screenshot('out/f12-bubbles-before-data.png');
+
+// Find the Data team bubble by its text label
+const dataTeamCenter = await lens.page.evaluate(() => {
+  for (const g of document.querySelectorAll('.team-bubble')) {
+    const label = Array.from(g.querySelectorAll('text'))
+      .find(t => t.textContent.trim() === 'Data');
+    if (label) {
+      const circle = g.querySelector('circle');
+      if (!circle) continue;
+      const box = circle.getBoundingClientRect();
+      return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    }
+  }
+  return null;
+});
+check('Data team bubble found in Bubbles view', !!dataTeamCenter);
+
+// All .repo-bubble elements are always in the DOM (hidden via display:none when
+// collapsed). Query by data-team-id without needing to expand or click.
+// This also avoids the off-screen click issue when the Data bubble is near the
+// bottom of the viewport.
+const dataContextCount = await lens.page.evaluate(() =>
+  document.querySelectorAll('.repo-bubble[data-team-id="data"]').length
+);
+check('Data team has exactly 1 context node (Data Platform merged)', dataContextCount === 1, `count=${dataContextCount}`);
+
+const dataPlatBubbleLabel = await lens.page.evaluate(() => {
+  const b = document.querySelector('.repo-bubble[data-team-id="data"]');
+  if (!b) return null;
+  return Array.from(b.querySelectorAll('text'))
+    .map(t => t.textContent.trim()).filter(Boolean).join(' ');
+});
+check('"Data Platform" label on context bubble', dataPlatBubbleLabel?.includes('Data Platform'), dataPlatBubbleLabel);
+await lens.screenshot('out/f12b-data-platform-bubble.png');
+
+// Switch back to Swimlane to finish cleanly
+await lens.page.locator('button:has-text("Swimlane")').click();
+await lens.page.waitForTimeout(600);
+
 // ── Summary ───────────────────────────────────────────────────────────────
 console.log(`\n══════════════════════════════`);
 console.log(`Passed: ${passed}  Failed: ${failed}`);
