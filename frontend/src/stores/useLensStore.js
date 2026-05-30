@@ -1,7 +1,8 @@
 import { defineStore } from 'pinia';
 import { ref, computed, watch } from 'vue';
-import Papa from 'papaparse';
 import { sameSource, globToRegex, contextForSource as contextForSourceFn, resolveContextId as resolveContextIdFn } from '../domain/contextSources.js';
+import { mergeCommits, mergeDateRanges } from '../domain/commits.js';
+import { parseCSVText } from '../adapters/csv.js';
 
 const STORAGE = {
   teams:            'conwaylens:teams',
@@ -64,25 +65,9 @@ export const useLensStore = defineStore('lens', () => {
   // Drill-down expansion state
   const expandedTeams = ref(new Set()); // Set<teamId> — teams expanded to show their context/author nodes
 
-  async function parseTimelineFile(file) {
-    const text  = new TextDecoder('utf-8').decode(await file.arrayBuffer());
-    const lines = text.split(/\r?\n/).filter(Boolean);
-    let parsedDateInfo = null;
-    if (lines.at(-1)?.startsWith('Since=')) {
-      const m = lines.pop().match(/Since=([\d-]+)?(?:,Until=([\d-]+))?/);
-      if (m) parsedDateInfo = { since: m[1] ?? null, until: m[2] ?? null };
-    }
-    const { data } = Papa.parse(lines.join('\n'), { header: true, skipEmptyLines: true });
-    return { rows: data, dateInfo: parsedDateInfo };
-  }
-
-  function mergeDateInfo(infos) {
-    let since = null, until = null;
-    for (const info of infos) {
-      if (info?.since && (!since || info.since < since)) since = info.since;
-      if (info?.until && (!until || info.until > until)) until = info.until;
-    }
-    return since || until ? { since, until } : null;
+  async function parseFile(file) {
+    const text = new TextDecoder('utf-8').decode(await file.arrayBuffer());
+    return parseCSVText(text);
   }
 
   async function loadTimelineData(fileOrFiles, { append = false } = {}) {
@@ -90,25 +75,16 @@ export const useLensStore = defineStore('lens', () => {
     const files = Array.isArray(fileOrFiles) ? fileOrFiles : [fileOrFiles];
     if (files.length === 0) return;
     try {
-      const parsed = await Promise.all(files.map(parseTimelineFile));
-      const newRows  = parsed.flatMap(p => p.rows);
-      const newInfos = parsed.map(p => p.dateInfo).filter(Boolean);
+      const parsed     = await Promise.all(files.map(parseFile));
+      const newCommits = parsed.flatMap(p => p.commits);
+      const newRanges  = parsed.map(p => p.dateRange).filter(Boolean);
 
       if (append && dataLoaded.value) {
-        // Dedupe by Product + ChangesetId + FilePath when merging into existing data.
-        const seen = new Set();
-        const keyOf = r => `${r.Product}\x00${r.ChangesetId}\x00${r.FilePath ?? ''}`;
-        for (const r of timelineData.value) seen.add(keyOf(r));
-        const merged = [...timelineData.value];
-        for (const r of newRows) {
-          const k = keyOf(r);
-          if (!seen.has(k)) { seen.add(k); merged.push(r); }
-        }
-        timelineData.value = merged;
-        dateInfo.value     = mergeDateInfo([dateInfo.value, ...newInfos]);
+        timelineData.value = mergeCommits(timelineData.value, newCommits);
+        dateInfo.value     = mergeDateRanges([dateInfo.value, ...newRanges]);
       } else {
-        timelineData.value = newRows;
-        dateInfo.value     = mergeDateInfo(newInfos);
+        timelineData.value = mergeCommits([], newCommits);
+        dateInfo.value     = mergeDateRanges(newRanges);
       }
 
       dataLoaded.value    = true;
@@ -123,13 +99,13 @@ export const useLensStore = defineStore('lens', () => {
   function normalizeAuthor(name) { return authorNormalizations.value[name] ?? name; }
 
   const allRawAuthors = computed(() =>
-    [...new Set(timelineData.value.map(r => r.Author))].filter(Boolean).sort()
+    [...new Set(timelineData.value.map(r => r.author))].sort()
   );
   const allAuthors = computed(() =>
     [...new Set(allRawAuthors.value.map(normalizeAuthor))].sort()
   );
   const allRepos = computed(() =>
-    [...new Set(timelineData.value.map(r => r.Product))].filter(Boolean).sort()
+    [...new Set(timelineData.value.map(r => r.repo))].filter(Boolean).sort()
   );
 
   // Merge user-defined contexts with auto-generated 1:1 contexts for repos not
@@ -159,9 +135,9 @@ export const useLensStore = defineStore('lens', () => {
   const dateBounds = computed(() => {
     let min = null, max = null;
     for (const row of timelineData.value) {
-      if (!row.Date) continue;
-      if (!min || row.Date < min) min = row.Date;
-      if (!max || row.Date > max) max = row.Date;
+      if (!row.date) continue;
+      if (!min || row.date < min) min = row.date;
+      if (!max || row.date > max) max = row.date;
     }
     return min ? { since: min, until: max } : null;
   });
@@ -223,13 +199,13 @@ export const useLensStore = defineStore('lens', () => {
     const teamTotalShas = {};
     if (hasTeamSetup) {
       for (const row of timelineData.value) {
-        if (!row.Author || !row.Product || !row.ChangesetId) continue;
-        if (since && row.Date < since) continue;
-        if (until && row.Date > until) continue;
-        const author = normalizeAuthor(row.Author);
+        if (!row.author || !row.repo || !row.commitHash) continue;
+        if (since && row.date < since) continue;
+        if (until && row.date > until) continue;
+        const author = normalizeAuthor(row.author);
         if (ignoredSet.value.has(author)) continue;
         for (const tid of (authorToTeams[author] ?? new Set())) {
-          (teamTotalShas[tid] ??= new Set()).add(row.ChangesetId);
+          (teamTotalShas[tid] ??= new Set()).add(row.commitHash);
         }
       }
     }
@@ -245,13 +221,13 @@ export const useLensStore = defineStore('lens', () => {
     }
 
     for (const row of timelineData.value) {
-      if (!row.Author || !row.Product || !row.ChangesetId) continue;
-      if (since && row.Date < since) continue;
-      if (until && row.Date > until) continue;
-      const author = normalizeAuthor(row.Author);
+      if (!row.author || !row.repo || !row.commitHash) continue;
+      if (since && row.date < since) continue;
+      if (until && row.date > until) continue;
+      const author = normalizeAuthor(row.author);
       if (ignoredSet.value.has(author)) continue;
 
-      const contextId = resolveContextId(row.Product, row.FilePath);
+      const contextId = resolveContextId(row.repo, row.filePath);
 
       // Resolve target: collapsed team node or plain context
       let targetId = contextId;
@@ -267,7 +243,7 @@ export const useLensStore = defineStore('lens', () => {
       }
 
       if (!hasTeamSetup) {
-        addEdge(author, targetId, row.ChangesetId);
+        addEdge(author, targetId, row.commitHash);
         sourceTypes[author] = 'author';
       } else {
         const authorTeams   = authorToTeams[author] ?? new Set();
@@ -275,13 +251,13 @@ export const useLensStore = defineStore('lens', () => {
 
         if (authorTeams.size === 0) {
           // Unassigned author — individual node, direct edge to target
-          addEdge(author, targetId, row.ChangesetId);
+          addEdge(author, targetId, row.commitHash);
           sourceTypes[author] = 'author';
         } else {
           for (const authorTeamId of authorTeams) {
             if (expandedTeams.value.has(authorTeamId)) {
               // Author's team is expanded — show as individual node
-              addEdge(author, targetId, row.ChangesetId);
+              addEdge(author, targetId, row.commitHash);
               sourceTypes[author] = 'author';
             } else {
               // Author's team is collapsed — source is the team node.
@@ -290,7 +266,7 @@ export const useLensStore = defineStore('lens', () => {
               if (authorTeamId === targetTeamId) continue;
 
               const sourceId = `team:${authorTeamId}`;
-              addEdge(sourceId, targetId, row.ChangesetId);
+              addEdge(sourceId, targetId, row.commitHash);
               sourceTypes[sourceId] = 'team';
             }
           }
@@ -398,17 +374,17 @@ export const useLensStore = defineStore('lens', () => {
     const contextAuthorShas  = {};
 
     for (const row of timelineData.value) {
-      if (!row.Author || !row.Product || !row.ChangesetId) continue;
-      if (since && row.Date < since) continue;
-      if (until && row.Date > until) continue;
+      if (!row.author || !row.repo || !row.commitHash) continue;
+      if (since && row.date < since) continue;
+      if (until && row.date > until) continue;
 
-      const author    = normalizeAuthor(row.Author);
+      const author    = normalizeAuthor(row.author);
       if (ignoredSet.value.has(author)) continue;
 
-      const contextId  = resolveContextId(row.Product, row.FilePath);
+      const contextId  = resolveContextId(row.repo, row.filePath);
       const authorTeam = authorToTeamId[author];
       const owningTeam = contextToTeamId[contextId];
-      const sha        = row.ChangesetId;
+      const sha        = row.commitHash;
 
       // Accumulate total commits per team (author's team)
       if (authorTeam) {
@@ -580,9 +556,9 @@ export const useLensStore = defineStore('lens', () => {
     function* repoPaths(repo) {
       const seen = new Set();
       for (const row of timelineData.value) {
-        if (row.Product === repo && row.FilePath && !seen.has(row.FilePath)) {
-          seen.add(row.FilePath);
-          yield row.FilePath;
+        if (row.repo === repo && row.filePath && !seen.has(row.filePath)) {
+          seen.add(row.filePath);
+          yield row.filePath;
         }
       }
     }
@@ -678,7 +654,7 @@ export const useLensStore = defineStore('lens', () => {
         for (let i = 0; i < count; i++) {
           const date = new Date(yearAgo.getTime() + Math.random() * msRange);
           const sha  = (++shaSeq).toString(16).padStart(8, '0') + Math.random().toString(16).slice(2, 10);
-          rows.push({ Author: author, Product: repo, ChangesetId: sha, Date: date.toISOString().slice(0, 10) });
+          rows.push({ author, repo, commitHash: sha, date: date.toISOString().slice(0, 10) });
         }
       }
     }
@@ -759,14 +735,14 @@ export const useLensStore = defineStore('lens', () => {
     const edgeMap = {}; // author → commits (Set<sha>)
     const repoShas = new Set();
     for (const row of timelineData.value) {
-      if (!row.Author || !row.Product || !row.ChangesetId) continue;
-      if (row.Product !== repoId) continue;
-      if (since && row.Date < since) continue;
-      if (until && row.Date > until) continue;
-      const author = normalizeAuthor(row.Author);
+      if (!row.author || !row.repo || !row.commitHash) continue;
+      if (row.repo !== repoId) continue;
+      if (since && row.date < since) continue;
+      if (until && row.date > until) continue;
+      const author = normalizeAuthor(row.author);
       if (ignoredSet.value.has(author)) continue;
-      (edgeMap[author] ??= new Set()).add(row.ChangesetId);
-      repoShas.add(row.ChangesetId);
+      (edgeMap[author] ??= new Set()).add(row.commitHash);
+      repoShas.add(row.commitHash);
     }
     const links = Object.entries(edgeMap).map(([author, shas]) => ({
       source: author, target: repoId, commits: shas.size,
@@ -789,14 +765,14 @@ export const useLensStore = defineStore('lens', () => {
     const edgeMap = {};
     const ctxShas = new Set();
     for (const row of timelineData.value) {
-      if (!row.Author || !row.Product || !row.ChangesetId) continue;
-      if (resolveContextId(row.Product, row.FilePath) !== contextId) continue;
-      if (since && row.Date < since) continue;
-      if (until && row.Date > until) continue;
-      const author = normalizeAuthor(row.Author);
+      if (!row.author || !row.repo || !row.commitHash) continue;
+      if (resolveContextId(row.repo, row.filePath) !== contextId) continue;
+      if (since && row.date < since) continue;
+      if (until && row.date > until) continue;
+      const author = normalizeAuthor(row.author);
       if (ignoredSet.value.has(author)) continue;
-      (edgeMap[author] ??= new Set()).add(row.ChangesetId);
-      ctxShas.add(row.ChangesetId);
+      (edgeMap[author] ??= new Set()).add(row.commitHash);
+      ctxShas.add(row.commitHash);
     }
     const links = Object.entries(edgeMap).map(([author, shas]) => ({
       source: author, target: contextId, commits: shas.size,
@@ -826,14 +802,14 @@ export const useLensStore = defineStore('lens', () => {
     const segmentLastDate    = {};
 
     for (const row of timelineData.value) {
-      if (!row.Author || !row.Product || !row.ChangesetId) continue;
-      if (row.Product !== repoId) continue;
-      if (since && row.Date < since) continue;
-      if (until && row.Date > until) continue;
-      const author = normalizeAuthor(row.Author);
+      if (!row.author || !row.repo || !row.commitHash) continue;
+      if (row.repo !== repoId) continue;
+      if (since && row.date < since) continue;
+      if (until && row.date > until) continue;
+      const author = normalizeAuthor(row.author);
       if (ignoredSet.value.has(author)) continue;
 
-      const filePath = row.FilePath ?? '';
+      const filePath = row.filePath ?? '';
 
       let segment;
       if (folderPrefix === '') {
@@ -851,9 +827,9 @@ export const useLensStore = defineStore('lens', () => {
       }
       if (!segment) continue;
 
-      ((segmentAuthorShas[segment] ??= {})[author] ??= new Set()).add(row.ChangesetId);
-      if (row.Date && (!segmentLastDate[segment] || row.Date > segmentLastDate[segment])) {
-        segmentLastDate[segment] = row.Date;
+      ((segmentAuthorShas[segment] ??= {})[author] ??= new Set()).add(row.commitHash);
+      if (row.date && (!segmentLastDate[segment] || row.date > segmentLastDate[segment])) {
+        segmentLastDate[segment] = row.date;
       }
     }
 
