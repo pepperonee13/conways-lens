@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed, watch } from 'vue';
 import Papa from 'papaparse';
+import { sameSource, contextForSource as contextForSourceFn } from '../utils/contextSources.js';
 
 const STORAGE = {
   teams:            'conwaylens:teams',
@@ -60,13 +61,6 @@ function globToRegex(pattern) {
     }
   }
   return new RegExp(`^${result}$`);
-}
-
-// Structural equality for two bounded-context sources, used to dedupe.
-function sameSource(a, b) {
-  return a.type === b.type && a.repo === b.repo &&
-    (a.path ?? null) === (b.path ?? null) &&
-    (a.pattern ?? null) === (b.pattern ?? null);
 }
 
 export const useLensStore = defineStore('lens', () => {
@@ -629,9 +623,8 @@ export const useLensStore = defineStore('lens', () => {
   }
   function removeTeam(id) { teams.value = teams.value.filter(t => t.id !== id); }
 
-  // Returns the context that already owns the given source, or null.
   function contextForSource(source) {
-    return contexts.value.find(c => (c.sources ?? []).some(s => sameSource(s, source))) ?? null;
+    return contextForSourceFn(source, contexts.value);
   }
 
   // Context CRUD
