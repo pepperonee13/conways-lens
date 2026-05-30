@@ -62,13 +62,20 @@ function globToRegex(pattern) {
   return new RegExp(`^${result}$`);
 }
 
+// Structural equality for two bounded-context sources, used to dedupe.
+function sameSource(a, b) {
+  return a.type === b.type && a.repo === b.repo &&
+    (a.path ?? null) === (b.path ?? null) &&
+    (a.pattern ?? null) === (b.pattern ?? null);
+}
+
 export const useLensStore = defineStore('lens', () => {
   const timelineData = ref([]);
   const dataLoaded   = ref(false);
   const dataError    = ref(null);
   const dateInfo     = ref(null);
 
-  const teams                = ref(load(STORAGE.teams, []).map(t => ({ authors: [], repos: [], ...t })));
+  const teams                = ref(load(STORAGE.teams, []).map(t => ({ authors: [], contexts: [], ...t })));
   const authorNormalizations = ref(load(STORAGE.normalizations, {}));
   const ignoredAuthors       = ref(load(STORAGE.ignoredAuthors, []));
 
@@ -160,7 +167,7 @@ export const useLensStore = defineStore('lens', () => {
 
   // Merge user-defined contexts with auto-generated 1:1 contexts for repos not
   // wholly covered by a user context. Auto-contexts use id === repoName so that
-  // existing team.repos arrays (which store repo names) resolve without migration.
+  // team.contexts arrays holding a bare repo name still resolve to a context.
   const allContexts = computed(() => {
     const wholeRepoCovered = new Set();
     for (const ctx of contexts.value) {
@@ -228,7 +235,7 @@ export const useLensStore = defineStore('lens', () => {
   const syntheticTeam = computed(() => {
     if (!dataLoaded.value || teams.value.length === 0) return null;
     const assignedAuthors     = new Set(teams.value.flatMap(t => t.authors ?? []));
-    const assignedContextIds  = new Set(teams.value.flatMap(t => t.repos   ?? []));
+    const assignedContextIds  = new Set(teams.value.flatMap(t => t.contexts ?? []));
     const freeAuthors   = allAuthors.value.filter(a => !assignedAuthors.has(a) && !ignoredSet.value.has(a));
     const freeContextIds = allContexts.value
       .filter(c => !assignedContextIds.has(c.id))
@@ -236,7 +243,7 @@ export const useLensStore = defineStore('lens', () => {
     if (freeAuthors.length === 0 && freeContextIds.length === 0) return null;
     return {
       id: UNASSIGNED_ID, name: 'Outside Contributors', color: '#9CA3AF',
-      authors: freeAuthors, repos: freeContextIds, isSynthetic: true,
+      authors: freeAuthors, contexts: freeContextIds, isSynthetic: true,
     };
   });
 
@@ -251,7 +258,7 @@ export const useLensStore = defineStore('lens', () => {
     const hasTeamSetup = allTeams.length > 0;
 
     // Build team membership lookups (synthetic team members included).
-    // teams[].repos holds context IDs; auto-context IDs equal repo names.
+    // teams[].contexts holds context IDs; auto-context IDs equal repo names.
     const authorToTeams  = {}; // normalizedAuthor → Set<teamId>
     const contextToTeam  = {}; // contextId → teamId
 
@@ -261,7 +268,7 @@ export const useLensStore = defineStore('lens', () => {
           if (!authorToTeams[a]) authorToTeams[a] = new Set();
           authorToTeams[a].add(t.id);
         }
-        for (const cid of (t.repos ?? [])) contextToTeam[cid] = t.id;
+        for (const cid of (t.contexts ?? [])) contextToTeam[cid] = t.id;
       }
     }
 
@@ -393,7 +400,7 @@ export const useLensStore = defineStore('lens', () => {
           id, type: 'team', teamId,
           name:        team?.name  ?? teamId,
           color:       team?.color ?? DEFAULT_COLORS[0],
-          repoCount:   (team?.repos    ?? []).length,
+          contextCount: (team?.contexts ?? []).length,
           authorCount: (team?.authors  ?? []).length,
           commits,
         };
@@ -427,7 +434,7 @@ export const useLensStore = defineStore('lens', () => {
       for (const a of (t.authors ?? [])) {
         if (!(a in authorToTeamId)) authorToTeamId[a] = t.id;
       }
-      for (const cid of (t.repos ?? [])) contextToTeamId[cid] = t.id;
+      for (const cid of (t.contexts ?? [])) contextToTeamId[cid] = t.id;
     }
 
     // edge accumulation: `srcTeamId\x00targetContextId` → Set<sha>
@@ -510,7 +517,7 @@ export const useLensStore = defineStore('lens', () => {
         name:       t.name,
         color:      t.color,
         commits:    totalCommits,
-        repoCount:  (t.repos    ?? []).length,
+        contextCount: (t.contexts ?? []).length,
         authorCount:(t.authors  ?? []).length,
         authorContributions,
       };
@@ -590,7 +597,7 @@ export const useLensStore = defineStore('lens', () => {
     teams.value.forEach((t, i) => {
       const color = t.color || DEFAULT_COLORS[i % DEFAULT_COLORS.length];
       for (const a of (t.authors ?? [])) map[`author:${a}`]   = color;
-      for (const cid of (t.repos ?? [])) map[`context:${cid}`] = color;
+      for (const cid of (t.contexts ?? [])) map[`context:${cid}`] = color;
     });
     return map;
   });
@@ -617,28 +624,51 @@ export const useLensStore = defineStore('lens', () => {
       name:    `Team ${teams.value.length + 1}`,
       color:   DEFAULT_COLORS[teams.value.length % DEFAULT_COLORS.length],
       authors: [],
-      repos:   [],
+      contexts: [],
     });
   }
   function removeTeam(id) { teams.value = teams.value.filter(t => t.id !== id); }
 
   // Context CRUD
-  function addContext(name) {
-    contexts.value = [...contexts.value, {
-      id:      `ctx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      name,
-      sources: [],
-    }];
+  function addContext(name, sources = []) {
+    const id = `ctx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    contexts.value = [...contexts.value, { id, name, sources }];
+    return id;
   }
   function removeContext(id) {
     contexts.value = contexts.value.filter(c => c.id !== id);
     // Un-assign the deleted context from all teams
     for (const t of teams.value) {
-      t.repos = (t.repos ?? []).filter(cid => cid !== id);
+      t.contexts = (t.contexts ?? []).filter(cid => cid !== id);
     }
   }
   function updateContext(id, patch) {
     contexts.value = contexts.value.map(c => c.id === id ? { ...c, ...patch } : c);
+  }
+  // Append a source to a context, skipping exact duplicates. Returns true if added.
+  function addContextSource(id, source) {
+    const ctx = contexts.value.find(c => c.id === id);
+    if (!ctx) return false;
+    const exists = (ctx.sources ?? []).some(s => sameSource(s, source));
+    if (exists) return false;
+    updateContext(id, { sources: [...(ctx.sources ?? []), source] });
+    return true;
+  }
+  function removeContextSource(id, index) {
+    const ctx = contexts.value.find(c => c.id === id);
+    if (!ctx) return;
+    updateContext(id, { sources: (ctx.sources ?? []).filter((_, i) => i !== index) });
+  }
+
+  // ── Right-click "Add to bounded context" hand-off ───────────────────────────
+  // A node's context menu records the source here; MappingEditor watches it,
+  // opens the Bounded Contexts tab, and lets the user confirm the target.
+  const pendingContextSource = ref(null); // { source, label } | null
+  function beginAddToContext(source, label) {
+    pendingContextSource.value = { source, label };
+  }
+  function clearPendingContextSource() {
+    pendingContextSource.value = null;
   }
 
   // Author normalization CRUD
@@ -701,7 +731,7 @@ export const useLensStore = defineStore('lens', () => {
       name:    teamNames[i],
       color:   DEFAULT_COLORS[i],
       authors: authors.filter((_, j) => j % teamCount === i),
-      repos:   repos.filter((_, j) => j % teamCount === i),
+      contexts: repos.filter((_, j) => j % teamCount === i),
     }));
 
     timelineData.value  = rows;
@@ -738,7 +768,7 @@ export const useLensStore = defineStore('lens', () => {
   // Import / Export
   function exportMappings() {
     return JSON.stringify({
-      version: 2,
+      version: 3,
       contexts: contexts.value,
       teams: teams.value,
       authorNormalizations: authorNormalizations.value,
@@ -749,11 +779,13 @@ export const useLensStore = defineStore('lens', () => {
   function importMappings(data) {
     if (!data || typeof data !== 'object' || Array.isArray(data))
       throw new Error('Invalid mapping file — expected a JSON object.');
-    // v2: explicit contexts array; v1: no contexts field (auto-contexts handle backwards compat)
+    // v3: teams reference bounded contexts via a `contexts` array; an explicit
+    // top-level `contexts` array defines them. Files without it rely on
+    // auto-contexts (one per repo, id === repo name).
     if (Array.isArray(data.contexts))
       contexts.value = data.contexts;
     if (Array.isArray(data.teams))
-      teams.value = data.teams.map(t => ({ authors: [], repos: [], ...t }));
+      teams.value = data.teams.map(t => ({ authors: [], contexts: [], ...t }));
     if (data.authorNormalizations && typeof data.authorNormalizations === 'object' && !Array.isArray(data.authorNormalizations))
       authorNormalizations.value = data.authorNormalizations;
     if (Array.isArray(data.ignoredAuthors))
@@ -781,7 +813,7 @@ export const useLensStore = defineStore('lens', () => {
     }));
     const syntheticT = syntheticTeam.value;
     const allTeams   = syntheticT ? [...teams.value, syntheticT] : teams.value;
-    const owningTeamId = allTeams.find(t => (t.repos ?? []).includes(repoId))?.id ?? null;
+    const owningTeamId = allTeams.find(t => (t.contexts ?? []).includes(repoId))?.id ?? null;
     const nodes = [
       { id: repoId, type: 'repo', commits: repoShas.size, owningTeamId },
       ...links.map(l => ({ id: l.source, type: 'author', commits: l.commits })),
@@ -851,7 +883,7 @@ export const useLensStore = defineStore('lens', () => {
       folderNodes.push({ id: segment, type: 'folder', commits: folderShas.size, hasChildren: segmentHasChildren[segment] ?? false, fullPath, lastCommit: segmentLastDate[segment] ?? null });
     }
 
-    const owningTeamId = allTeams.find(t => (t.repos ?? []).includes(repoId))?.id ?? null;
+    const owningTeamId = allTeams.find(t => (t.contexts ?? []).includes(repoId))?.id ?? null;
     const nodes = [
       { id: repoId, type: 'repo', commits: allShas.size, owningTeamId },
       ...folderNodes,
@@ -874,7 +906,8 @@ export const useLensStore = defineStore('lens', () => {
     repoContributorsData, repoFolderData,
     loadTimelineData, loadSimulatedData, clearData,
     addTeam, removeTeam,
-    addContext, removeContext, updateContext,
+    addContext, removeContext, updateContext, addContextSource, removeContextSource,
+    pendingContextSource, beginAddToContext, clearPendingContextSource,
     setFilterTeam, setFilterContext, setFilterAuthor, clearAllFilters,
     setNormalization, removeNormalization,
     ignoreAuthor, unignoreAuthor,

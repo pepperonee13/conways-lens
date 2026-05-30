@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "contexts": [
     {
       "id": "ctx-data-platform",
@@ -16,28 +16,28 @@
       "name": "Backend",
       "color": "#225EA9",
       "authors": ["Alice", "Bob"],
-      "repos": ["backend-api", "authentication-and-authorisation-service"]
+      "contexts": ["backend-api", "authentication-and-authorisation-service"]
     },
     {
       "id": "frontend",
       "name": "Frontend",
       "color": "#F08223",
       "authors": ["Carol", "Dave"],
-      "repos": ["frontend-web", "mobile-app"]
+      "contexts": ["frontend-web", "mobile-app"]
     },
     {
       "id": "data",
       "name": "Data",
       "color": "#088F9B",
       "authors": ["Eve", "Frank"],
-      "repos": ["ctx-data-platform"]
+      "contexts": ["ctx-data-platform"]
     },
     {
       "id": "platform",
       "name": "Platform",
       "color": "#5A4A80",
       "authors": ["Grace", "Heidi"],
-      "repos": ["ci-platform"]
+      "contexts": ["ci-platform"]
     }
   ],
   "authorNormalizations": {},

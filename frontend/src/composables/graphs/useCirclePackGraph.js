@@ -21,6 +21,7 @@ export function useCirclePackGraph({
   onMoveTooltip,
   onHideTooltip,
   onNodeClick,
+  onNodeContextMenu,
   violationThreshold,
   violatingOnly,
   edgeWeight,
@@ -76,7 +77,7 @@ export function useCirclePackGraph({
         teamId:      team.id,
         type:        'team',
         commits:     teamNode?.commits     ?? 0,
-        repoCount:   teamNode?.repoCount   ?? 0,
+        contextCount: teamNode?.contextCount ?? 0,
         authorCount: teamNode?.authorCount ?? 0,
         children: filteredRepos.length > 0
           ? filteredRepos.map(r => ({
@@ -376,7 +377,7 @@ export function useCirclePackGraph({
 
         onShowNodeTooltip({
           id: teamNodeId, type: 'team', name: d.data.name,
-          commits: d.data.commits, repoCount: d.data.repoCount, authorCount: d.data.authorCount,
+          commits: d.data.commits, contextCount: d.data.contextCount, authorCount: d.data.authorCount,
           teamInboundBreakdown: teamInboundBreakdown.length ? teamInboundBreakdown : null,
           teamOutboundBreakdown: teamOutboundBreakdown.length ? teamOutboundBreakdown : null,
         }, event.pageX + TOOLTIP_OFFSET.x, event.pageY + TOOLTIP_OFFSET.y);
@@ -401,7 +402,15 @@ export function useCirclePackGraph({
       })
       .on('mousemove', e => onMoveTooltip(e.pageX + TOOLTIP_OFFSET.x, e.pageY + TOOLTIP_OFFSET.y))
       .on('mouseout', () => { clearEdges(); onHideTooltip(); })
-      .on('click', (event, d) => { event.stopPropagation(); onNodeClick(d.data.id); });
+      .on('click', (event, d) => { event.stopPropagation(); onNodeClick(d.data.id); })
+      .on('contextmenu', (event, d) => {
+        if (!onNodeContextMenu) return;
+        event.preventDefault();
+        event.stopPropagation();
+        clearEdges();
+        onHideTooltip();
+        onNodeContextMenu(d.data, event);
+      });
   }
 
   function updateEdgeStyles() {}
