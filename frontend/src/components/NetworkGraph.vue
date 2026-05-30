@@ -24,7 +24,7 @@
           <p v-else class="graph-desc">
             <span class="legend"><span class="legend-bubble-team"></span>Team</span>
             <span class="legend"><span class="legend-bubble-repo"></span>Bounded Context</span>
-            &nbsp;·&nbsp; Bubble size = commit volume &nbsp;·&nbsp; Hover to see cross-team edges &nbsp;·&nbsp; Click a repo for author details
+            &nbsp;·&nbsp; Bubble size = commit volume &nbsp;·&nbsp; Hover to see cross-team edges &nbsp;·&nbsp; Click a context for author details
           </p>
           <div v-if="effectiveTeams.length > 0" class="view-toggle">
             <button :class="['view-toggle-btn', { active: graphView === 'swimlane' }]" @click="setGraphView('swimlane')">Swimlane</button>
@@ -133,7 +133,7 @@
       <div v-if="!detailRepoId && violationSummary.violating > 0" class="violation-banner">
         <strong>{{ violationSummary.violating }}</strong> out of
         <strong>{{ violationSummary.total }}</strong>
-        {{ violationSummary.total === 1 ? 'repository violates' : 'repositories violate' }}
+        {{ violationSummary.total === 1 ? 'bounded context violates' : 'bounded contexts violate' }}
         the <strong>{{ violationThreshold }}%</strong> threshold
       </div>
       <template v-if="detailRepoId">
@@ -142,7 +142,7 @@
           <div class="detail-header">
             <button class="back-btn" @click="closeDetail">← Back to overview</button>
             <nav class="folder-breadcrumb" aria-label="Folder path">
-              <button class="breadcrumb-item breadcrumb-repo" @click="closeFolderMode">{{ detailRepoId }}</button>
+              <button class="breadcrumb-item breadcrumb-repo" @click="closeFolderMode">{{ detailContextName }}</button>
               <template v-for="(seg, idx) in folderPath" :key="idx">
                 <span class="breadcrumb-sep">/</span>
                 <button
@@ -159,7 +159,7 @@
         <template v-else>
           <div class="detail-header">
             <button class="back-btn" @click="closeDetail">← Back to overview</button>
-            <span class="detail-title">Contributors to <strong>{{ detailRepoId }}</strong></span>
+            <span class="detail-title">Contributors to <strong>{{ detailContextName }}</strong></span>
           </div>
           <p v-if="!isFullscreen" class="hint">Scroll to zoom · Hover nodes or edges to inspect · Click the repo to explore folders</p>
         </template>
@@ -169,8 +169,8 @@
       </template>
       <template v-else>
         <p v-if="!isFullscreen" class="hint">
-          <template v-if="graphView === 'swimlane'">Scroll to zoom · Hover nodes or edges to inspect · Click a repo for author details</template>
-          <template v-else>Scroll to zoom · Click a team to expand · Hover to see cross-team edges · Click a repo for author details</template>
+          <template v-if="graphView === 'swimlane'">Scroll to zoom · Hover nodes or edges to inspect · Click a context for author details</template>
+          <template v-else>Scroll to zoom · Click a team to expand · Hover to see cross-team edges · Click a context for author details</template>
         </p>
         <div class="svg-wrap">
           <svg ref="svgRef" class="graph-svg"></svg>
@@ -237,12 +237,13 @@
             </li>
           </ul>
           <div v-if="tooltip.contribsLabel" class="tt-contribs-label">{{ tooltip.contribsLabel }}</div>
-          <ul v-if="tooltip.authorContributions?.length" class="tt-contribs tt-contribs--authors">
-            <li v-for="a in tooltip.authorContributions" :key="a.authorId">
+          <ul v-if="tooltipDisplayedAuthors.length" class="tt-contribs tt-contribs--authors">
+            <li v-for="a in tooltipDisplayedAuthors" :key="a.authorId">
               <span class="tt-contrib-dot" :style="{ background: a.teamColor || '#9CA3AF' }"></span>
               <span class="tt-contrib-name">{{ anonMap[a.authorId] ?? a.authorId }}</span>
               <span class="tt-contrib-pct">{{ a.pct }}%</span>
             </li>
+            <li v-if="tooltipHiddenAuthorCount > 0" class="tt-more">+{{ tooltipHiddenAuthorCount }} more</li>
           </ul>
           <div v-if="tooltip.action" class="tt-action">{{ tooltip.action }}</div>
         </template>
@@ -267,6 +268,7 @@ const store = useLensStore();
 const {
   ownershipGraphData, nodeColors,
   dateBounds, activeRange, syntheticTeam,
+  allContexts,
 } = storeToRefs(store);
 
 const effectiveTeams = computed(() =>
@@ -278,8 +280,25 @@ const detailSvgRef  = ref(null);
 const containerRef  = ref(null);
 const vizDropRef    = ref(null);
 const dims          = reactive({ w: 900, h: 600 });
-const detailRepoId  = ref(null);
+const detailRepoId  = ref(null); // holds the context ID of the detail view
 const folderPath    = ref(null); // null = author view, [] = folder root, ['src'] = inside src/, etc.
+
+// Resolves the context's display name for the detail header.
+const detailContextName = computed(() => {
+  const id = detailRepoId.value;
+  if (!id) return null;
+  return allContexts.value.find(c => c.id === id)?.name ?? id;
+});
+
+// Resolves the first concrete repo name for drill-down functions.
+// For auto-contexts (id === repoName) this returns the id unchanged.
+const detailRepoName = computed(() => {
+  const id = detailRepoId.value;
+  if (!id) return null;
+  const ctx = allContexts.value.find(c => c.id === id);
+  const repoSrc = (ctx?.sources ?? []).find(s => s.type === 'repo');
+  return repoSrc?.repo ?? id;
+});
 const noFolderData  = ref(false); // true when repo has no FilePath data — suppresses blank folder view
 
 const VIZ_DEFAULTS = {
@@ -299,13 +318,13 @@ const displayAuthors     = ref(VIZ_DEFAULTS.displayAuthors);
 
 const violationSummary = computed(() => {
   const threshold = violationThreshold.value;
-  const repos = ownershipGraphData.value.nodes.filter(n => n.type === 'repo');
-  const violating = repos.filter(r =>
+  const contexts = ownershipGraphData.value.nodes.filter(n => n.type === 'context');
+  const violating = contexts.filter(r =>
     r.commits && r.contributions?.some(c =>
       c.teamId !== r.owningTeamId && (c.commits / r.commits) * 100 >= threshold
     )
   ).length;
-  return { violating, total: repos.length };
+  return { violating, total: contexts.length };
 });
 
 function toggleFullscreen() {
@@ -340,6 +359,7 @@ const tooltip = reactive({
 const tooltipName = computed(() => {
   if (tooltip.type === 'team' || tooltip.type === 'team-collapsed') return tooltip.teamName;
   if (tooltip.type === 'author') return anonMap.value[tooltip.name] ?? tooltip.name;
+  if (tooltip.type === 'context') return allContexts.value.find(c => c.id === tooltip.name)?.name ?? tooltip.name;
   return tooltip.name;
 });
 
@@ -355,6 +375,12 @@ const tooltipDetail = computed(() => {
   if (tooltip.type === 'folder') {
     return `${c} commits`;
   }
+  if (tooltip.type === 'context') {
+    const owningTeam = tooltip.owningTeamId
+      ? effectiveTeams.value.find(t => t.id === tooltip.owningTeamId)?.name
+      : null;
+    return owningTeam ? `${c} commits · ${owningTeam}` : `${c} commits`;
+  }
   const team = tooltip.teamName ? ` · ${tooltip.teamName}` : '';
   const pctStr = tooltip.pct != null
     ? (tooltip.context === 'folder' ? `${tooltip.pct}% of this level's commits` : `${tooltip.pct}%`)
@@ -363,7 +389,7 @@ const tooltipDetail = computed(() => {
 });
 
 const tooltipContributions = computed(() => {
-  if (tooltip.type !== 'repo') return [];
+  if (tooltip.type !== 'context') return [];
   const total = tooltip.commits || 0;
   if (!total) return [];
   const threshold = violationThreshold.value;
@@ -385,6 +411,14 @@ const tooltipContributions = computed(() => {
     });
 });
 
+const MAX_TOOLTIP_AUTHORS = 3;
+const tooltipDisplayedAuthors = computed(() =>
+  (tooltip.authorContributions ?? []).slice(0, MAX_TOOLTIP_AUTHORS)
+);
+const tooltipHiddenAuthorCount = computed(() =>
+  Math.max(0, (tooltip.authorContributions?.length ?? 0) - MAX_TOOLTIP_AUTHORS)
+);
+
 function teamNameById(id) {
   return effectiveTeams.value.find(t => t.id === id)?.name ?? id;
 }
@@ -398,7 +432,7 @@ function displayNodeName(id) {
     const teamId = id.slice(5);
     return effectiveTeams.value.find(t => t.id === teamId)?.name ?? id;
   }
-  return id;
+  return allContexts.value.find(c => c.id === id)?.name ?? id;
 }
 
 const { anonymize } = useAnonymize();
@@ -426,10 +460,10 @@ const renderer = useSwimlaneGraph({
       anchorRight: d.type === 'team',
       name: d.id, type: d.type, commits: d.commits,
       teamName: d.name ?? '', repoCount: d.repoCount ?? 0, authorCount: d.authorCount ?? 0,
-      action: d.type === 'repo' ? 'Click to see author contributions' : '',
+      action: d.type === 'context' ? 'Click to see author contributions' : '',
       contributions: d.contributions ?? [],
       owningTeamId: d.owningTeamId ?? null,
-      authorContributions: displayAuthors.value && (d.type === 'repo' || d.type === 'team') ? d.authorContributions ?? null : null,
+      authorContributions: displayAuthors.value && (d.type === 'context' || d.type === 'team') ? d.authorContributions ?? null : null,
       folderLastCommit: null, folderFullPath: null, context: '',
       teamInboundBreakdown: null, teamOutboundBreakdown: null, repoBreakdown: null,
     });
@@ -458,10 +492,10 @@ const circlePackRenderer = useCirclePackGraph({
       anchorRight: d.type === 'team',
       name: d.id, type: d.type, commits: d.commits,
       teamName: d.name ?? '', repoCount: d.repoCount ?? 0, authorCount: d.authorCount ?? 0,
-      action: d.type === 'repo' ? 'Click to see author contributions' : '',
+      action: d.type === 'context' ? 'Click to see author contributions' : '',
       contributions: d.contributions ?? [],
       owningTeamId: d.owningTeamId ?? null,
-      authorContributions: displayAuthors.value && (d.type === 'repo' || d.type === 'team') ? d.authorContributions ?? null : null,
+      authorContributions: displayAuthors.value && (d.type === 'context' || d.type === 'team') ? d.authorContributions ?? null : null,
       folderLastCommit: null, folderFullPath: null, context: '',
       teamInboundBreakdown: d.teamInboundBreakdown ?? null,
       teamOutboundBreakdown: d.teamOutboundBreakdown ?? null,
@@ -540,13 +574,13 @@ const folderRenderer = useRepoFolderGraph({
   edgeWeight,
 });
 
-function openDetail(repoId) {
+function openDetail(contextId) {
   folderRenderer.teardown();
   folderPath.value = null;
   noFolderData.value = false;
-  detailRepoId.value = repoId;
+  detailRepoId.value = contextId;
   nextTick(() => {
-    const data = store.repoContributorsData(repoId);
+    const data = store.repoContributorsData(detailRepoName.value);
     detailRenderer.draw({ dims, data });
   });
 }
@@ -560,7 +594,7 @@ function closeDetail() {
 }
 
 function openFolderMode() {
-  const probe = store.repoFolderData(detailRepoId.value, '');
+  const probe = store.repoFolderData(detailRepoName.value, '');
   if (!probe.nodes.some(n => n.type === 'folder')) {
     noFolderData.value = true;
     return;
@@ -575,7 +609,7 @@ function closeFolderMode() {
   folderRenderer.teardown();
   folderPath.value = null;
   nextTick(() => {
-    const data = store.repoContributorsData(detailRepoId.value);
+    const data = store.repoContributorsData(detailRepoName.value);
     detailRenderer.draw({ dims, data });
   });
 }
@@ -592,7 +626,7 @@ function breadcrumbNavigate(index) {
 
 function redrawFolder() {
   const prefix = (folderPath.value ?? []).join('/');
-  const data = store.repoFolderData(detailRepoId.value, prefix);
+  const data = store.repoFolderData(detailRepoName.value, prefix);
   folderRenderer.draw({ dims, data });
 }
 
@@ -866,6 +900,7 @@ onMounted(() => {
 .tt-contribs--authors li { grid-template-columns: 10px 1fr auto; }
 .tt-contribs--authors .tt-contrib-pct { text-align: right; }
 .tt-contrib-owner .tt-contrib-name::after { content: ' · owner'; font-weight: 500; font-size: 9px; color: #94a3b8; }
+.tt-more { color: #94a3b8; font-size: 10px; grid-column: 1 / -1; padding-top: 1px; white-space: nowrap; }
 
 /* ── Visualization dropdown ── */
 .viz-dropdown-wrap  { position: relative; }
@@ -919,7 +954,7 @@ onMounted(() => {
 
 .legend-bubble-team {
   display: inline-block; width: 18px; height: 18px; border-radius: 50%;
-  background: #F08223; opacity: 0.2; border: 2px solid #F08223;
+  background: rgba(240,130,35,0.13); border: 2px dashed rgba(240,130,35,0.6);
 }
 .legend-bubble-repo {
   display: inline-block; width: 12px; height: 12px; border-radius: 50%;

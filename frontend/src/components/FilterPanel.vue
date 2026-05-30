@@ -95,7 +95,7 @@
                 <!-- Repos -->
                 <div class="sub-section">
                   <div class="sub-header">
-                    <span class="sub-label">Repositories</span>
+                    <span class="sub-label">Bounded Contexts</span>
                     <span class="sub-count">{{ tv.repos.length }}</span>
                   </div>
                   <div v-if="tv.repos.length" class="item-grid">
@@ -103,21 +103,21 @@
                       v-for="repo in tv.repos"
                       :key="repo"
                       :class="['item-row', {
-                        'item-checked':  filterRepoIds.has(repo) || filterTeamIds.has(tv.id),
-                        'item-via-team': filterTeamIds.has(tv.id) && !filterRepoIds.has(repo),
+                        'item-checked':  filterContextIds.has(repo) || filterTeamIds.has(tv.id),
+                        'item-via-team': filterTeamIds.has(tv.id) && !filterContextIds.has(repo),
                       }]"
                       @click.stop
                     >
                       <input
                         type="checkbox"
                         class="item-cb"
-                        :checked="filterRepoIds.has(repo) || filterTeamIds.has(tv.id)"
-                        @change="onRepoToggle(repo, tv, $event.target.checked)"
+                        :checked="filterContextIds.has(repo) || filterTeamIds.has(tv.id)"
+                        @change="onContextToggle(repo, tv, $event.target.checked)"
                       />
-                      <span class="item-name" :title="repo">{{ repo }}</span>
+                      <span class="item-name" :title="contextNameMap[repo] ?? repo">{{ contextNameMap[repo] ?? repo }}</span>
                     </label>
                   </div>
-                  <p v-else class="sub-empty">No repositories assigned</p>
+                  <p v-else class="sub-empty">No bounded contexts assigned</p>
                 </div>
 
                 <!-- Authors -->
@@ -172,7 +172,14 @@ import { SlidersHorizontal, X, Check, Search, ChevronRight, Info } from '@lucide
 import { useAnonymize } from '../composables/useAnonymize.js';
 
 const store = useLensStore();
-const { teams, syntheticTeam, filterTeamIds, filterRepoIds, filterAuthorIds } = storeToRefs(store);
+const { teams, syntheticTeam, filterTeamIds, filterContextIds, filterAuthorIds, allContexts } = storeToRefs(store);
+
+// context id → display name lookup
+const contextNameMap = computed(() => {
+  const map = {};
+  for (const c of allContexts.value) map[c.id] = c.name;
+  return map;
+});
 const { anonymize } = useAnonymize();
 
 // Compute display names once so filter, sort, and template all reuse the same map.
@@ -200,7 +207,7 @@ const filteredTeams = computed(() => {
 
   return filterableTeams.value.flatMap(team => {
     const teamHit = !q || team.name.toLowerCase().includes(q);
-    const repos   = (teamHit ? [...team.repos] : team.repos.filter(r => r.toLowerCase().includes(q))).sort();
+    const repos   = (teamHit ? [...team.repos] : team.repos.filter(r => (contextNameMap.value[r] ?? r).toLowerCase().includes(q))).sort();
     const authors = (teamHit ? [...team.authors] : team.authors.filter(a => anonMap.value[a]?.toLowerCase().includes(q)))
       .sort((a, b) => (anonMap.value[a] ?? a).localeCompare(anonMap.value[b] ?? b));
 
@@ -210,7 +217,7 @@ const filteredTeams = computed(() => {
       ...team,
       repos,
       authors,
-      selRepos:    repos.filter(r => filterRepoIds.value.has(r)).length,
+      selRepos:    repos.filter(r => filterContextIds.value.has(r)).length,
       selAuthors:  authors.filter(a => filterAuthorIds.value.has(a)).length,
       autoExpand:  q && !teamHit,
     }];
@@ -218,7 +225,7 @@ const filteredTeams = computed(() => {
 });
 
 const activeFilterCount = computed(
-  () => filterTeamIds.value.size + filterRepoIds.value.size + filterAuthorIds.value.size
+  () => filterTeamIds.value.size + filterContextIds.value.size + filterAuthorIds.value.size
 );
 
 // Expansion state
@@ -252,15 +259,15 @@ function toggleExpand(id) {
 // "explode" the team selection into individual repo picks minus this one.
 // Use the full (unfiltered) team repo list so a search-narrowed view
 // doesn't silently drop repos that aren't currently visible.
-function onRepoToggle(repo, tv, checked) {
+function onContextToggle(contextId, tv, checked) {
   if (!checked && filterTeamIds.value.has(tv.id)) {
     const fullTeam = filterableTeams.value.find(t => t.id === tv.id);
     store.setFilterTeam(tv.id, false);
     for (const r of (fullTeam?.repos ?? tv.repos)) {
-      if (r !== repo) store.setFilterRepo(r, true);
+      if (r !== contextId) store.setFilterContext(r, true);
     }
   } else {
-    store.setFilterRepo(repo, checked);
+    store.setFilterContext(contextId, checked);
   }
 }
 </script>

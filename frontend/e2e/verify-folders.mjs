@@ -254,6 +254,196 @@ if (pill) {
   console.log(`  ℹ  Edge count after team expand: ${edgesAfter}`);
 }
 
+// ── Step 9: Switch to Bubbles (circle-pack) view ─────────────────────────────
+console.log('\n[9] Switch to Bubbles view');
+
+// Close any open detail / folder view so the view-toggle is visible
+if (await lens.page.locator('.back-btn').isVisible()) {
+  await lens.page.locator('.back-btn').click();
+  await lens.page.waitForTimeout(500);
+}
+
+const toggleVisible = await lens.page.locator('button:has-text("Bubbles")').isVisible();
+check('View toggle buttons visible', toggleVisible);
+
+await lens.page.locator('button:has-text("Bubbles")').click();
+await lens.page.waitForTimeout(800);
+await lens.screenshot('out/f09-bubbles.png');
+
+const bubblesActive = await lens.page.evaluate(() => {
+  const btn = [...document.querySelectorAll('.view-toggle-btn')]
+    .find(b => b.textContent.trim() === 'Bubbles');
+  return btn?.classList.contains('active') ?? false;
+});
+check('Bubbles button is active', bubblesActive);
+
+const swimlaneStillActive = await lens.page.evaluate(() => {
+  const btn = [...document.querySelectorAll('.view-toggle-btn')]
+    .find(b => b.textContent.trim() === 'Swimlane');
+  return btn?.classList.contains('active') ?? false;
+});
+check('Swimlane button is no longer active', !swimlaneStillActive);
+
+const teamBubbleCount = await lens.page.evaluate(() =>
+  document.querySelectorAll('.team-bubble').length
+);
+check('Team bubbles rendered', teamBubbleCount > 0, `count=${teamBubbleCount}`);
+console.log(`  ℹ  Team bubbles: ${teamBubbleCount}`);
+
+// Hover a team bubble — tooltip should appear
+const teamBubbleCenter = await lens.page.evaluate(() => {
+  const circle = document.querySelector('.team-bubble circle');
+  if (!circle) return null;
+  const box = circle.getBoundingClientRect();
+  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+});
+check('Team bubble circle found for hover', !!teamBubbleCenter);
+
+if (teamBubbleCenter) {
+  await lens.page.mouse.move(teamBubbleCenter.x, teamBubbleCenter.y);
+  await lens.page.waitForSelector('.graph-tooltip', { state: 'visible', timeout: 8000 });
+  const teamTipText = await lens.page.locator('.graph-tooltip').textContent();
+  check('Team bubble tooltip visible', teamTipText.length > 0, teamTipText);
+  await lens.screenshot('out/f09b-team-bubble-hover.png');
+
+  // Click team bubble to expand it — context (repo) bubbles should appear inside
+  await lens.page.mouse.click(teamBubbleCenter.x, teamBubbleCenter.y);
+  await lens.page.waitForTimeout(500);
+  await lens.screenshot('out/f09c-team-expanded.png');
+
+  const contextBubbleCount = await lens.page.evaluate(() =>
+    [...document.querySelectorAll('.repo-bubble')].filter(el => el.style.display !== 'none').length
+  );
+  check('Context bubbles visible after expanding team', contextBubbleCount > 0, `count=${contextBubbleCount}`);
+  console.log(`  ℹ  Context bubbles visible: ${contextBubbleCount}`);
+
+  // Hover a visible context bubble → tooltip should offer drill-down
+  const repoBubbleCenter = await lens.page.evaluate(() => {
+    const visible = [...document.querySelectorAll('.repo-bubble')]
+      .find(el => el.style.display !== 'none');
+    if (!visible) return null;
+    const circle = visible.querySelector('circle');
+    if (!circle) return null;
+    const box = circle.getBoundingClientRect();
+    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  });
+  check('Context bubble circle found for hover', !!repoBubbleCenter);
+
+  if (repoBubbleCenter) {
+    await lens.page.mouse.move(repoBubbleCenter.x, repoBubbleCenter.y);
+    await lens.page.waitForSelector('.graph-tooltip', { state: 'visible', timeout: 8000 });
+    await lens.page.waitForTimeout(150);
+    const bubbleTipText = await lens.page.locator('.graph-tooltip').textContent();
+    check('Context bubble tooltip has drill-down action',
+      bubbleTipText.includes('Click to see author contributions'), bubbleTipText);
+    await lens.screenshot('out/f09d-context-bubble-hover.png');
+
+    // Click context bubble → detail view should open
+    await lens.page.mouse.click(repoBubbleCenter.x, repoBubbleCenter.y);
+    await lens.page.waitForTimeout(800);
+    await lens.screenshot('out/f09e-bubble-detail.png');
+    check('Clicking context bubble opens detail view',
+      await lens.page.locator('.detail-title').isVisible());
+
+    // Return to main graph
+    await lens.page.locator('.back-btn').click();
+    await lens.page.waitForTimeout(500);
+  }
+}
+
+// ── Step 10: Switch back to Swimlane ─────────────────────────────────────────
+console.log('\n[10] Switch back to Swimlane view');
+await lens.page.locator('button:has-text("Swimlane")').click();
+await lens.page.waitForTimeout(800);
+await lens.screenshot('out/f10-swimlane-restored.png');
+
+const swimlaneActiveAgain = await lens.page.evaluate(() => {
+  const btn = [...document.querySelectorAll('.view-toggle-btn')]
+    .find(b => b.textContent.trim() === 'Swimlane');
+  return btn?.classList.contains('active') ?? false;
+});
+check('Swimlane button active after switching back', swimlaneActiveAgain);
+
+const bubblesGone = await lens.page.evaluate(() =>
+  document.querySelectorAll('.team-bubble').length === 0
+);
+check('Circle-pack elements removed after returning to swimlane', bubblesGone);
+
+// ── Step 11: Verify "Data Platform" multi-repo context in swimlane ───────────
+console.log('\n[11] Verify "Data Platform" multi-repo context in swimlane');
+
+// "Data Platform" text label must appear in the swimlane graph
+const dataPlatLabel = await lens.page.evaluate(() =>
+  Array.from(document.querySelectorAll('svg text'))
+    .some(t => t.textContent.trim() === 'Data Platform')
+);
+check('"Data Platform" context label rendered in swimlane', dataPlatLabel);
+
+// The individual repo names must NOT appear as separate bold context labels
+const dataPipelineAsLabel = await lens.page.evaluate(() =>
+  Array.from(document.querySelectorAll('svg text'))
+    .filter(t => t.getAttribute('font-weight') === '600')
+    .some(t => t.textContent.trim() === 'data-pipeline')
+);
+check('"data-pipeline" not shown as a separate context label', !dataPipelineAsLabel);
+
+const analyticsDbAsLabel = await lens.page.evaluate(() =>
+  Array.from(document.querySelectorAll('svg text'))
+    .filter(t => t.getAttribute('font-weight') === '600')
+    .some(t => t.textContent.trim() === 'analytics-db')
+);
+check('"analytics-db" not shown as a separate context label', !analyticsDbAsLabel);
+
+// The violation banner reports "X out of TOTAL" — with the merge, TOTAL should be 6.
+// (violatingOnly=true by default, so not all 6 are drawn; the banner total is the reliable count.)
+const violationText = await lens.page.locator('.violation-banner').textContent();
+check('Violation banner shows 6 total contexts (7 repos → 6 after merge)', violationText.includes('out of 6 '), violationText);
+await lens.screenshot('out/f11-data-platform-swimlane.png');
+
+// ── Step 12: Verify "Data Platform" context bubble in Bubbles view ────────────
+console.log('\n[12] Verify "Data Platform" in Bubbles view');
+await lens.page.locator('button:has-text("Bubbles")').click();
+await lens.page.waitForTimeout(800);
+await lens.screenshot('out/f12-bubbles-before-data.png');
+
+// Find the Data team bubble by its text label
+const dataTeamCenter = await lens.page.evaluate(() => {
+  for (const g of document.querySelectorAll('.team-bubble')) {
+    const label = Array.from(g.querySelectorAll('text'))
+      .find(t => t.textContent.trim() === 'Data');
+    if (label) {
+      const circle = g.querySelector('circle');
+      if (!circle) continue;
+      const box = circle.getBoundingClientRect();
+      return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    }
+  }
+  return null;
+});
+check('Data team bubble found in Bubbles view', !!dataTeamCenter);
+
+// All .repo-bubble elements are always in the DOM (hidden via display:none when
+// collapsed). Query by data-team-id without needing to expand or click.
+// This also avoids the off-screen click issue when the Data bubble is near the
+// bottom of the viewport.
+const dataContextCount = await lens.page.evaluate(() =>
+  document.querySelectorAll('.repo-bubble[data-team-id="data"]').length
+);
+check('Data team has exactly 1 context node (Data Platform merged)', dataContextCount === 1, `count=${dataContextCount}`);
+
+const dataPlatBubbleLabel = await lens.page.evaluate(() => {
+  const b = document.querySelector('.repo-bubble[data-team-id="data"]');
+  if (!b) return null;
+  return Array.from(b.querySelectorAll('text'))
+    .map(t => t.textContent.trim()).filter(Boolean).join(' ');
+});
+check('"Data Platform" label on context bubble', dataPlatBubbleLabel?.includes('Data Platform'), dataPlatBubbleLabel);
+await lens.screenshot('out/f12b-data-platform-bubble.png');
+
+// Switch back to Swimlane to finish cleanly
+await lens.page.locator('button:has-text("Swimlane")').click();
+await lens.page.waitForTimeout(600);
+
 // ── Summary ───────────────────────────────────────────────────────────────
 console.log(`\n══════════════════════════════`);
 console.log(`Passed: ${passed}  Failed: ${failed}`);

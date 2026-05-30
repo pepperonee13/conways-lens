@@ -29,7 +29,7 @@ export class LensPage {
   static async open(browser, url = 'http://localhost:5174') {
     const page = await browser.newPage();
     const w = parseInt(process.env.PLAYWRIGHT_VIEWPORT_WIDTH  ?? '1400', 10);
-    const h = parseInt(process.env.PLAYWRIGHT_VIEWPORT_HEIGHT ?? '900',  10);
+    const h = parseInt(process.env.PLAYWRIGHT_VIEWPORT_HEIGHT ?? '1100', 10);
     await page.setViewportSize({ width: w, height: h });
     await page.goto(url);
     await page.waitForLoadState('networkidle');

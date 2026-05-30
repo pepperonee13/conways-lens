@@ -1,5 +1,15 @@
 {
-  "version": 1,
+  "version": 2,
+  "contexts": [
+    {
+      "id": "ctx-data-platform",
+      "name": "Data Platform",
+      "sources": [
+        { "type": "repo", "repo": "data-pipeline" },
+        { "type": "repo", "repo": "analytics-db" }
+      ]
+    }
+  ],
   "teams": [
     {
       "id": "backend",
@@ -20,7 +30,7 @@
       "name": "Data",
       "color": "#088F9B",
       "authors": ["Eve", "Frank"],
-      "repos": ["data-pipeline", "analytics-db"]
+      "repos": ["ctx-data-platform"]
     },
     {
       "id": "platform",

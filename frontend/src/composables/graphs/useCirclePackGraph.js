@@ -44,14 +44,14 @@ export function useCirclePackGraph({
     );
 
     // Pre-computed before the hierarchy loop so outbound-only teams can be detected
-    const repoOwnerMap  = Object.fromEntries(data.nodes.filter(n => n.type === 'repo').map(n => [n.id, n.owningTeamId]));
-    const repoCommitMap = Object.fromEntries(data.nodes.filter(n => n.type === 'repo').map(n => [n.id, n.commits ?? 0]));
+    const repoOwnerMap  = Object.fromEntries(data.nodes.filter(n => n.type === 'context').map(n => [n.id, n.owningTeamId]));
+    const repoCommitMap = Object.fromEntries(data.nodes.filter(n => n.type === 'context').map(n => [n.id, n.commits ?? 0]));
 
     // Build hierarchy: root → teams → repos
     const children = [];
     for (const team of teams) {
       const teamNode  = teamNodeMap[`team:${team.id}`];
-      const teamRepos = data.nodes.filter(n => n.type === 'repo' && n.owningTeamId === team.id);
+      const teamRepos = data.nodes.filter(n => n.type === 'context' && n.owningTeamId === team.id);
       const filteredRepos = filterViolating
         ? teamRepos.filter(r => r.contributions?.some(c =>
             c.teamId !== r.owningTeamId && r.commits > 0 &&
@@ -81,8 +81,8 @@ export function useCirclePackGraph({
         children: filteredRepos.length > 0
           ? filteredRepos.map(r => ({
               id:                  r.id,
-              name:                r.id,
-              type:                'repo',
+              name:                r.name ?? r.id,
+              type:                'context',
               value:               Math.max(1, r.commits),
               commits:             r.commits,
               owningTeamId:        r.owningTeamId,
@@ -226,7 +226,8 @@ export function useCirclePackGraph({
       .attr('fill-opacity', 0.13)
       .attr('stroke', d => d.data.color)
       .attr('stroke-width', 2)
-      .attr('stroke-opacity', 0.5)
+      .attr('stroke-opacity', 0.6)
+      .attr('stroke-dasharray', '6 4')
       .attr('cursor', 'pointer');
 
     teamGs.append('text')
@@ -242,7 +243,7 @@ export function useCirclePackGraph({
       .text(d => d.data.name);
 
     // ── Repo circles (hidden until team is expanded) ──────────────────────
-    const repoNodes = allRepoPackNodes.filter(d => d.data.type === 'repo');
+    const repoNodes = allRepoPackNodes.filter(d => d.data.type === 'context');
 
     const repoGs = g.selectAll('g.repo-bubble')
       .data(repoNodes)
@@ -344,7 +345,7 @@ export function useCirclePackGraph({
         drawEdges(links);
         // Inbound: other teams' share of THIS team's total repo commits
         const thisTeamRepoTotal = data.nodes
-          .filter(n => n.type === 'repo' && n.owningTeamId === teamId)
+          .filter(n => n.type === 'context' && n.owningTeamId === teamId)
           .reduce((s, n) => s + (n.commits ?? 0), 0);
         const inboundMap = {};
         for (const l of crossLinks.filter(l => repoOwnerMap[l.target] === teamId)) {
@@ -367,7 +368,7 @@ export function useCirclePackGraph({
         const teamOutboundBreakdown = Object.entries(outboundMap)
           .map(([tid, commits]) => {
             const tgtTotal = data.nodes
-              .filter(n => n.type === 'repo' && n.owningTeamId === tid)
+              .filter(n => n.type === 'context' && n.owningTeamId === tid)
               .reduce((s, n) => s + (n.commits ?? 0), 0);
             return { teamId: tid, commits, pct: tgtTotal > 0 ? +((commits / tgtTotal) * 100).toFixed(1) : 0 };
           })
