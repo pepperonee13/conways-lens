@@ -303,14 +303,15 @@ const detailContextName = computed(() => {
   return allContexts.value.find(c => c.id === id)?.name ?? id;
 });
 
-// Resolves the first concrete repo name for drill-down functions.
+// Resolves the first concrete repo name for folder-mode functions.
+// Accepts any source type (repo/path/glob) so path- and glob-sourced contexts work too.
 // For auto-contexts (id === repoName) this returns the id unchanged.
 const detailRepoName = computed(() => {
   const id = detailRepoId.value;
   if (!id) return null;
   const ctx = allContexts.value.find(c => c.id === id);
-  const repoSrc = (ctx?.sources ?? []).find(s => s.type === 'repo');
-  return repoSrc?.repo ?? id;
+  const src = (ctx?.sources ?? []).find(s => s.repo);
+  return src?.repo ?? id;
 });
 const noFolderData  = ref(false); // true when repo has no FilePath data — suppresses blank folder view
 
@@ -629,7 +630,7 @@ function openDetail(contextId) {
   noFolderData.value = false;
   detailRepoId.value = contextId;
   nextTick(() => {
-    const data = store.repoContributorsData(detailRepoName.value);
+    const data = store.contextContributorsData(contextId);
     detailRenderer.draw({ dims, data });
   });
 }
@@ -658,7 +659,7 @@ function closeFolderMode() {
   folderRenderer.teardown();
   folderPath.value = null;
   nextTick(() => {
-    const data = store.repoContributorsData(detailRepoName.value);
+    const data = store.contextContributorsData(detailRepoId.value);
     detailRenderer.draw({ dims, data });
   });
 }

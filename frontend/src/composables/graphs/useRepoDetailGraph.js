@@ -485,7 +485,7 @@ export function useRepoDetailGraph({
         .attr('text-anchor', 'middle').attr('dy', REPO_R + NODE_LABEL_OFFSET)
         .attr('fill', NODE.LABEL_COLOR).attr('font-size', NODE.LABEL_SIZE_SM).attr('font-weight', '600')
         .attr('pointer-events', 'none')
-        .text(repoNode.id);
+        .text(repoNode.name ?? repoNode.id);
     }
   }
 

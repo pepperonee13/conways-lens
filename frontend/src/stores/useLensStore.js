@@ -821,6 +821,37 @@ export const useLensStore = defineStore('lens', () => {
     return { nodes, links };
   }
 
+  // Returns {nodes, links} for a bounded context using resolveContextId so that
+  // path, glob, and multi-repo sources are all handled correctly.
+  function contextContributorsData(contextId) {
+    const since = activeRange.value.since;
+    const until = activeRange.value.until;
+    const edgeMap = {};
+    const ctxShas = new Set();
+    for (const row of timelineData.value) {
+      if (!row.Author || !row.Product || !row.ChangesetId) continue;
+      if (resolveContextId(row.Product, row.FilePath) !== contextId) continue;
+      if (since && row.Date < since) continue;
+      if (until && row.Date > until) continue;
+      const author = normalizeAuthor(row.Author);
+      if (ignoredSet.value.has(author)) continue;
+      (edgeMap[author] ??= new Set()).add(row.ChangesetId);
+      ctxShas.add(row.ChangesetId);
+    }
+    const links = Object.entries(edgeMap).map(([author, shas]) => ({
+      source: author, target: contextId, commits: shas.size,
+    }));
+    const syntheticT = syntheticTeam.value;
+    const allTeams   = syntheticT ? [...teams.value, syntheticT] : teams.value;
+    const owningTeamId = allTeams.find(t => (t.contexts ?? []).includes(contextId))?.id ?? null;
+    const ctx = allContexts.value.find(c => c.id === contextId);
+    const nodes = [
+      { id: contextId, name: ctx?.name ?? contextId, type: 'repo', commits: ctxShas.size, owningTeamId },
+      ...links.map(l => ({ id: l.source, type: 'author', commits: l.commits })),
+    ];
+    return { nodes, links };
+  }
+
   // Returns {nodes, links} for a repo drilled into a specific folder path.
   // folderPrefix = '' for top-level, 'src' for inside src/, 'src/auth' for inside src/auth/, etc.
   function repoFolderData(repoId, folderPrefix = '') {
@@ -903,7 +934,7 @@ export const useLensStore = defineStore('lens', () => {
     expandedTeams,
     allRawAuthors, allAuthors, allRepos,
     graphData, ownershipGraphData, nodeColors, getNodeColor,
-    repoContributorsData, repoFolderData,
+    repoContributorsData, contextContributorsData, repoFolderData,
     loadTimelineData, loadSimulatedData, clearData,
     addTeam, removeTeam,
     addContext, removeContext, updateContext, addContextSource, removeContextSource,
