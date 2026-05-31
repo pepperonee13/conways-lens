@@ -18,6 +18,7 @@ export function useGraphContextMenu({ store, detailRepoName }) {
 
   function openContextMenuForContextNode(d, e) {
     e.preventDefault();
+    if (d.type === 'team') return;
     // Only auto-contexts (id === repo name, not in the user-defined list) back a
     // single repo and can be folded into another context.
     const isUserDefined = store.contexts.some(c => c.id === d.id);
