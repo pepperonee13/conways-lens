@@ -40,7 +40,7 @@ node cli/extract-git-history.mjs --repos team-a-repos.json --output team-a.csv
 
 Clones in parallel (default `--concurrency 4`, no npm dependencies needed). Output defaults to
 `frontend/public/CommitHistory-<reposFileName>.csv`, so different team configs produce different files
-that can be merged in the frontend (see step 5).
+that can be merged in the frontend (see step 3).
 
 **PowerShell (Windows, sequential):**
 
@@ -63,12 +63,16 @@ npm run dev
 Open http://localhost:5174 in your browser.
 
 Drag and drop one or more CSV files into the upload zone. Multiple files are merged into a single
-dataset (rows are deduplicated by `Product`+`ChangesetId`+`FilePath`, and the date range is
+dataset (rows are deduplicated by `RepoName`+`CommitHash`+`FilePath`, and the date range is
 expanded to cover all inputs). Once data is loaded, use **Add CSV** to merge additional files,
 or **Replace** to start over. Drag-and-drop on an active dataset merges by default; hold
 <kbd>Shift</kbd> while dropping to replace.
 
-### 4. Define team mappings
+### 4. Save and switch lenses (optional)
+
+Click **Lenses** (bottom left) to open the Lenses panel. A lens is a named snapshot of your current team and context mapping — useful when you analyse multiple clients or projects with the same CSV data. Enter a name and click **Save** to capture the current configuration. Click any saved lens to restore it, or rename/delete it from the panel. The active lens name is shown in the header.
+
+### 5. Define team mappings
 
 Click **Mapping** (bottom right) to open the mapping panel. It has four tabs:
 
@@ -81,7 +85,7 @@ You can also build a context straight from the graph: right-click a context node
 
 Mappings persist automatically in your browser's localStorage. Use **Export** to save them as JSON and **Import** to restore.
 
-### 5. Explore the graph
+### 6. Explore the graph
 
 Switch between two layouts with the view toggle in the graph header:
 
@@ -94,6 +98,8 @@ The **Visualization** dropdown (graph header) tunes the view: toggle weighted ed
 
 Use the **Filters** panel to narrow the graph to specific teams, contexts, or authors. The **fullscreen** button maximises the canvas.
 
+Use the **Export** button (graph header) to save the current view as a PNG (2× resolution) or SVG file.
+
 **Drill down**: click a bounded context to open a radial detail view of all its contributors, grouped by team, with each author's share of the commits shown on the edges. From there, drill further into the context's folder structure (when file-path data is present) to see ownership at the directory level.
 
 ## Output
@@ -104,12 +110,12 @@ Both extraction scripts produce a `CommitHistory` CSV with one row per file per 
 |---|---|
 | `Date` | Commit date (YYYY-MM-DD) |
 | `DateTime` | Full timestamp |
-| `Product` | Repository name (from `repos.json`) |
+| `RepoName` | Repository name (from `repos.json`) |
+| `RepoUrl` | Repository URL (from `repos.json`) |
 | `Author` | Git author name |
-| `ChangesetId` | Commit SHA |
+| `CommitHash` | Commit SHA |
 | `ChangeType` | `add`, `edit`, `delete`, `rename` |
 | `FilePath` | File path within the repository |
-| `Source` | Always `git` |
 | `CommitMessage` | Commit subject line |
 
 ## Documentation
