@@ -160,7 +160,6 @@ foreach ($repo in $repos) {
                     CommitHash    = $currentCommit.Hash
                     ChangeType    = $changeType
                     FilePath      = $filePath
-                    Source        = 'git'
                     CommitMessage = $currentCommit.Message
                 })
             }

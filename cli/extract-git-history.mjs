@@ -176,7 +176,7 @@ function csvEscape(v) {
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-const COLS = ['Date', 'DateTime', 'RepoName', 'RepoUrl', 'Author', 'CommitHash', 'ChangeType', 'FilePath', 'Source', 'CommitMessage'];
+const COLS = ['Date', 'DateTime', 'RepoName', 'RepoUrl', 'Author', 'CommitHash', 'ChangeType', 'FilePath', 'CommitMessage'];
 
 async function processRepo(repo) {
   const repoName = repo.name;
@@ -243,7 +243,7 @@ async function processRepo(repo) {
         const filePath = m[2].split('\t').pop().trim();
         rows.push([
           cur.date, cur.dateStr, repoName, repoUrl, cur.author, cur.hash,
-          STATUS_MAP[m[1]] ?? 'edit', filePath, 'git', cur.message,
+          STATUS_MAP[m[1]] ?? 'edit', filePath, cur.message,
         ]);
       }
     }
