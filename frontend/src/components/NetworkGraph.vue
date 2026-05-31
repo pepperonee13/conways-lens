@@ -271,12 +271,42 @@
         <div class="ctx-menu-backdrop" @click="closeContextMenu" @contextmenu.prevent="closeContextMenu"></div>
         <div class="ctx-menu" :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }">
           <div class="ctx-menu-label">{{ contextMenu.label }}</div>
-          <button class="ctx-menu-item" :disabled="!contextMenu.source" @click="confirmAddToContext">
-            Add to bounded context…
-          </button>
-          <div v-if="contextMenu.reason" class="ctx-menu-reason">{{ contextMenu.reason }}</div>
+
+          <template v-if="contextMenu.source">
+            <template v-if="contexts.length">
+              <div class="ctx-menu-section-header">
+                {{ contextMenu.currentContextId ? 'Change context' : 'Add to context' }}
+              </div>
+              <button
+                v-for="c in contexts" :key="c.id"
+                class="ctx-menu-item ctx-menu-item--context"
+                :class="{ 'ctx-menu-item--current': c.id === contextMenu.currentContextId }"
+                @click="assignToContext(c.id)"
+              >
+                <span class="ctx-menu-check">{{ c.id === contextMenu.currentContextId ? '✓' : '' }}</span>
+                {{ c.name }}
+              </button>
+              <div class="ctx-menu-divider"></div>
+            </template>
+            <button class="ctx-menu-item ctx-menu-item--new" @click="confirmAddToContext">
+              + Create new context…
+            </button>
+          </template>
+
+          <template v-else>
+            <div class="ctx-menu-reason">{{ contextMenu.reason }}</div>
+          </template>
         </div>
       </template>
+    </teleport>
+
+    <!-- Toast notifications -->
+    <teleport to="body">
+      <div class="toast-stack">
+        <transition-group name="toast">
+          <div v-for="t in toasts" :key="t.id" class="toast">{{ t.message }}</div>
+        </transition-group>
+      </div>
     </teleport>
   </div>
 </template>
@@ -296,14 +326,17 @@ import { useGraphContextMenu } from '../composables/useGraphContextMenu.js';
 import { useGraphExport } from '../composables/useGraphExport.js';
 import { useGraphFullscreen } from '../composables/useGraphFullscreen.js';
 import { isContextViolating } from '../domain/violations.js';
+import { useToast } from '../composables/useToast.js';
 
 const store = useLensStore();
 const {
   ownershipGraphData, nodeColors,
   dateBounds, activeRange, syntheticTeam,
-  allContexts,
+  allContexts, contexts,
   vizSettings,
 } = storeToRefs(store);
+
+const { toasts } = useToast();
 
 const effectiveTeams = computed(() =>
   syntheticTeam.value ? [...store.teams, syntheticTeam.value] : store.teams
@@ -403,6 +436,7 @@ const {
   closeContextMenu,
   openContextMenuForContextNode,
   openContextMenuForFolderNode,
+  assignToContext,
   confirmAddToContext,
 } = useGraphContextMenu({ store, detailRepoName });
 
@@ -802,12 +836,45 @@ onBeforeUnmount(() => {
 .ctx-menu-label {
   @apply px-3 py-1.5 text-xs font-mono text-gray-500 border-b border-gray-100 truncate max-w-[260px];
 }
+.ctx-menu-section-header {
+  @apply px-3 pt-2 pb-0.5 text-[10px] font-bold uppercase tracking-wider text-gray-400;
+}
 .ctx-menu-item {
   @apply w-full text-left px-3 py-2 font-medium text-gray-700 hover:bg-orange-50 hover:text-brand-orange
          transition-colors cursor-pointer;
 }
+.ctx-menu-item--context {
+  @apply flex items-center gap-2 pl-3 pr-3 text-sm;
+}
+.ctx-menu-item--current {
+  @apply text-brand-teal font-semibold;
+}
+.ctx-menu-check {
+  @apply w-3 text-brand-teal font-bold flex-shrink-0 text-xs;
+}
+.ctx-menu-item--new {
+  @apply text-gray-500 hover:text-brand-orange text-sm;
+}
+.ctx-menu-divider { @apply border-t border-gray-100 my-1; }
 .ctx-menu-item:disabled { @apply text-gray-300 cursor-not-allowed hover:bg-transparent hover:text-gray-300; }
-.ctx-menu-reason { @apply px-3 py-1 text-[11px] text-gray-400 italic; }
+.ctx-menu-reason { @apply px-3 py-2 text-[11px] text-gray-400 italic; }
+
+/* Toast notifications */
+.toast-stack {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  z-index: 20000; display: flex; flex-direction: column; gap: 8px; align-items: center;
+  pointer-events: none;
+}
+.toast {
+  background: #1f2937; color: #f9fafb;
+  padding: 10px 18px; border-radius: 8px;
+  font-size: 13px; font-weight: 500; white-space: nowrap;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+}
+.toast-enter-active { transition: all 0.2s ease-out; }
+.toast-leave-active { transition: all 0.25s ease-in; }
+.toast-enter-from  { opacity: 0; transform: translateY(8px); }
+.toast-leave-to   { opacity: 0; transform: translateY(-6px); }
 .graph-tooltip--anchor-right {
   animation: fadeInRight 0.12s ease-out forwards;
 }

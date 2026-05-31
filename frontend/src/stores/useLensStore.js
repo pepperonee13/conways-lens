@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed, watch } from 'vue';
-import { sameSource, globToRegex, contextForSource as contextForSourceFn, resolveContextId as resolveContextIdFn } from '../domain/contextSources.js';
+import { sameSource, globToRegex, sourcesOverlap, contextForSource as contextForSourceFn, resolveContextId as resolveContextIdFn } from '../domain/contextSources.js';
 import { mergeCommits, mergeDateRanges } from '../domain/commits.js';
 import { parseCSVText } from '../adapters/csv.js';
 import { DEFAULT_VIOLATION_THRESHOLD, DEFAULT_DISPLAY_AUTHORS } from '../config.js';
@@ -574,16 +574,17 @@ export const useLensStore = defineStore('lens', () => {
   }
   function removeTeam(id) { teams.value = teams.value.filter(t => t.id !== id); }
 
-  function contextForSource(source) {
-    function* repoPaths(repo) {
-      const seen = new Set();
-      for (const row of commits.value) {
-        if (row.repo === repo && row.filePath && !seen.has(row.filePath)) {
-          seen.add(row.filePath);
-          yield row.filePath;
-        }
+  function* repoPaths(repo) {
+    const seen = new Set();
+    for (const row of commits.value) {
+      if (row.repo === repo && row.filePath && !seen.has(row.filePath)) {
+        seen.add(row.filePath);
+        yield row.filePath;
       }
     }
+  }
+
+  function contextForSource(source) {
     return contextForSourceFn(source, contexts.value, repoPaths);
   }
 
@@ -616,6 +617,30 @@ export const useLensStore = defineStore('lens', () => {
     const ctx = contexts.value.find(c => c.id === id);
     if (!ctx) return;
     updateContext(id, { sources: (ctx.sources ?? []).filter((_, i) => i !== index) });
+  }
+
+  // Move a source from its current context (if any) to a target context.
+  // Used by the context-menu quick-assign path.
+  // Find and remove whichever source in `ctx` overlaps with `source`.
+  // The stored source may be broader than `source` (e.g. a whole-repo source
+  // covering a sub-path), so we match with sourcesOverlap rather than sameSource.
+  function removeCoveringSource(ctx, source) {
+    const idx = ctx.sources.findIndex(s => sourcesOverlap(s, source, repoPaths));
+    if (idx !== -1) removeContextSource(ctx.id, idx);
+  }
+
+  function moveContextSource(source, targetContextId) {
+    const current = contextForSource(source);
+    if (current) removeCoveringSource(current, source);
+    addContextSource(targetContextId, source);
+  }
+
+  // Create a new context with a source pre-assigned, evicting it from any
+  // existing context first. Used by the "Create new context" panel flow.
+  function createContextWithSource(name, source) {
+    const current = contextForSource(source);
+    if (current) removeCoveringSource(current, source);
+    return addContext(name, [source]);
   }
 
   // ── Right-click "Add to bounded context" hand-off ───────────────────────────
@@ -978,6 +1003,7 @@ export const useLensStore = defineStore('lens', () => {
     loadCommits, loadSimulatedData, clearData,
     addTeam, removeTeam,
     addContext, removeContext, updateContext, addContextSource, removeContextSource, contextForSource,
+    moveContextSource, createContextWithSource,
     pendingContextSource, beginAddToContext, clearPendingContextSource,
     setFilterTeam, setFilterContext, setFilterAuthor, clearAllFilters,
     setNormalization, removeNormalization,

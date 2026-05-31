@@ -288,37 +288,45 @@
             automatic context named after itself.
           </p>
 
-          <!-- Pending source hand-off from a node's right-click menu -->
+          <!-- Pending source: "Create new context" hand-off from right-click menu -->
           <div v-if="pendingContextSource" class="ctx-pending">
-            <div class="ctx-pending-title">
-              Add <code>{{ pendingContextSource.label }}</code> to a bounded context
+            <div class="ctx-pending-title">Create new bounded context</div>
+
+            <div class="ctx-pending-source-row">
+              <span class="ctx-source-type" :class="`ctx-source-type--${pendingContextSource.source.type}`">
+                {{ pendingContextSource.source.type }}
+              </span>
+              <span class="ctx-source-desc">{{ pendingContextSource.label }}</span>
             </div>
-            <div class="ctx-pending-targets">
-              <button
-                v-for="c in contexts" :key="c.id"
-                :class="['ctx-target-pill', { 'ctx-target-pill--active': pendingTarget === c.id }]"
-                @click="pendingTarget = c.id"
-              >{{ c.name }}</button>
-              <button
-                :class="['ctx-target-pill', 'ctx-target-pill--new', { 'ctx-target-pill--active': pendingTarget === '__new__' }]"
-                @click="pendingTarget = '__new__'"
-              >+ New context…</button>
-            </div>
+
             <input
-              v-if="pendingTarget === '__new__'"
               v-model="pendingNewName"
               class="ctx-new-name-input"
-              placeholder="New context name"
+              placeholder="Context name"
               @keyup.enter="canConfirmPending && confirmPending()"
+              ref="pendingNameInput"
             />
-            <p v-if="pendingSourceConflict" class="ctx-conflict">
-              Already assigned to <strong>{{ pendingSourceConflict.name }}</strong>
-            </p>
+
+            <!-- Duplicate-name confirmation -->
+            <div v-if="pendingNameDuplicate && !pendingNameDuplicateDismissed" class="ctx-dupe-warning">
+              <AlertTriangle :size="13" class="flex-shrink-0 text-amber-500" />
+              <span>A context named <strong>{{ pendingNameDuplicate.name }}</strong> already exists.</span>
+              <div class="ctx-dupe-actions">
+                <button class="ctx-dupe-btn ctx-dupe-btn--assign"
+                  @click="assignToDuplicate">Assign to it</button>
+                <button class="ctx-dupe-btn ctx-dupe-btn--new"
+                  @click="pendingNameDuplicateDismissed = true">Create new</button>
+              </div>
+            </div>
+
             <div class="ctx-pending-actions">
-              <button class="modal-btn modal-btn--confirm" :disabled="!canConfirmPending" @click="confirmPending">
-                Add source
+              <button class="modal-btn modal-btn--confirm"
+                :disabled="!canConfirmPending"
+                @click="confirmPending">
+                Create &amp; assign
               </button>
-              <button class="modal-btn modal-btn--secondary" @click="store.clearPendingContextSource()">Cancel</button>
+              <button class="modal-btn modal-btn--secondary"
+                @click="store.clearPendingContextSource()">Cancel</button>
             </div>
           </div>
 
@@ -437,7 +445,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, onUnmounted } from 'vue';
+import { ref, reactive, computed, watch, nextTick, onUnmounted } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useLensStore } from '../stores/useLensStore';
 import {
@@ -711,31 +719,46 @@ function addSourceFromDraft(id) {
   draftSource[id] = freshDraft();
 }
 
-// Right-click "Add to bounded context" hand-off.
-const pendingTarget  = ref('__new__');
+// Right-click "Create new context" hand-off.
 const pendingNewName = ref('');
-const pendingSourceConflict = computed(() => {
-  const p = pendingContextSource.value;
-  return p ? store.contextForSource(p.source) : null;
+const pendingNameInput = ref(null);
+const pendingNameDuplicateDismissed = ref(false);
+
+const pendingNameDuplicate = computed(() => {
+  const trimmed = pendingNewName.value.trim().toLowerCase();
+  if (!trimmed || pendingNameDuplicateDismissed.value) return null;
+  return contexts.value.find(c => c.name.trim().toLowerCase() === trimmed) ?? null;
 });
+
 const canConfirmPending = computed(
-  () => !pendingSourceConflict.value && (pendingTarget.value !== '__new__' || pendingNewName.value.trim().length > 0)
+  () => pendingNewName.value.trim().length > 0 && !pendingNameDuplicate.value
 );
-watch(pendingContextSource, (p) => {
+
+watch(pendingContextSource, async (p) => {
   if (!p) return;
   open.value = true;
   tab.value  = 'contexts';
-  pendingTarget.value  = contexts.value.length ? contexts.value[0].id : '__new__';
   pendingNewName.value = p.label ?? '';
+  pendingNameDuplicateDismissed.value = false;
+  await nextTick();
+  pendingNameInput.value?.focus();
 });
+
+// Reset duplicate-dismissed flag when the name changes
+watch(pendingNewName, () => { pendingNameDuplicateDismissed.value = false; });
+
 function confirmPending() {
   const p = pendingContextSource.value;
   if (!p || !canConfirmPending.value) return;
-  if (pendingTarget.value === '__new__') {
-    store.addContext(pendingNewName.value.trim(), [p.source]);
-  } else {
-    store.addContextSource(pendingTarget.value, p.source);
-  }
+  store.createContextWithSource(pendingNewName.value.trim(), p.source);
+  store.clearPendingContextSource();
+}
+
+function assignToDuplicate() {
+  const p = pendingContextSource.value;
+  const dup = pendingNameDuplicate.value;
+  if (!p || !dup) return;
+  store.moveContextSource(p.source, dup.id);
   store.clearPendingContextSource();
 }
 
@@ -877,27 +900,31 @@ async function handleImport(e) {
 .ctx-input-sm { @apply text-xs py-0.5; }
 .ctx-input { @apply flex-1 min-w-0; }
 .ctx-pending {
-  @apply border border-brand-orange bg-orange-50 rounded-xl p-4 mb-4 flex flex-col gap-2;
+  @apply border border-brand-orange bg-orange-50 rounded-xl p-4 mb-4 flex flex-col gap-3;
 }
-.ctx-pending-title { @apply text-sm text-gray-700; }
-.ctx-pending-title code { @apply font-mono bg-white px-1.5 py-0.5 rounded border border-gray-200; }
-.ctx-pending-targets { @apply flex flex-wrap gap-1.5; }
-.ctx-target-pill {
-  @apply px-2.5 py-1 rounded-full text-xs font-medium border border-brand-teal
-         text-brand-teal bg-white hover:bg-brand-teal hover:text-white
-         transition-all duration-100 cursor-pointer;
+.ctx-pending-title {
+  @apply text-sm font-semibold text-gray-800;
 }
-.ctx-target-pill--active { @apply bg-brand-teal text-white; }
-.ctx-target-pill--new {
-  @apply border-dashed border-gray-400 text-gray-500 bg-white
-         hover:border-brand-orange hover:text-brand-orange hover:bg-white;
-}
-.ctx-target-pill--new.ctx-target-pill--active {
-  @apply bg-brand-orange border-brand-orange text-white;
+.ctx-pending-source-row {
+  @apply flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2;
 }
 .ctx-new-name-input {
   @apply border border-gray-300 rounded-lg px-3 py-1.5 text-sm bg-white w-full
          focus:outline-none focus:ring-2 focus:ring-brand-orange/40 focus:border-brand-orange;
+}
+.ctx-dupe-warning {
+  @apply flex flex-wrap items-start gap-1.5 text-xs text-amber-800 bg-amber-50
+         border border-amber-200 rounded-lg px-3 py-2;
+}
+.ctx-dupe-actions { @apply flex gap-2 w-full mt-1; }
+.ctx-dupe-btn {
+  @apply px-2.5 py-1 rounded-md text-xs font-medium border transition-all duration-100 cursor-pointer;
+}
+.ctx-dupe-btn--assign {
+  @apply border-brand-teal text-brand-teal bg-white hover:bg-brand-teal hover:text-white;
+}
+.ctx-dupe-btn--new {
+  @apply border-gray-300 text-gray-600 bg-white hover:border-gray-400 hover:text-gray-800;
 }
 .ctx-pending-actions { @apply flex items-center gap-2 justify-end; }
 .ctx-conflict { @apply text-xs text-red-600; }
