@@ -13,6 +13,7 @@ export default defineConfig({
     viewport: { width: 1400, height: 1100 },
     actionTimeout: 10_000,
     trace: 'on-first-retry',
+    screenshot: 'on',
   },
   webServer: {
     command: 'npx vite --port 5174',

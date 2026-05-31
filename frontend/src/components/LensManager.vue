@@ -175,7 +175,7 @@ async function handleImport(e) {
 <style scoped>
 /* ── Floating trigger ── */
 .floating-lens-btn {
-  @apply fixed left-6 bottom-6 z-40 bg-gradient-to-r from-brand-teal to-teal-400
+  @apply fixed left-6 bottom-24 z-40 bg-gradient-to-r from-brand-teal to-teal-400
          text-white rounded-full shadow-2xl px-6 py-4 font-bold text-base cursor-pointer
          transition-all duration-300 hover:scale-110 flex items-center gap-3;
 }
