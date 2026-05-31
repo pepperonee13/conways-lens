@@ -29,3 +29,26 @@ export function isContextViolating(context, threshold) {
     exceedsThreshold(c.commits, context.commits, threshold)
   );
 }
+
+/**
+ * Filters a contributions array to those worth displaying: the owning team is
+ * always included; external teams only when their share meets the threshold.
+ * Returns a new array sorted owner-first, then by commit volume descending.
+ *
+ * Contributions may carry any extra fields (teamColor, teamName, …); they are
+ * passed through unchanged so callers can enrich before or after.
+ *
+ * Expected shape of each item: { teamId: string, commits: number, [rest]: any }
+ */
+export function filterSignificantContributions(contributions, owningTeamId, total, threshold) {
+  if (!total || !contributions?.length) return [];
+  return contributions
+    .filter(c => c.teamId === owningTeamId || (c.commits / total) * 100 >= threshold)
+    .slice()
+    .sort((a, b) => {
+      const aOwner = a.teamId === owningTeamId ? 1 : 0;
+      const bOwner = b.teamId === owningTeamId ? 1 : 0;
+      if (aOwner !== bOwner) return bOwner - aOwner;
+      return b.commits - a.commits;
+    });
+}
