@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue';
 import { sameSource, globToRegex, contextForSource as contextForSourceFn, resolveContextId as resolveContextIdFn } from '../domain/contextSources.js';
 import { mergeCommits, mergeDateRanges } from '../domain/commits.js';
 import { parseCSVText } from '../adapters/csv.js';
+import { DEFAULT_VIOLATION_THRESHOLD, DEFAULT_DISPLAY_AUTHORS } from '../config.js';
 
 const STORAGE = {
   teams:            'conwaylens:teams',
@@ -12,6 +13,17 @@ const STORAGE = {
   filterTeamIds:    'conwaylens:filterTeamIds',
   filterContextIds: 'conwaylens:filterContextIds',
   filterAuthorIds:  'conwaylens:filterAuthorIds',
+  vizSettings:      'conwaylens:vizSettings',
+  lenses:           'conwaylens:lenses',
+  activeLensId:     'conwaylens:activeLensId',
+};
+
+const VIZ_DEFAULTS = {
+  graphView:          'swimlane',
+  edgeWeight:         true,
+  violationThreshold: DEFAULT_VIOLATION_THRESHOLD,
+  violatingOnly:      true,
+  displayAuthors:     DEFAULT_DISPLAY_AUTHORS,
 };
 
 const DEFAULT_COLORS  = ['#225EA9', '#088F9B', '#F08223', '#5A4A80', '#C45E0F', '#006B75', '#3A75BA', '#1A9FA9'];
@@ -59,6 +71,16 @@ export const useLensStore = defineStore('lens', () => {
   watch(authorNormalizations, v => localStorage.setItem(STORAGE.normalizations, JSON.stringify(v)), { deep: true });
   watch(ignoredAuthors,       v => localStorage.setItem(STORAGE.ignoredAuthors,  JSON.stringify(v)), { deep: true });
   watch(contexts,             v => localStorage.setItem(STORAGE.contexts,        JSON.stringify(v)), { deep: true });
+
+  const vizSettings = ref(load(STORAGE.vizSettings, { ...VIZ_DEFAULTS }));
+  watch(vizSettings, v => localStorage.setItem(STORAGE.vizSettings, JSON.stringify(v)), { deep: true });
+
+  const lenses       = ref(load(STORAGE.lenses, []));
+  const activeLensId = ref(load(STORAGE.activeLensId, null) || null);
+  watch(lenses,       v => localStorage.setItem(STORAGE.lenses, JSON.stringify(v)));
+  watch(activeLensId, v => localStorage.setItem(STORAGE.activeLensId, JSON.stringify(v)));
+
+  const uiLensOpen = ref(false);
 
   const activeRange = ref({ since: null, until: null });
 
@@ -728,6 +750,88 @@ export const useLensStore = defineStore('lens', () => {
       ignoredAuthors.value = data.ignoredAuthors;
   }
 
+  // ── Named Lenses ─────────────────────────────────────────────────────────────
+
+  function _lensSnapshot() {
+    return {
+      teams:                JSON.parse(JSON.stringify(teams.value)),
+      contexts:             JSON.parse(JSON.stringify(contexts.value)),
+      authorNormalizations: JSON.parse(JSON.stringify(authorNormalizations.value)),
+      ignoredAuthors:       [...ignoredAuthors.value],
+      vizSettings:          { ...vizSettings.value },
+    };
+  }
+
+  function saveLens(name) {
+    const id = Date.now().toString();
+    lenses.value = [...lenses.value, {
+      id,
+      name:      name.trim() || 'Unnamed Lens',
+      createdAt: new Date().toISOString().slice(0, 10),
+      ..._lensSnapshot(),
+    }];
+    activeLensId.value = id;
+    return id;
+  }
+
+  function overwriteLens(id) {
+    lenses.value = lenses.value.map(l =>
+      l.id === id ? { ...l, ..._lensSnapshot() } : l
+    );
+  }
+
+  function loadLens(id) {
+    const lens = lenses.value.find(l => l.id === id);
+    if (!lens) return;
+    importMappings({
+      version: 3,
+      teams:                lens.teams,
+      contexts:             lens.contexts,
+      authorNormalizations: lens.authorNormalizations,
+      ignoredAuthors:       lens.ignoredAuthors,
+    });
+    if (lens.vizSettings) vizSettings.value = { ...VIZ_DEFAULTS, ...lens.vizSettings };
+    activeLensId.value = id;
+  }
+
+  function updateLens(id, patch) {
+    lenses.value = lenses.value.map(l => l.id === id ? { ...l, ...patch } : l);
+  }
+
+  function deleteLens(id) {
+    lenses.value = lenses.value.filter(l => l.id !== id);
+    if (activeLensId.value === id) activeLensId.value = null;
+  }
+
+  function exportLens(id) {
+    const lens = lenses.value.find(l => l.id === id);
+    if (!lens) return null;
+    return JSON.stringify({ ...lens, version: 4 }, null, 2);
+  }
+
+  function importLensFromData(data) {
+    if (!data || typeof data !== 'object' || Array.isArray(data))
+      throw new Error('Invalid lens file — expected a JSON object.');
+    const id = Date.now().toString();
+    const lens = {
+      id,
+      name:                 data.name             ?? 'Imported Lens',
+      createdAt:            data.createdAt        ?? new Date().toISOString().slice(0, 10),
+      teams:                Array.isArray(data.teams)          ? data.teams.map(t => ({ authors: [], contexts: [], ...t })) : [],
+      contexts:             Array.isArray(data.contexts)       ? data.contexts : [],
+      authorNormalizations: (data.authorNormalizations && typeof data.authorNormalizations === 'object' && !Array.isArray(data.authorNormalizations)) ? data.authorNormalizations : {},
+      ignoredAuthors:       Array.isArray(data.ignoredAuthors) ? data.ignoredAuthors : [],
+      vizSettings:          { ...VIZ_DEFAULTS, ...(data.vizSettings ?? {}) },
+    };
+    lenses.value = [...lenses.value, lens];
+    loadLens(id);
+    return id;
+  }
+
+  function resetVizSettings() {
+    vizSettings.value = { ...VIZ_DEFAULTS };
+  }
+
   // Returns {nodes, links} for a single repo: all contributing authors regardless of team.
   function repoContributorsData(repoId) {
     const since = activeRange.value.since;
@@ -880,5 +984,8 @@ export const useLensStore = defineStore('lens', () => {
     ignoreAuthor, unignoreAuthor,
     toggleTeamExpansion,
     exportMappings, importMappings,
+    vizSettings, resetVizSettings,
+    lenses, activeLensId, uiLensOpen,
+    saveLens, overwriteLens, loadLens, updateLens, deleteLens, exportLens, importLensFromData,
   };
 });

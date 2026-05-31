@@ -295,7 +295,6 @@ import { useGraphTooltip } from '../composables/useGraphTooltip.js';
 import { useGraphContextMenu } from '../composables/useGraphContextMenu.js';
 import { useGraphExport } from '../composables/useGraphExport.js';
 import { useGraphFullscreen } from '../composables/useGraphFullscreen.js';
-import { DEFAULT_VIOLATION_THRESHOLD, DEFAULT_DISPLAY_AUTHORS } from '../config.js';
 import { isContextViolating } from '../domain/violations.js';
 
 const store = useLensStore();
@@ -303,6 +302,7 @@ const {
   ownershipGraphData, nodeColors,
   dateBounds, activeRange, syntheticTeam,
   allContexts,
+  vizSettings,
 } = storeToRefs(store);
 
 const effectiveTeams = computed(() =>
@@ -334,19 +334,28 @@ const detailRepoName = computed(() => {
 
 const noFolderData = ref(false);
 
-const VIZ_DEFAULTS = {
-  edgeWeight: true,
-  violationThreshold: DEFAULT_VIOLATION_THRESHOLD,
-  violatingOnly: true,
-  displayAuthors: DEFAULT_DISPLAY_AUTHORS,
-};
+const vizOpen = ref(false);
 
-const vizOpen            = ref(false);
-const graphView          = ref('swimlane'); // 'swimlane' | 'circlepack'
-const edgeWeight         = ref(VIZ_DEFAULTS.edgeWeight);
-const violationThreshold = ref(VIZ_DEFAULTS.violationThreshold);
-const violatingOnly      = ref(VIZ_DEFAULTS.violatingOnly);
-const displayAuthors     = ref(VIZ_DEFAULTS.displayAuthors);
+const graphView = computed({
+  get: () => vizSettings.value.graphView,
+  set: v  => { vizSettings.value = { ...vizSettings.value, graphView: v }; },
+});
+const edgeWeight = computed({
+  get: () => vizSettings.value.edgeWeight,
+  set: v  => { vizSettings.value = { ...vizSettings.value, edgeWeight: v }; },
+});
+const violationThreshold = computed({
+  get: () => vizSettings.value.violationThreshold,
+  set: v  => { vizSettings.value = { ...vizSettings.value, violationThreshold: v }; },
+});
+const violatingOnly = computed({
+  get: () => vizSettings.value.violatingOnly,
+  set: v  => { vizSettings.value = { ...vizSettings.value, violatingOnly: v }; },
+});
+const displayAuthors = computed({
+  get: () => vizSettings.value.displayAuthors,
+  set: v  => { vizSettings.value = { ...vizSettings.value, displayAuthors: v }; },
+});
 
 const violationSummary = computed(() => {
   const threshold = violationThreshold.value;
@@ -356,10 +365,9 @@ const violationSummary = computed(() => {
 });
 
 function resetVizDefaults() {
-  edgeWeight.value         = VIZ_DEFAULTS.edgeWeight;
-  violationThreshold.value = VIZ_DEFAULTS.violationThreshold;
-  violatingOnly.value      = VIZ_DEFAULTS.violatingOnly;
-  displayAuthors.value     = VIZ_DEFAULTS.displayAuthors;
+  const prevView = graphView.value;
+  store.resetVizSettings();
+  if (graphView.value !== prevView) nextTick(() => redraw());
 }
 
 // ── Composables ───────────────────────────────────────────────────────────
