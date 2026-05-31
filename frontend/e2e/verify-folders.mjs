@@ -470,8 +470,8 @@ check('Pending source confirmation shown', await lens.page.locator('.ctx-pending
 await lens.screenshot('out/f13-add-to-context.png');
 
 const ctxCardsBefore = await lens.page.locator('.ctx-card').count();
-await lens.page.locator('.ctx-pending select').selectOption('__new__');
-await lens.page.locator('.ctx-pending input').fill('Backend Bundle');
+await lens.page.locator('.ctx-pending .ctx-target-pill--new').click();
+await lens.page.locator('.ctx-pending .ctx-new-name-input').fill('Backend Bundle');
 await lens.page.locator('.ctx-pending .modal-btn--confirm').click();
 await lens.page.waitForTimeout(400);
 const ctxCardsAfter = await lens.page.locator('.ctx-card').count();
