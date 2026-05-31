@@ -41,21 +41,14 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - name: Start dev server
-        run: npx vite --port 5174 &
-      - name: Wait for dev server
-        run: timeout 30 bash -c 'until curl -sf http://localhost:5174; do sleep 1; done'
       - name: Run e2e
-        run: mkdir -p out && npm run e2e
-        env:
-          PLAYWRIGHT_VIEWPORT_WIDTH: 1024
-          PLAYWRIGHT_VIEWPORT_HEIGHT: 768
-      - name: Upload screenshots
+        run: npx playwright test
+      - name: Upload test report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-screenshots
-          path: frontend/out/*.png
+          name: playwright-report
+          path: frontend/playwright-report/
           retention-days: 7
 
   cli-smoke:
