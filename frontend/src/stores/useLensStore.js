@@ -78,7 +78,7 @@ export const useLensStore = defineStore('lens', () => {
   const lenses       = ref(load(STORAGE.lenses, []));
   const activeLensId = ref(load(STORAGE.activeLensId, null) || null);
   watch(lenses,       v => localStorage.setItem(STORAGE.lenses, JSON.stringify(v)));
-  watch(activeLensId, v => localStorage.setItem(STORAGE.activeLensId, v ?? ''));
+  watch(activeLensId, v => localStorage.setItem(STORAGE.activeLensId, JSON.stringify(v)));
 
   const uiLensOpen = ref(false);
 

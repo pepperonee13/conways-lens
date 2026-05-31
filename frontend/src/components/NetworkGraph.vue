@@ -365,7 +365,9 @@ const violationSummary = computed(() => {
 });
 
 function resetVizDefaults() {
+  const prevView = graphView.value;
   store.resetVizSettings();
+  if (graphView.value !== prevView) nextTick(() => redraw());
 }
 
 // ── Composables ───────────────────────────────────────────────────────────
