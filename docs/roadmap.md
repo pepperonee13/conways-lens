@@ -53,12 +53,7 @@ and map the brand palette to dark equivalents.
 Navigate between views (swimlane ↔ bubbles), reset filters, open/close fullscreen,
 and drill in/out without touching the mouse. A `?` overlay to list shortcuts.
 
-### 9. Export as PNG / SVG ✅ *(shipped)*
-Save the current graph view for presentations. PNG at 2× resolution for retina
-displays; SVG for vector editing. Download button appears in the toolbar when data
-is loaded.
-
-### 10. Shareable URL state
+### 9. Shareable URL state
 Encode the current filters, view mode, date range, and violation threshold in the
 URL hash so a link can be shared with colleagues who have the same dataset loaded.
 
@@ -66,7 +61,8 @@ URL hash so a link can be shared with colleagues who have the same dataset loade
 
 ## Notes
 
-- Items 1–5 would benefit from a lightweight backend; items 6–10 are fully
+- Shipped items are removed from this list and documented in [features.md](features.md).
+- Items 1–5 would benefit from a lightweight backend; items 6–9 are fully
   achievable in the existing browser-only architecture.
 - The extraction CLI (Node.js + PowerShell) is intentionally kept dependency-free;
   any server component should follow the same principle where possible.
