@@ -18,11 +18,11 @@ export class MappingEditorPage {
 
   /**
    * Complete the pending "Add to bounded context" confirmation flow:
-   * selects __new__, fills the context name, and clicks confirm.
+   * clicks the "New context…" pill, fills the context name, and clicks confirm.
    */
   async confirmNewContext(contextName) {
-    await this.page.locator('.ctx-pending select').selectOption('__new__');
-    await this.page.locator('.ctx-pending input').fill(contextName);
+    await this.page.locator('.ctx-pending .ctx-target-pill--new').click();
+    await this.page.locator('.ctx-pending .ctx-new-name-input').fill(contextName);
     await this.page.locator('.ctx-pending .modal-btn--confirm').click();
     await this.page.waitForTimeout(400);
   }
