@@ -123,6 +123,24 @@ export class FolderViewPage {
     await this.page.waitForTimeout(600);
   }
 
+  /** Right-click the first drillable folder (has › indicator). Returns true if found. */
+  async rightClickFirstDrillableFolder() {
+    const target = await this.findFirstDrillableFolder();
+    if (!target) return false;
+    await this.page.mouse.click(target.x, target.y, { button: 'right' });
+    await this.page.waitForTimeout(200);
+    return true;
+  }
+
+  /** Right-click the first leaf folder (no › indicator). Returns true if found. */
+  async rightClickLeafFolder() {
+    const target = await this.findLeafFolder();
+    if (!target) return false;
+    await this.page.mouse.click(target.x, target.y, { button: 'right' });
+    await this.page.waitForTimeout(200);
+    return true;
+  }
+
   async getAuthorCircleCount() {
     return this.page.evaluate(() =>
       Array.from(document.querySelectorAll('svg circle'))
