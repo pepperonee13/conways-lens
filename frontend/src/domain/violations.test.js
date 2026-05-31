@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { exceedsThreshold, isContextViolating } from './violations.js';
+import { exceedsThreshold, isContextViolating, filterSignificantContributions } from './violations.js';
 
 // ── exceedsThreshold ──────────────────────────────────────────────────────────
 
@@ -101,5 +101,38 @@ describe('isContextViolating', () => {
     };
     expect(isContextViolating(ctx, 10)).toBe(true);
     expect(isContextViolating(ctx, 20)).toBe(false);
+  });
+});
+
+// ── filterSignificantContributions ────────────────────────────────────────────
+
+describe('filterSignificantContributions', () => {
+  const owner = 'team-a';
+  const ext   = 'team-b';
+
+  it('always includes the owning team even when below threshold', () => {
+    const result = filterSignificantContributions([{ teamId: owner, commits: 5 }], owner, 100, 10);
+    expect(result.map(r => r.teamId)).toContain(owner);
+  });
+
+  it('includes external teams at or above threshold, excludes those below', () => {
+    const contribs = [
+      { teamId: owner, commits: 80 },
+      { teamId: ext,   commits: 10 }, // exactly 10 % → included
+      { teamId: 'team-c', commits: 9 }, // below → excluded
+    ];
+    const result = filterSignificantContributions(contribs, owner, 100, 10);
+    expect(result.map(r => r.teamId)).toEqual(expect.arrayContaining([owner, ext]));
+    expect(result.find(r => r.teamId === 'team-c')).toBeUndefined();
+  });
+
+  it('places the owning team first, then sorts externals by commit volume descending', () => {
+    const contribs = [
+      { teamId: 'team-c', commits: 20 },
+      { teamId: ext,      commits: 30 },
+      { teamId: owner,    commits: 50 },
+    ];
+    const result = filterSignificantContributions(contribs, owner, 100, 10);
+    expect(result.map(r => r.teamId)).toEqual([owner, ext, 'team-c']);
   });
 });
