@@ -618,6 +618,28 @@ export const useLensStore = defineStore('lens', () => {
     updateContext(id, { sources: (ctx.sources ?? []).filter((_, i) => i !== index) });
   }
 
+  // Move a source from its current context (if any) to a target context.
+  // Used by the context-menu quick-assign path.
+  function moveContextSource(source, targetContextId) {
+    const current = contextForSource(source);
+    if (current) {
+      const idx = current.sources.findIndex(s => sameSource(s, source));
+      if (idx !== -1) removeContextSource(current.id, idx);
+    }
+    addContextSource(targetContextId, source);
+  }
+
+  // Create a new context with a source pre-assigned, evicting it from any
+  // existing context first. Used by the "Create new context" panel flow.
+  function createContextWithSource(name, source) {
+    const current = contextForSource(source);
+    if (current) {
+      const idx = current.sources.findIndex(s => sameSource(s, source));
+      if (idx !== -1) removeContextSource(current.id, idx);
+    }
+    return addContext(name, [source]);
+  }
+
   // ── Right-click "Add to bounded context" hand-off ───────────────────────────
   // A node's context menu records the source here; MappingEditor watches it,
   // opens the Bounded Contexts tab, and lets the user confirm the target.
@@ -978,6 +1000,7 @@ export const useLensStore = defineStore('lens', () => {
     loadCommits, loadSimulatedData, clearData,
     addTeam, removeTeam,
     addContext, removeContext, updateContext, addContextSource, removeContextSource, contextForSource,
+    moveContextSource, createContextWithSource,
     pendingContextSource, beginAddToContext, clearPendingContextSource,
     setFilterTeam, setFilterContext, setFilterAuthor, clearAllFilters,
     setNormalization, removeNormalization,
