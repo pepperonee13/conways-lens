@@ -291,6 +291,10 @@ import { useCirclePackGraph } from '../composables/graphs/useCirclePackGraph.js'
 import { useRepoDetailGraph } from '../composables/graphs/useRepoDetailGraph.js';
 import { useRepoFolderGraph } from '../composables/graphs/useRepoFolderGraph.js';
 import { useAnonymize } from '../composables/useAnonymize.js';
+import { useGraphTooltip } from '../composables/useGraphTooltip.js';
+import { useGraphContextMenu } from '../composables/useGraphContextMenu.js';
+import { useGraphExport } from '../composables/useGraphExport.js';
+import { useGraphFullscreen } from '../composables/useGraphFullscreen.js';
 import { DEFAULT_VIOLATION_THRESHOLD, DEFAULT_DISPLAY_AUTHORS } from '../config.js';
 import { isContextViolating } from '../domain/violations.js';
 
@@ -305,24 +309,21 @@ const effectiveTeams = computed(() =>
   syntheticTeam.value ? [...store.teams, syntheticTeam.value] : store.teams
 );
 
-const svgRef        = ref(null);
-const detailSvgRef  = ref(null);
-const containerRef  = ref(null);
-const vizDropRef    = ref(null);
-const dims          = reactive({ w: 900, h: 600 });
-const detailRepoId  = ref(null); // holds the context ID of the detail view
-const folderPath    = ref(null); // null = author view, [] = folder root, ['src'] = inside src/, etc.
+const svgRef       = ref(null);
+const detailSvgRef = ref(null);
+const containerRef = ref(null);
+const vizDropRef   = ref(null);
+const dims         = reactive({ w: 900, h: 600 });
+const detailRepoId = ref(null);
+const folderPath   = ref(null); // null = author view, [] = folder root, ['src'] = inside src/
 
-// Resolves the context's display name for the detail header.
 const detailContextName = computed(() => {
   const id = detailRepoId.value;
   if (!id) return null;
   return allContexts.value.find(c => c.id === id)?.name ?? id;
 });
 
-// Resolves the first concrete repo name for folder-mode functions.
-// Accepts any source type (repo/path/glob) so path- and glob-sourced contexts work too.
-// For auto-contexts (id === repoName) this returns the id unchanged.
+// Accepts any source type (repo/path/glob); for auto-contexts (id === repoName) returns id.
 const detailRepoName = computed(() => {
   const id = detailRepoId.value;
   if (!id) return null;
@@ -330,7 +331,8 @@ const detailRepoName = computed(() => {
   const src = (ctx?.sources ?? []).find(s => s.repo);
   return src?.repo ?? id;
 });
-const noFolderData  = ref(false); // true when repo has no FilePath data — suppresses blank folder view
+
+const noFolderData = ref(false);
 
 const VIZ_DEFAULTS = {
   edgeWeight: true,
@@ -340,9 +342,6 @@ const VIZ_DEFAULTS = {
 };
 
 const vizOpen            = ref(false);
-const exportOpen         = ref(false);
-const exportDropRef      = ref(null);
-const isFullscreen       = ref(false);
 const graphView          = ref('swimlane'); // 'swimlane' | 'circlepack'
 const edgeWeight         = ref(VIZ_DEFAULTS.edgeWeight);
 const violationThreshold = ref(VIZ_DEFAULTS.violationThreshold);
@@ -351,15 +350,10 @@ const displayAuthors     = ref(VIZ_DEFAULTS.displayAuthors);
 
 const violationSummary = computed(() => {
   const threshold = violationThreshold.value;
-  const contexts = ownershipGraphData.value.nodes.filter(n => n.type === 'context');
+  const contexts  = ownershipGraphData.value.nodes.filter(n => n.type === 'context');
   const violating = contexts.filter(r => isContextViolating(r, threshold)).length;
   return { violating, total: contexts.length };
 });
-
-function toggleFullscreen() {
-  isFullscreen.value = !isFullscreen.value;
-  nextTick(() => updateSize());
-}
 
 function resetVizDefaults() {
   edgeWeight.value         = VIZ_DEFAULTS.edgeWeight;
@@ -368,159 +362,15 @@ function resetVizDefaults() {
   displayAuthors.value     = VIZ_DEFAULTS.displayAuthors;
 }
 
-function triggerDownload(url, filename) {
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-}
+// ── Composables ───────────────────────────────────────────────────────────
 
-async function exportAs(format) {
-  exportOpen.value = false;
-  const el = detailRepoId.value ? detailSvgRef.value : svgRef.value;
-  if (!el) return;
+const { isFullscreen, toggleFullscreen } = useGraphFullscreen({ containerRef, dims });
 
-  // Clone and ensure white background + xmlns for standalone export
-  const clone = el.cloneNode(true);
-  clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-  const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-  bg.setAttribute('width', '100%');
-  bg.setAttribute('height', '100%');
-  bg.setAttribute('fill', '#ffffff');
-  clone.insertBefore(bg, clone.firstChild);
-
-  const svgStr = new XMLSerializer().serializeToString(clone);
-  const stamp  = new Date().toISOString().slice(0, 10);
-  const name   = `conways-lens-${stamp}`;
-
-  if (format === 'svg') {
-    const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
-    const url  = URL.createObjectURL(blob);
-    triggerDownload(url, `${name}.svg`);
-    URL.revokeObjectURL(url);
-    return;
-  }
-
-  // PNG — render at 2× for retina clarity
-  const w = Number(el.getAttribute('width'))  || dims.w;
-  const h = Number(el.getAttribute('height')) || dims.h;
-  const canvas = document.createElement('canvas');
-  canvas.width  = w * 2;
-  canvas.height = h * 2;
-  const ctx = canvas.getContext('2d');
-  ctx.scale(2, 2);
-
-  const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
-  const url  = URL.createObjectURL(blob);
-  const img  = new Image();
-  img.onload = () => {
-    ctx.drawImage(img, 0, 0);
-    URL.revokeObjectURL(url);
-    triggerDownload(canvas.toDataURL('image/png'), `${name}.png`);
-  };
-  img.src = url;
-}
-
-const tooltip = reactive({
-  show: false, x: 0, y: 0, anchorRight: false,
-  isLink: false,
-  name: '', type: '', commits: 0, pct: null,
-  teamName: '', contextCount: 0, authorCount: 0,
-  source: '', target: '', action: '',
-  contributions: [], owningTeamId: null,
-  authorContributions: null,
-  folderFullPath: null,
-  folderLastCommit: null,
-  context: '',
-  contribsLabel: null,
-  teamInboundBreakdown: null,
-  teamOutboundBreakdown: null,
-  repoBreakdown: null,
+const { exportOpen, exportDropRef, exportAs } = useGraphExport({
+  svgRef, detailSvgRef, detailRepoId, dims,
 });
-
-const tooltipName = computed(() => {
-  if (tooltip.type === 'team' || tooltip.type === 'team-collapsed') return tooltip.teamName;
-  if (tooltip.type === 'author') return anonMap.value[tooltip.name] ?? tooltip.name;
-  if (tooltip.type === 'context') return allContexts.value.find(c => c.id === tooltip.name)?.name ?? tooltip.name;
-  return tooltip.name;
-});
-
-const tooltipDetail = computed(() => {
-  const c = tooltip.commits.toLocaleString();
-  if (tooltip.type === 'team')
-    return `Team · ${tooltip.contextCount} ${tooltip.contextCount === 1 ? 'context' : 'contexts'} · ${tooltip.authorCount} ${tooltip.authorCount === 1 ? 'dev' : 'devs'} · ${c} commits`;
-  if (tooltip.type === 'team-collapsed') {
-    const devs = tooltip.authorCount;
-    const commitLabel = tooltip.context === 'folder' ? `${c} commits at this level` : `${c} commits`;
-    return `${devs} ${devs === 1 ? 'dev' : 'devs'} · ${commitLabel} · click to expand`;
-  }
-  if (tooltip.type === 'folder') {
-    return `${c} commits`;
-  }
-  if (tooltip.type === 'context') {
-    const owningTeam = tooltip.owningTeamId
-      ? effectiveTeams.value.find(t => t.id === tooltip.owningTeamId)?.name
-      : null;
-    return owningTeam ? `${c} commits · ${owningTeam}` : `${c} commits`;
-  }
-  const team = tooltip.teamName ? ` · ${tooltip.teamName}` : '';
-  const pctStr = tooltip.pct != null
-    ? (tooltip.context === 'folder' ? `${tooltip.pct}% of this level's commits` : `${tooltip.pct}%`)
-    : `${c} commits`;
-  return `${pctStr}${team}`;
-});
-
-const tooltipContributions = computed(() => {
-  if (tooltip.type !== 'context') return [];
-  const total = tooltip.commits || 0;
-  if (!total) return [];
-  const threshold = violationThreshold.value;
-  return tooltip.contributions
-    .filter(c =>
-      c.teamId === tooltip.owningTeamId || (c.commits / total) * 100 >= threshold
-    )
-    .map(c => ({
-      teamId: c.teamId,
-      teamColor: c.teamColor,
-      teamName: effectiveTeams.value.find(t => t.id === c.teamId)?.name ?? c.teamId,
-      commits: c.commits,
-      pct: ((c.commits / total) * 100).toFixed(1).replace(/\.0$/, ''),
-    })).sort((a, b) => {
-      const aOwner = a.teamId === tooltip.owningTeamId ? 1 : 0;
-      const bOwner = b.teamId === tooltip.owningTeamId ? 1 : 0;
-      if (aOwner !== bOwner) return bOwner - aOwner;
-      return b.commits - a.commits;
-    });
-});
-
-const MAX_TOOLTIP_AUTHORS = 3;
-const tooltipDisplayedAuthors = computed(() =>
-  (tooltip.authorContributions ?? []).slice(0, MAX_TOOLTIP_AUTHORS)
-);
-const tooltipHiddenAuthorCount = computed(() =>
-  Math.max(0, (tooltip.authorContributions?.length ?? 0) - MAX_TOOLTIP_AUTHORS)
-);
-
-function teamNameById(id) {
-  return effectiveTeams.value.find(t => t.id === id)?.name ?? id;
-}
-function teamColorById(id) {
-  return effectiveTeams.value.find(t => t.id === id)?.color ?? '#9CA3AF';
-}
-
-function displayNodeName(id) {
-  if (!id) return '';
-  if (id.startsWith('team:')) {
-    const teamId = id.slice(5);
-    return effectiveTeams.value.find(t => t.id === teamId)?.name ?? id;
-  }
-  return allContexts.value.find(c => c.id === id)?.name ?? id;
-}
 
 const { anonymize } = useAnonymize();
-
 const anonMap = computed(() => {
   const map = {};
   for (const node of ownershipGraphData.value.nodes) {
@@ -533,7 +383,23 @@ const anonMap = computed(() => {
   return map;
 });
 
-// ── Renderer ──────────────────────────────────────────────────────────────
+const {
+  tooltip,
+  tooltipName, tooltipDetail, tooltipContributions,
+  tooltipDisplayedAuthors, tooltipHiddenAuthorCount,
+  teamNameById, teamColorById, displayNodeName,
+} = useGraphTooltip({ effectiveTeams, allContexts, anonMap, violationThreshold });
+
+const {
+  contextMenu,
+  closeContextMenu,
+  openContextMenuForContextNode,
+  openContextMenuForFolderNode,
+  confirmAddToContext,
+} = useGraphContextMenu({ store, detailRepoName });
+
+// ── Renderers ─────────────────────────────────────────────────────────────
+
 const renderer = useSwimlaneGraph({
   svgRef,
   effectiveTeams,
@@ -567,7 +433,6 @@ const renderer = useSwimlaneGraph({
   violatingOnly,
 });
 
-// ── Circle pack renderer ──────────────────────────────────────────────────
 const circlePackRenderer = useCirclePackGraph({
   svgRef,
   effectiveTeams,
@@ -596,7 +461,6 @@ const circlePackRenderer = useCirclePackGraph({
   edgeWeight,
 });
 
-// ── Detail (repo contributor radial) renderer ────────────────────────────
 const detailRenderer = useRepoDetailGraph({
   svgRef: detailSvgRef,
   effectiveTeams,
@@ -626,7 +490,6 @@ const detailRenderer = useRepoDetailGraph({
   edgeWeight,
 });
 
-// ── Folder drill-down renderer ────────────────────────────────────────────
 const folderRenderer = useRepoFolderGraph({
   svgRef: detailSvgRef,
   effectiveTeams,
@@ -661,38 +524,7 @@ const folderRenderer = useRepoFolderGraph({
   edgeWeight,
 });
 
-// ── Right-click "Add to bounded context" menu ──────────────────────────────
-// Node context menus record a source; confirming hands it to the store, which
-// the MappingEditor watches to open its Bounded Contexts tab for confirmation.
-const contextMenu = reactive({ show: false, x: 0, y: 0, label: '', source: null, reason: '' });
-function closeContextMenu() { contextMenu.show = false; }
-function openContextMenuForContextNode(d, e) {
-  e.preventDefault();
-  // Only auto-contexts (id === repo name, not in the user-defined list) back a
-  // single repo and can be folded into another context.
-  const isUserDefined = store.contexts.some(c => c.id === d.id);
-  Object.assign(contextMenu, {
-    show: true, x: e.clientX, y: e.clientY,
-    label: d.name ?? d.id,
-    source: isUserDefined ? null : { type: 'repo', repo: d.id },
-    reason: isUserDefined ? 'Already a bounded context' : '',
-  });
-}
-function openContextMenuForFolderNode(d, e) {
-  e.preventDefault();
-  const repo = detailRepoName.value;
-  const path = d.fullPath ?? d.folderFullPath ?? d.id;
-  Object.assign(contextMenu, {
-    show: true, x: e.clientX, y: e.clientY,
-    label: repo ? `${repo} / ${path}` : path,
-    source: repo ? { type: 'path', repo, path } : null,
-    reason: repo ? '' : 'Unknown repository',
-  });
-}
-function confirmAddToContext() {
-  if (contextMenu.source) store.beginAddToContext(contextMenu.source, contextMenu.label);
-  closeContextMenu();
-}
+// ── Navigation ────────────────────────────────────────────────────────────
 
 function openDetail(contextId) {
   folderRenderer.teardown();
@@ -750,6 +582,8 @@ function redrawFolder() {
   folderRenderer.draw({ dims, data });
 }
 
+// ── Render ────────────────────────────────────────────────────────────────
+
 function redraw() {
   if (graphView.value === 'circlepack') {
     renderer.teardown();
@@ -789,53 +623,19 @@ watch(violationThreshold, () => {
 });
 watch(violatingOnly, () => redraw());
 
-// ── Resize ────────────────────────────────────────────────────────────────
-
-function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
-
-function updateSize() {
-  if (isFullscreen.value) {
-    const pad    = 24; // 12px each side
-    const headerEl = containerRef.value?.querySelector('.graph-header');
-    const headerH  = headerEl ? headerEl.getBoundingClientRect().height : 56;
-    dims.w = window.innerWidth  - pad;
-    dims.h = window.innerHeight - headerH - pad;
-    return;
-  }
-  if (!containerRef.value) return;
-  const r = containerRef.value.getBoundingClientRect();
-  dims.w = Math.max(500, r.width - 48);
-  dims.h = Math.max(400, Math.min(800, dims.w * 0.65));
-}
+// ── Lifecycle ─────────────────────────────────────────────────────────────
 
 function handleDocClick(e) {
-  if (vizOpen.value    && vizDropRef.value    && !vizDropRef.value.contains(e.target))
+  if (vizOpen.value && vizDropRef.value && !vizDropRef.value.contains(e.target))
     vizOpen.value = false;
-  if (exportOpen.value && exportDropRef.value && !exportDropRef.value.contains(e.target))
-    exportOpen.value = false;
 }
 
-function handleKeyDown(e) {
-  if (e.key === 'Escape' && isFullscreen.value) {
-    isFullscreen.value = false;
-    nextTick(() => updateSize());
-  }
-}
-
-onMounted(() => {
-  updateSize();
-  const onResize = debounce(updateSize, 150);
-  window.addEventListener('resize', onResize);
-  document.addEventListener('mousedown', handleDocClick);
-  document.addEventListener('keydown', handleKeyDown);
-  onBeforeUnmount(() => {
-    window.removeEventListener('resize', onResize);
-    document.removeEventListener('mousedown', handleDocClick);
-    document.removeEventListener('keydown', handleKeyDown);
-    renderer.teardown();
-    circlePackRenderer.teardown();
-    detailRenderer.teardown();
-  });
+onMounted(() => document.addEventListener('mousedown', handleDocClick));
+onBeforeUnmount(() => {
+  document.removeEventListener('mousedown', handleDocClick);
+  renderer.teardown();
+  circlePackRenderer.teardown();
+  detailRenderer.teardown();
 });
 </script>
 
