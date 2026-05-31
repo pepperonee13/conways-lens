@@ -36,18 +36,22 @@ this for async reviews.
 
 ## Lower-hanging fruit
 
-### 6. Dark mode
+### 6. Named lenses (client / project profiles)
+Save the complete configuration — teams, bounded contexts, author aliases, ignored
+authors, and active visualisation settings — under a named lens. The name is a
+natural fit: each client or project gets its own lens on its codebase. A lens
+picker in the toolbar lets consultants or architects switch between client projects
+instantly without exporting and re-importing JSON. Lenses are stored in
+`localStorage` alongside the current data, so no backend is required; individual
+lenses can still be exported as JSON for sharing or backup.
+
+### 7. Dark mode
 Tailwind already supports `dark:` variants throughout the codebase. Wire up a toggle
 and map the brand palette to dark equivalents.
 
-### 7. Keyboard shortcuts
+### 8. Keyboard shortcuts
 Navigate between views (swimlane ↔ bubbles), reset filters, open/close fullscreen,
 and drill in/out without touching the mouse. A `?` overlay to list shortcuts.
-
-### 8. Export as PNG / SVG ✅ *(shipped)*
-Save the current graph view for presentations. PNG at 2× resolution for retina
-displays; SVG for vector editing. Download button appears in the toolbar when data
-is loaded.
 
 ### 9. Shareable URL state
 Encode the current filters, view mode, date range, and violation threshold in the
@@ -57,6 +61,7 @@ URL hash so a link can be shared with colleagues who have the same dataset loade
 
 ## Notes
 
+- Shipped items are removed from this list and documented in [features.md](features.md).
 - Items 1–5 would benefit from a lightweight backend; items 6–9 are fully
   achievable in the existing browser-only architecture.
 - The extraction CLI (Node.js + PowerShell) is intentionally kept dependency-free;

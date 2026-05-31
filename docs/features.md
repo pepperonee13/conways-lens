@@ -78,6 +78,8 @@ see the [README](../README.md); for internals see [architecture.md](architecture
 - Show or hide the per-context author list in tooltips.
 - Reset all visualization settings to their defaults.
 - Enter fullscreen for presentations or large datasets.
+- Export the current graph view as a PNG (2× resolution for retina displays) or an
+  SVG for vector editing — a download button appears in the toolbar when data is loaded.
 
 ## Filtering
 
