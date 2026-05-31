@@ -154,18 +154,18 @@ foreach ($repo in $repos) {
                 $rows.Add([pscustomobject]@{
                     Date          = $currentCommit.Date
                     DateTime      = $currentCommit.DateStr
-                    Product       = $repoName
+                    RepoName      = $repoName
+                    RepoUrl       = $repoUrl
                     Author        = $currentCommit.Author
-                    ChangesetId   = $currentCommit.Hash
+                    CommitHash    = $currentCommit.Hash
                     ChangeType    = $changeType
                     FilePath      = $filePath
-                    Source        = 'git'
                     CommitMessage = $currentCommit.Message
                 })
             }
         }
 
-        Write-Host "    Done — $($rows | Where-Object { $_.Product -eq $repoName } | Measure-Object | Select-Object -ExpandProperty Count) file-commit rows extracted." -ForegroundColor Green
+        Write-Host "    Done — $($rows | Where-Object { $_.RepoName -eq $repoName } | Measure-Object | Select-Object -ExpandProperty Count) file-commit rows extracted." -ForegroundColor Green
     } finally {
         Pop-Location
     }
