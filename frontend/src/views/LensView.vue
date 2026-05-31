@@ -11,6 +11,15 @@
         <span class="brand-tagline">Team boundary analysis via git history</span>
       </div>
       <div class="header-right">
+        <button
+          v-if="activeLensName"
+          class="active-lens-chip"
+          @click="store.uiLensOpen = true"
+          :title="`Active lens: ${activeLensName}`"
+        >
+          <Layers :size="13" />
+          <span class="truncate">{{ activeLensName }}</span>
+        </button>
         <div v-if="dateInfo" class="date-info">
           <span class="date-info-label">Data range:</span>
           <span class="date-info-value">{{ dateInfo.since }} → {{ dateInfo.until }}</span>
@@ -113,6 +122,7 @@
 
     <MappingEditor />
     <FilterPanel />
+    <LensManager />
 
     <!-- Sim overwrite confirmation dialog -->
     <teleport to="body">
@@ -142,18 +152,23 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useLensStore } from '../stores/useLensStore';
 import NetworkGraph from '../components/NetworkGraph.vue';
 import MappingEditor from '../components/MappingEditor.vue';
 import FilterPanel from '../components/FilterPanel.vue';
+import LensManager from '../components/LensManager.vue';
 import {
-  FolderOpen, Inbox, FlaskConical, Plus, RefreshCw, FileText, Download,
+  FolderOpen, Inbox, FlaskConical, Plus, RefreshCw, FileText, Download, Layers,
 } from '@lucide/vue';
 
 const store = useLensStore();
-const { dataLoaded, dataError, dateInfo, teams } = storeToRefs(store);
+const { dataLoaded, dataError, dateInfo, teams, lenses, activeLensId } = storeToRefs(store);
+
+const activeLensName = computed(() =>
+  lenses.value.find(l => l.id === activeLensId.value)?.name ?? null
+);
 
 const loadedFilenames = ref([]);
 const isDragOver = ref(false);
@@ -310,6 +325,12 @@ function onAppDrop(event) {
 
 .filename-chip {
   @apply inline-flex items-center gap-1.5 text-xs text-gray-500 bg-gray-100 border border-gray-200 rounded-full px-3 py-1 max-w-[200px];
+}
+
+.active-lens-chip {
+  @apply inline-flex items-center gap-1.5 text-xs font-semibold text-brand-teal
+         bg-teal-50 border border-brand-teal/30 rounded-full px-3 py-1 max-w-[160px]
+         cursor-pointer hover:bg-teal-100 transition-colors duration-150;
 }
 
 .new-scenario-btn {
