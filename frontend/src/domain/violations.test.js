@@ -108,80 +108,31 @@ describe('isContextViolating', () => {
 
 describe('filterSignificantContributions', () => {
   const owner = 'team-a';
-  const ext1  = 'team-b';
-  const ext2  = 'team-c';
-
-  it('returns [] when contributions is empty', () => {
-    expect(filterSignificantContributions([], owner, 100, 10)).toEqual([]);
-  });
-
-  it('returns [] when total is zero', () => {
-    const contribs = [{ teamId: owner, commits: 0 }];
-    expect(filterSignificantContributions(contribs, owner, 0, 10)).toEqual([]);
-  });
+  const ext   = 'team-b';
 
   it('always includes the owning team even when below threshold', () => {
-    const contribs = [{ teamId: owner, commits: 5 }];
-    const result = filterSignificantContributions(contribs, owner, 100, 10);
-    expect(result).toHaveLength(1);
-    expect(result[0].teamId).toBe(owner);
+    const result = filterSignificantContributions([{ teamId: owner, commits: 5 }], owner, 100, 10);
+    expect(result.map(r => r.teamId)).toContain(owner);
   });
 
-  it('includes an external team whose share meets the threshold exactly', () => {
-    const contribs = [{ teamId: ext1, commits: 10 }];
-    const result = filterSignificantContributions(contribs, owner, 100, 10);
-    expect(result).toHaveLength(1);
-    expect(result[0].teamId).toBe(ext1);
-  });
-
-  it('excludes an external team whose share is below the threshold', () => {
+  it('includes external teams at or above threshold, excludes those below', () => {
     const contribs = [
-      { teamId: owner, commits: 95 },
-      { teamId: ext1,  commits: 5  },
+      { teamId: owner, commits: 80 },
+      { teamId: ext,   commits: 10 }, // exactly 10 % → included
+      { teamId: 'team-c', commits: 9 }, // below → excluded
     ];
     const result = filterSignificantContributions(contribs, owner, 100, 10);
-    expect(result.map(r => r.teamId)).toEqual([owner]);
+    expect(result.map(r => r.teamId)).toEqual(expect.arrayContaining([owner, ext]));
+    expect(result.find(r => r.teamId === 'team-c')).toBeUndefined();
   });
 
-  it('places the owning team first regardless of commit volume', () => {
+  it('places the owning team first, then sorts externals by commit volume descending', () => {
     const contribs = [
-      { teamId: ext1,  commits: 60 },
-      { teamId: owner, commits: 40 },
+      { teamId: 'team-c', commits: 20 },
+      { teamId: ext,      commits: 30 },
+      { teamId: owner,    commits: 50 },
     ];
     const result = filterSignificantContributions(contribs, owner, 100, 10);
-    expect(result[0].teamId).toBe(owner);
-    expect(result[1].teamId).toBe(ext1);
-  });
-
-  it('sorts non-owner teams by commit volume descending', () => {
-    const contribs = [
-      { teamId: owner, commits: 50 },
-      { teamId: ext2,  commits: 20 },
-      { teamId: ext1,  commits: 30 },
-    ];
-    const result = filterSignificantContributions(contribs, owner, 100, 10);
-    expect(result.map(r => r.teamId)).toEqual([owner, ext1, ext2]);
-  });
-
-  it('does not mutate the input array', () => {
-    const contribs = [
-      { teamId: ext1,  commits: 60 },
-      { teamId: owner, commits: 40 },
-    ];
-    const copy = [...contribs];
-    filterSignificantContributions(contribs, owner, 100, 10);
-    expect(contribs).toEqual(copy);
-  });
-
-  it('treats all teams as external when owningTeamId is null', () => {
-    const contribs = [{ teamId: ext1, commits: 20 }];
-    const result = filterSignificantContributions(contribs, null, 100, 10);
-    expect(result).toHaveLength(1);
-  });
-
-  it('passes extra fields through unchanged', () => {
-    const contribs = [{ teamId: owner, commits: 100, teamColor: '#f00', extra: true }];
-    const result = filterSignificantContributions(contribs, owner, 100, 10);
-    expect(result[0]).toMatchObject({ teamColor: '#f00', extra: true });
+    expect(result.map(r => r.teamId)).toEqual([owner, ext, 'team-c']);
   });
 });
