@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
     Clones/updates the git repositories defined in repos.json and extracts
-    commit history into TimelineData.csv for ConwayLens.
+    commit history into CommitHistory.csv for ConwayLens.
 
 .PARAMETER Since
     Start date for history extraction (default: 1 year ago). Format: YYYY-MM-DD
@@ -35,7 +35,7 @@ $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
-$OutputFile  = Join-Path $PSScriptRoot '..\app\public\TimelineData.csv'
+$OutputFile  = Join-Path $PSScriptRoot '..\app\public\CommitHistory.csv'
 
 
 # ---------------------------------------------------------------------------

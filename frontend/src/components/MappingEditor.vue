@@ -306,6 +306,9 @@
                 @keyup.enter="canConfirmPending && confirmPending()"
               />
             </div>
+            <p v-if="pendingSourceConflict" class="ctx-conflict">
+              Already assigned to <strong>{{ pendingSourceConflict.name }}</strong>
+            </p>
             <div class="ctx-pending-actions">
               <button class="modal-btn modal-btn--confirm" :disabled="!canConfirmPending" @click="confirmPending">
                 Add source
@@ -351,6 +354,9 @@
                 v-if="draftSource[c.id].type === 'glob'"
                 v-model="draftSource[c.id].pattern" class="ctx-input-sm" placeholder="e.g. **/*.sql" />
               <button class="available-pill" :disabled="!canAddSource(c.id)" @click="addSourceFromDraft(c.id)">+ source</button>
+              <span v-if="draftConflict(c.id)" class="ctx-conflict ctx-conflict--inline">
+                Already in <strong>{{ draftConflict(c.id).name }}</strong>
+              </span>
             </div>
           </div>
 
@@ -674,19 +680,23 @@ watch(contexts, (list) => {
   for (const c of list) if (!(c.id in draftSource)) draftSource[c.id] = freshDraft();
 }, { immediate: true, deep: false });
 
-function canAddSource(id) {
+function draftToSource(id) {
   const d = draftSource[id];
-  if (!d || !d.repo) return false;
-  if (d.type === 'path') return !!d.path.trim();
-  if (d.type === 'glob') return !!d.pattern.trim();
-  return true;
+  if (!d || !d.repo) return null;
+  if (d.type === 'path') return d.path.trim() ? { type: 'path', repo: d.repo, path: d.path.trim() } : null;
+  if (d.type === 'glob') return d.pattern.trim() ? { type: 'glob', repo: d.repo, pattern: d.pattern.trim() } : null;
+  return { type: 'repo', repo: d.repo };
+}
+function draftConflict(id) {
+  const src = draftToSource(id);
+  return src ? store.contextForSource(src) : null;
+}
+function canAddSource(id) {
+  return !!draftToSource(id) && !draftConflict(id);
 }
 function addSourceFromDraft(id) {
-  const d = draftSource[id];
-  if (!canAddSource(id)) return;
-  const source = d.type === 'path' ? { type: 'path', repo: d.repo, path: d.path.trim() }
-    : d.type === 'glob' ? { type: 'glob', repo: d.repo, pattern: d.pattern.trim() }
-    : { type: 'repo', repo: d.repo };
+  const source = draftToSource(id);
+  if (!source || !canAddSource(id)) return;
   store.addContextSource(id, source);
   draftSource[id] = freshDraft();
 }
@@ -694,8 +704,12 @@ function addSourceFromDraft(id) {
 // Right-click "Add to bounded context" hand-off.
 const pendingTarget  = ref('__new__');
 const pendingNewName = ref('');
+const pendingSourceConflict = computed(() => {
+  const p = pendingContextSource.value;
+  return p ? store.contextForSource(p.source) : null;
+});
 const canConfirmPending = computed(
-  () => pendingTarget.value !== '__new__' || pendingNewName.value.trim().length > 0
+  () => !pendingSourceConflict.value && (pendingTarget.value !== '__new__' || pendingNewName.value.trim().length > 0)
 );
 watch(pendingContextSource, (p) => {
   if (!p) return;
@@ -859,6 +873,8 @@ async function handleImport(e) {
 .ctx-pending-title code { @apply font-mono bg-white px-1.5 py-0.5 rounded border border-gray-200; }
 .ctx-pending-row { @apply flex items-center gap-2; }
 .ctx-pending-actions { @apply flex items-center gap-2 justify-end; }
+.ctx-conflict { @apply text-xs text-red-600; }
+.ctx-conflict--inline { @apply w-full; }
 
 .teams-list { @apply flex flex-col gap-4; }
 .team-card { @apply bg-gray-50 border border-gray-200 rounded-xl p-4; }

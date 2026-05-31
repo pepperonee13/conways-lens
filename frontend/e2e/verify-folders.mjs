@@ -10,7 +10,7 @@ function check(label, cond, detail = '') {
   else       { console.log(`  ❌ ${label}${detail ? ` — ${detail}` : ''}`); failed++; }
 }
 
-await lens.loadCSV('e2e/TimelineData.csv');
+await lens.loadCSV('e2e/CommitHistory.csv');
 await lens.importMappings('e2e/mappings.json');
 await lens.page.waitForTimeout(600);
 await lens.screenshot('out/f00-swimlane.png');

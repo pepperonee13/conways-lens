@@ -1,6 +1,7 @@
 import * as d3 from 'd3';
 import { EDGE, NODE, ARROW, TOOLTIP_OFFSET, NODE_LABEL_OFFSET, REPO_DETAIL } from './graphConstants.js';
 import { calcEdgeWidth, toPct } from './graphUtils.js';
+import { exceedsThreshold } from '../../domain/violations.js';
 
 /**
  * Radial repo-detail graph: one repo at center, contributing authors around it.
@@ -149,11 +150,11 @@ export function useRepoDetailGraph({
 
     const threshold = violationThreshold?.value ?? 0;
     const groups = Object.values(teamGroups).filter(g =>
-      g.team.id === repoOwningTeamId || (g.totalCommits / repoTotal) * 100 >= threshold
+      g.team.id === repoOwningTeamId || exceedsThreshold(g.totalCommits, repoTotal, threshold)
     );
     if (unassigned.length) {
-      const uPct = (unassigned.reduce((s, a) => s + (a.commits ?? 0), 0) / repoTotal) * 100;
-      if (uPct >= threshold) groups.push({ team: null, authors: unassigned, totalCommits: uPct * repoTotal / 100 });
+      const uTotal = unassigned.reduce((s, a) => s + (a.commits ?? 0), 0);
+      if (exceedsThreshold(uTotal, repoTotal, threshold)) groups.push({ team: null, authors: unassigned, totalCommits: uTotal });
     }
 
     // ── Layout ───────────────────────────────────────────────────────────────
@@ -485,7 +486,7 @@ export function useRepoDetailGraph({
         .attr('text-anchor', 'middle').attr('dy', REPO_R + NODE_LABEL_OFFSET)
         .attr('fill', NODE.LABEL_COLOR).attr('font-size', NODE.LABEL_SIZE_SM).attr('font-weight', '600')
         .attr('pointer-events', 'none')
-        .text(repoNode.id);
+        .text(repoNode.name ?? repoNode.id);
     }
   }
 

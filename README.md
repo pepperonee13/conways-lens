@@ -39,7 +39,7 @@ node cli/extract-git-history.mjs --repos team-a-repos.json --output team-a.csv
 ```
 
 Clones in parallel (default `--concurrency 4`, no npm dependencies needed). Output defaults to
-`frontend/public/TimelineData-<reposFileName>.csv`, so different team configs produce different files
+`frontend/public/CommitHistory-<reposFileName>.csv`, so different team configs produce different files
 that can be merged in the frontend (see step 5).
 
 **PowerShell (Windows, sequential):**
@@ -98,7 +98,7 @@ Use the **Filters** panel to narrow the graph to specific teams, contexts, or au
 
 ## Output
 
-Both extraction scripts produce a `TimelineData` CSV with one row per file per commit:
+Both extraction scripts produce a `CommitHistory` CSV with one row per file per commit:
 
 | Column | Description |
 |---|---|

@@ -276,6 +276,7 @@ import { useRepoDetailGraph } from '../composables/graphs/useRepoDetailGraph.js'
 import { useRepoFolderGraph } from '../composables/graphs/useRepoFolderGraph.js';
 import { useAnonymize } from '../composables/useAnonymize.js';
 import { DEFAULT_VIOLATION_THRESHOLD, DEFAULT_DISPLAY_AUTHORS } from '../config.js';
+import { isContextViolating } from '../domain/violations.js';
 
 const store = useLensStore();
 const {
@@ -303,14 +304,15 @@ const detailContextName = computed(() => {
   return allContexts.value.find(c => c.id === id)?.name ?? id;
 });
 
-// Resolves the first concrete repo name for drill-down functions.
+// Resolves the first concrete repo name for folder-mode functions.
+// Accepts any source type (repo/path/glob) so path- and glob-sourced contexts work too.
 // For auto-contexts (id === repoName) this returns the id unchanged.
 const detailRepoName = computed(() => {
   const id = detailRepoId.value;
   if (!id) return null;
   const ctx = allContexts.value.find(c => c.id === id);
-  const repoSrc = (ctx?.sources ?? []).find(s => s.type === 'repo');
-  return repoSrc?.repo ?? id;
+  const src = (ctx?.sources ?? []).find(s => s.repo);
+  return src?.repo ?? id;
 });
 const noFolderData  = ref(false); // true when repo has no FilePath data — suppresses blank folder view
 
@@ -332,11 +334,7 @@ const displayAuthors     = ref(VIZ_DEFAULTS.displayAuthors);
 const violationSummary = computed(() => {
   const threshold = violationThreshold.value;
   const contexts = ownershipGraphData.value.nodes.filter(n => n.type === 'context');
-  const violating = contexts.filter(r =>
-    r.commits && r.contributions?.some(c =>
-      c.teamId !== r.owningTeamId && (c.commits / r.commits) * 100 >= threshold
-    )
-  ).length;
+  const violating = contexts.filter(r => isContextViolating(r, threshold)).length;
   return { violating, total: contexts.length };
 });
 
@@ -629,7 +627,7 @@ function openDetail(contextId) {
   noFolderData.value = false;
   detailRepoId.value = contextId;
   nextTick(() => {
-    const data = store.repoContributorsData(detailRepoName.value);
+    const data = store.contextContributorsData(contextId);
     detailRenderer.draw({ dims, data });
   });
 }
@@ -658,7 +656,7 @@ function closeFolderMode() {
   folderRenderer.teardown();
   folderPath.value = null;
   nextTick(() => {
-    const data = store.repoContributorsData(detailRepoName.value);
+    const data = store.contextContributorsData(detailRepoId.value);
     detailRenderer.draw({ dims, data });
   });
 }

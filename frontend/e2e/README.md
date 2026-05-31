@@ -28,7 +28,7 @@ import { LensPage }  from './e2e/lens-page.mjs';
 
 const browser = await chromium.launch({ args: ['--no-sandbox'] });
 const lens    = await LensPage.open(browser);
-await lens.loadCSV('e2e/TimelineData.csv');
+await lens.loadCSV('e2e/CommitHistory.csv');
 await lens.importMappings('e2e/mappings.json');
 
 // ... your verification here ...
@@ -44,7 +44,7 @@ node my-script.mjs
 
 | Method | What it does |
 |--------|-------------|
-| `await lens.loadCSV('e2e/TimelineData.csv')` | Upload CSV via drag-drop simulation |
+| `await lens.loadCSV('e2e/CommitHistory.csv')` | Upload CSV via drag-drop simulation |
 | `await lens.importMappings('e2e/mappings.json')` | Open Mapping panel, import JSON, close panel |
 | `await lens.expandNode('Backend')` | Click a named SVG node to expand it; waits for simulation |
 | `await lens.collapseNode('Backend')` | Click a named SVG node to collapse it; waits for simulation |

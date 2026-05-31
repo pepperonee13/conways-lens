@@ -3,12 +3,12 @@
 ## Data flow
 
 ```
-repos.json (copy of repos.example.json) → extract-git-history (.mjs / .ps1) → TimelineData.csv
+repos.json (copy of repos.example.json) → extract-git-history (.mjs / .ps1) → CommitHistory.csv
                                                 ↓
                                     (user uploads via drag-drop)
                                                 ↓
                                     useLensStore (Pinia)
-                                      ├─ timelineData (raw CSV rows)
+                                      ├─ commits (raw CSV rows)
                                       ├─ contexts (user-defined bounded contexts)
                                       ├─ allContexts (user + auto 1:1 contexts)
                                       ├─ teams (own contexts, not raw repos)
@@ -69,7 +69,7 @@ with the source pre-filled for confirmation.
 ## Store state shape
 
 ```js
-timelineData         // Raw parsed CSV rows
+commits         // Raw parsed CSV rows
 contexts             // BoundedContext[] — user-defined only (auto-contexts derived in allContexts)
 teams                // { id, name, color, authors[], contexts[] }  ← contexts[] holds context IDs
 authorNormalizations // { "raw git name" → "canonical name" }
