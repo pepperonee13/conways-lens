@@ -1,5 +1,7 @@
 frontend/.env
 frontend/public/TimelineData*.csv
+frontend/playwright-report/
+frontend/test-results/
 node_modules/
 out/
 cli/repos.json
