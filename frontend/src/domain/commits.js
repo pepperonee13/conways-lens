@@ -3,6 +3,7 @@
  * {
  *   author:     string,
  *   repo:       string,
+ *   repoUrl:    string | null,
  *   commitHash: string,
  *   date:       string | null,   // YYYY-MM-DD
  *   filePath:   string | null,

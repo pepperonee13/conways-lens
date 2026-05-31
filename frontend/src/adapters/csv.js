@@ -5,13 +5,14 @@ import Papa from 'papaparse';
  * Handles the optional `Since=...,Until=...` metadata footer.
  *
  * This is the only place in the codebase that knows the raw CSV column names:
- *   Author      → author
- *   Product     → repo        (legacy ADO/TFS field name)
- *   ChangesetId → commitHash  (legacy TFS field name; holds the git commit SHA)
- *   Date        → date
- *   FilePath    → filePath
+ *   Author     → author
+ *   RepoName   → repo
+ *   RepoUrl    → repoUrl
+ *   CommitHash → commitHash
+ *   Date       → date
+ *   FilePath   → filePath
  *
- * Rows missing Author, Product, or ChangesetId are dropped here so the rest of
+ * Rows missing Author, RepoName, or CommitHash are dropped here so the rest of
  * the app works with a clean dataset.
  *
  * @param   {string} text - raw CSV text
@@ -26,13 +27,14 @@ export function parseCSVText(text) {
   }
   const { data } = Papa.parse(lines.join('\n'), { header: true, skipEmptyLines: true });
   const commits = data
-    .filter(r => r.Author && r.Product && r.ChangesetId)
+    .filter(r => r.Author && r.RepoName && r.CommitHash)
     .map(r => ({
       author:     r.Author,
-      repo:       r.Product,
-      commitHash: r.ChangesetId,
-      date:       r.Date     ?? null,
-      filePath:   r.FilePath ?? null,
+      repo:       r.RepoName,
+      repoUrl:    r.RepoUrl   ?? null,
+      commitHash: r.CommitHash,
+      date:       r.Date      ?? null,
+      filePath:   r.FilePath  ?? null,
     }));
   return { commits, dateRange };
 }
