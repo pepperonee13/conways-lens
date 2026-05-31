@@ -98,6 +98,22 @@
             </div>
           </div>
         </div>
+        <div class="export-dropdown-wrap" ref="exportDropRef">
+          <button class="maximize-btn"
+                  :disabled="!store.dataLoaded || effectiveTeams.length === 0"
+                  :title="'Export graph'"
+                  @click="exportOpen = !exportOpen">
+            <Download :size="14" />
+          </button>
+          <div v-if="exportOpen" class="export-panel">
+            <button class="export-item" @click="exportAs('svg')">
+              <span>SVG</span><span class="export-item-hint">vector</span>
+            </button>
+            <button class="export-item" @click="exportAs('png')">
+              <span>PNG</span><span class="export-item-hint">2× raster</span>
+            </button>
+          </div>
+        </div>
         <button class="maximize-btn" @click="toggleFullscreen" :title="isFullscreen ? 'Exit fullscreen' : 'Fullscreen'">
           <Minimize2 v-if="isFullscreen" :size="14" />
           <Maximize2 v-else :size="14" />
@@ -268,7 +284,7 @@
 <script setup>
 import { ref, computed, watch, reactive, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { storeToRefs } from 'pinia';
-import { Maximize2, Minimize2 } from '@lucide/vue';
+import { Maximize2, Minimize2, Download } from '@lucide/vue';
 import { useLensStore } from '../stores/useLensStore';
 import { useSwimlaneGraph } from '../composables/graphs/useSwimlaneGraph.js';
 import { useCirclePackGraph } from '../composables/graphs/useCirclePackGraph.js';
@@ -324,6 +340,8 @@ const VIZ_DEFAULTS = {
 };
 
 const vizOpen            = ref(false);
+const exportOpen         = ref(false);
+const exportDropRef      = ref(null);
 const isFullscreen       = ref(false);
 const graphView          = ref('swimlane'); // 'swimlane' | 'circlepack'
 const edgeWeight         = ref(VIZ_DEFAULTS.edgeWeight);
@@ -348,6 +366,61 @@ function resetVizDefaults() {
   violationThreshold.value = VIZ_DEFAULTS.violationThreshold;
   violatingOnly.value      = VIZ_DEFAULTS.violatingOnly;
   displayAuthors.value     = VIZ_DEFAULTS.displayAuthors;
+}
+
+function triggerDownload(url, filename) {
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+async function exportAs(format) {
+  exportOpen.value = false;
+  const el = detailRepoId.value ? detailSvgRef.value : svgRef.value;
+  if (!el) return;
+
+  // Clone and ensure white background + xmlns for standalone export
+  const clone = el.cloneNode(true);
+  clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  bg.setAttribute('width', '100%');
+  bg.setAttribute('height', '100%');
+  bg.setAttribute('fill', '#ffffff');
+  clone.insertBefore(bg, clone.firstChild);
+
+  const svgStr = new XMLSerializer().serializeToString(clone);
+  const stamp  = new Date().toISOString().slice(0, 10);
+  const name   = `conways-lens-${stamp}`;
+
+  if (format === 'svg') {
+    const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+    const url  = URL.createObjectURL(blob);
+    triggerDownload(url, `${name}.svg`);
+    URL.revokeObjectURL(url);
+    return;
+  }
+
+  // PNG — render at 2× for retina clarity
+  const w = Number(el.getAttribute('width'))  || dims.w;
+  const h = Number(el.getAttribute('height')) || dims.h;
+  const canvas = document.createElement('canvas');
+  canvas.width  = w * 2;
+  canvas.height = h * 2;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(2, 2);
+
+  const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const img  = new Image();
+  img.onload = () => {
+    ctx.drawImage(img, 0, 0);
+    URL.revokeObjectURL(url);
+    triggerDownload(canvas.toDataURL('image/png'), `${name}.png`);
+  };
+  img.src = url;
 }
 
 const tooltip = reactive({
@@ -722,8 +795,11 @@ function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTi
 
 function updateSize() {
   if (isFullscreen.value) {
-    dims.w = window.innerWidth - 48;
-    dims.h = window.innerHeight - 120;
+    const pad    = 24; // 12px each side
+    const headerEl = containerRef.value?.querySelector('.graph-header');
+    const headerH  = headerEl ? headerEl.getBoundingClientRect().height : 56;
+    dims.w = window.innerWidth  - pad;
+    dims.h = window.innerHeight - headerH - pad;
     return;
   }
   if (!containerRef.value) return;
@@ -733,8 +809,10 @@ function updateSize() {
 }
 
 function handleDocClick(e) {
-  if (vizOpen.value && vizDropRef.value && !vizDropRef.value.contains(e.target))
+  if (vizOpen.value    && vizDropRef.value    && !vizDropRef.value.contains(e.target))
     vizOpen.value = false;
+  if (exportOpen.value && exportDropRef.value && !exportDropRef.value.contains(e.target))
+    exportOpen.value = false;
 }
 
 function handleKeyDown(e) {
@@ -774,7 +852,7 @@ onMounted(() => {
   border-radius: 0 !important;
   border: none !important;
   box-shadow: none !important;
-  padding: 16px 24px !important;
+  padding: 12px !important;
   overflow: auto;
   animation: none;
 }
@@ -1033,5 +1111,24 @@ onMounted(() => {
   cursor: pointer; transition: all 0.15s; flex-shrink: 0;
   margin-left: 4px;
 }
-.maximize-btn:hover { border-color: #225EA9; color: #225EA9; }
+.maximize-btn:hover:not(:disabled) { border-color: #225EA9; color: #225EA9; }
+.maximize-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* ── Export dropdown ── */
+.export-dropdown-wrap { position: relative; margin-left: 4px; }
+.export-panel {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 200;
+  background: #fff; border: 1.5px solid #e2e8f0; border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.10); overflow: hidden; min-width: 130px;
+  animation: fadeIn 0.12s ease-out;
+}
+.export-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  width: 100%; padding: 8px 14px;
+  font-size: 12px; font-weight: 600; color: #374151;
+  background: transparent; border: none; cursor: pointer; text-align: left;
+  transition: background 0.1s;
+}
+.export-item:hover { background: #f1f5f9; color: #225EA9; }
+.export-item-hint { font-size: 10px; font-weight: 400; color: #9ca3af; }
 </style>
