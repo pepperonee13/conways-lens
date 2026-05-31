@@ -293,19 +293,24 @@
             <div class="ctx-pending-title">
               Add <code>{{ pendingContextSource.label }}</code> to a bounded context
             </div>
-            <div class="ctx-pending-row">
-              <select v-model="pendingTarget" class="ctx-select">
-                <option value="__new__">➕ New context…</option>
-                <option v-for="c in contexts" :key="c.id" :value="c.id">{{ c.name }}</option>
-              </select>
-              <input
-                v-if="pendingTarget === '__new__'"
-                v-model="pendingNewName"
-                class="ctx-input"
-                placeholder="New context name"
-                @keyup.enter="canConfirmPending && confirmPending()"
-              />
+            <div class="ctx-pending-targets">
+              <button
+                v-for="c in contexts" :key="c.id"
+                :class="['ctx-target-pill', { 'ctx-target-pill--active': pendingTarget === c.id }]"
+                @click="pendingTarget = c.id"
+              >{{ c.name }}</button>
+              <button
+                :class="['ctx-target-pill', 'ctx-target-pill--new', { 'ctx-target-pill--active': pendingTarget === '__new__' }]"
+                @click="pendingTarget = '__new__'"
+              >+ New context…</button>
             </div>
+            <input
+              v-if="pendingTarget === '__new__'"
+              v-model="pendingNewName"
+              class="ctx-new-name-input"
+              placeholder="New context name"
+              @keyup.enter="canConfirmPending && confirmPending()"
+            />
             <p v-if="pendingSourceConflict" class="ctx-conflict">
               Already assigned to <strong>{{ pendingSourceConflict.name }}</strong>
             </p>
@@ -338,15 +343,20 @@
             </div>
 
             <div class="ctx-add-source" v-if="draftSource[c.id]">
-              <select v-model="draftSource[c.id].type" class="ctx-select-sm">
-                <option value="repo">repo</option>
-                <option value="path">path</option>
-                <option value="glob">glob</option>
-              </select>
-              <select v-model="draftSource[c.id].repo" class="ctx-select-sm">
-                <option value="" disabled>repo…</option>
-                <option v-for="r in allRepos" :key="r" :value="r">{{ r }}</option>
-              </select>
+              <div class="ctx-type-pills">
+                <button
+                  v-for="t in ['repo', 'path', 'glob']" :key="t"
+                  :class="['ctx-type-pill', `ctx-type-pill--${t}`, { 'ctx-type-pill--active': draftSource[c.id].type === t }]"
+                  @click="draftSource[c.id].type = t"
+                >{{ t }}</button>
+              </div>
+              <div class="ctx-repo-pills">
+                <button
+                  v-for="r in allRepos" :key="r"
+                  :class="['ctx-repo-pill', { 'ctx-repo-pill--selected': draftSource[c.id].repo === r }]"
+                  @click="draftSource[c.id].repo = r"
+                >{{ r }}</button>
+              </div>
               <input
                 v-if="draftSource[c.id].type === 'path'"
                 v-model="draftSource[c.id].path" class="ctx-input-sm" placeholder="e.g. src/auth" />
@@ -860,21 +870,55 @@ async function handleImport(e) {
 .ctx-source-type--path { @apply bg-teal-100 text-teal-700; }
 .ctx-source-type--glob { @apply bg-orange-100 text-orange-700; }
 .ctx-source-desc { @apply font-mono text-gray-700 truncate; }
-.ctx-add-source { @apply flex items-center gap-2 flex-wrap; }
-.ctx-select, .ctx-select-sm, .ctx-input, .ctx-input-sm {
+.ctx-add-source { @apply flex flex-col gap-2; }
+.ctx-input, .ctx-input-sm {
   @apply border border-gray-300 rounded px-2 py-1 text-sm bg-white;
 }
-.ctx-select-sm, .ctx-input-sm { @apply text-xs py-0.5; }
-.ctx-select, .ctx-input { @apply flex-1 min-w-0; }
+.ctx-input-sm { @apply text-xs py-0.5; }
+.ctx-input { @apply flex-1 min-w-0; }
 .ctx-pending {
   @apply border border-brand-orange bg-orange-50 rounded-xl p-4 mb-4 flex flex-col gap-2;
 }
 .ctx-pending-title { @apply text-sm text-gray-700; }
 .ctx-pending-title code { @apply font-mono bg-white px-1.5 py-0.5 rounded border border-gray-200; }
-.ctx-pending-row { @apply flex items-center gap-2; }
+.ctx-pending-targets { @apply flex flex-wrap gap-1.5; }
+.ctx-target-pill {
+  @apply px-2.5 py-1 rounded-full text-xs font-medium border border-brand-teal
+         text-brand-teal bg-white hover:bg-brand-teal hover:text-white
+         transition-all duration-100 cursor-pointer;
+}
+.ctx-target-pill--active { @apply bg-brand-teal text-white; }
+.ctx-target-pill--new {
+  @apply border-dashed border-gray-400 text-gray-500 bg-white
+         hover:border-brand-orange hover:text-brand-orange hover:bg-white;
+}
+.ctx-target-pill--new.ctx-target-pill--active {
+  @apply bg-brand-orange border-brand-orange text-white;
+}
+.ctx-new-name-input {
+  @apply border border-gray-300 rounded-lg px-3 py-1.5 text-sm bg-white w-full
+         focus:outline-none focus:ring-2 focus:ring-brand-orange/40 focus:border-brand-orange;
+}
 .ctx-pending-actions { @apply flex items-center gap-2 justify-end; }
 .ctx-conflict { @apply text-xs text-red-600; }
 .ctx-conflict--inline { @apply w-full; }
+/* Type toggle pills */
+.ctx-type-pills { @apply flex items-center gap-1; }
+.ctx-type-pill {
+  @apply px-2.5 py-0.5 rounded-full text-xs font-semibold border cursor-pointer
+         border-gray-300 text-gray-500 bg-white hover:border-gray-400 transition-all duration-100;
+}
+.ctx-type-pill--repo.ctx-type-pill--active { @apply bg-blue-100 border-blue-400 text-blue-700; }
+.ctx-type-pill--path.ctx-type-pill--active { @apply bg-teal-100 border-teal-400 text-teal-700; }
+.ctx-type-pill--glob.ctx-type-pill--active { @apply bg-orange-100 border-orange-400 text-orange-700; }
+/* Repo pills in add-source form */
+.ctx-repo-pills { @apply flex flex-wrap gap-1; }
+.ctx-repo-pill {
+  @apply px-2 py-0.5 rounded-full text-xs font-mono border border-brand-teal
+         text-brand-teal bg-white hover:bg-brand-teal hover:text-white
+         transition-all duration-100 cursor-pointer;
+}
+.ctx-repo-pill--selected { @apply bg-brand-teal text-white; }
 
 .teams-list { @apply flex flex-col gap-4; }
 .team-card { @apply bg-gray-50 border border-gray-200 rounded-xl p-4; }

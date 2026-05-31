@@ -96,4 +96,24 @@ test.describe('Repo detail and folder drill-down', () => {
     await folderView.expandTeamPill();
     expect(await folderView.getAuthorCircleCount()).toBeGreaterThan(0);
   });
+
+  test('drilling two levels deep extends the breadcrumb to 3+ items', async () => {
+    await repoDetail.clickRepoCenterCircle();
+    await folderView.drillIntoFirstFolder();
+    const l2Label = await folderView.drillIntoFirstFolder();
+    expect(l2Label).toBeTruthy();
+    const items = await folderView.getBreadcrumbItems();
+    expect(items.length).toBeGreaterThanOrEqual(3);
+  });
+
+  test('clicking an intermediate breadcrumb segment navigates back and updates current', async () => {
+    await repoDetail.clickRepoCenterCircle();
+    const l1Label = await folderView.drillIntoFirstFolder();
+    await folderView.drillIntoFirstFolder();
+    const itemsBefore = await folderView.getBreadcrumbItems();
+    await folderView.clickBreadcrumbSegmentAt(0);
+    const itemsAfter = await folderView.getBreadcrumbItems();
+    expect(itemsAfter.length).toBeLessThan(itemsBefore.length);
+    expect(await folderView.getCurrentBreadcrumbSegment()).toBe(l1Label);
+  });
 });

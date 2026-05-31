@@ -4,7 +4,7 @@ export default defineConfig({
   testDir: './e2e/tests',
   testMatch: '**/*.spec.mjs',
   fullyParallel: false,
-  workers: 1,
+  workers: 3,
   timeout: 30_000,
   retries: 0,
   reporter: [['html', { open: 'never' }], ['list']],
