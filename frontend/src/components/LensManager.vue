@@ -1,7 +1,7 @@
 <template>
   <FabButton v-if="!open" class="fixed left-6 bottom-24 z-40"
     label="Lenses" :badge="lenses.length || null" color="teal" expand="right"
-    title="Manage lenses" @click="open = true"
+    title="Manage lenses" data-testid="fab-lenses" @click="open = true"
   >
     <Telescope :size="18" />
   </FabButton>

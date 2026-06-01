@@ -121,7 +121,7 @@ test.describe('Context menu — Direct assignment to existing context', () => {
     await page.waitForTimeout(200);
     await mappingEditor.clickAssignToContextMenuItem('Data Platform');
     // Open the mapping editor manually to verify
-    await page.locator('.floating-mapping-btn').click();
+    await page.locator('[data-testid="fab-mapping"]').click();
     await page.locator('.tab-btn').filter({ hasText: 'Contexts' }).click();
     const descs = await mappingEditor.getSourceDescriptions();
     expect(descs.some(d => d.includes('backend-api'))).toBe(true);
@@ -143,7 +143,7 @@ test.describe('Context menu — Change context for already-assigned folder', () 
     await app.setup(CSV, MAPPINGS);
 
     // Create a second context "New Home" before we start assigning
-    await page.locator('.floating-mapping-btn').click();
+    await page.locator('[data-testid="fab-mapping"]').click();
     await page.locator('.tab-btn').filter({ hasText: 'Contexts' }).click();
     await page.locator('.add-team-btn').click();
     await page.locator('.ctx-card').last().locator('.team-name-input').fill('New Home');

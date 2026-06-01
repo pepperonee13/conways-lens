@@ -1,7 +1,7 @@
 <template>
   <FabButton v-if="!open" class="fixed right-6 bottom-6 z-40"
     label="Mapping" :badge="teams.length || null" color="orange" expand="left"
-    title="Edit mappings" @click="open = true"
+    title="Edit mappings" data-testid="fab-mapping" @click="open = true"
   >
     <MapIcon :size="18" />
   </FabButton>

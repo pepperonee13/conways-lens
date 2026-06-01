@@ -4,7 +4,7 @@ export class LensManagerPage {
   }
 
   async open() {
-    await this.page.click('button:has-text("Lenses")');
+    await this.page.click('[data-testid="fab-lenses"]');
   }
 
   async close() {

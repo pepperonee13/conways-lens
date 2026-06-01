@@ -36,7 +36,7 @@ export class LensAppPage {
   /** Import team mappings via the MappingEditor's hidden file input. */
   async importMappings(jsonPath) {
     const abs = resolve(jsonPath);
-    await this.page.click('button:has-text("Mapping")');
+    await this.page.click('[data-testid="fab-mapping"]');
     await this.page.waitForTimeout(400);
     await this.page.locator('input[type=file][accept=".json"]').setInputFiles(abs);
     await this.page.waitForTimeout(IMPORT_MS);

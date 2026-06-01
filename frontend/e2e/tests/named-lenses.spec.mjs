@@ -15,7 +15,7 @@ test.describe('Named Lenses', () => {
   });
 
   test('Lenses button is visible after data is loaded', async ({ page }) => {
-    await expect(page.locator('button:has-text("Lenses")')).toBeVisible();
+    await expect(page.locator('[data-testid="fab-lenses"]')).toBeVisible();
   });
 
   test('saves current config as a named lens', async () => {
@@ -29,7 +29,7 @@ test.describe('Named Lenses', () => {
     await lm.open();
     await lm.saveLens('Client A');
     await lm.close();
-    const badge = page.locator('.floating-lens-btn .lens-badge');
+    const badge = page.locator('[data-testid="fab-lenses"] .fab-badge');
     await expect(badge).toBeVisible();
     await expect(badge).toHaveText('1');
   });

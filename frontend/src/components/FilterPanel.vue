@@ -1,7 +1,7 @@
 <template>
   <FabButton v-if="!open" class="fixed left-6 bottom-6 z-40"
     label="Filters" :badge="activeFilterCount || null" color="teal" expand="right"
-    title="Filters" @click="open = true"
+    title="Filters" data-testid="fab-filters" @click="open = true"
   >
     <SlidersHorizontal :size="18" />
   </FabButton>
