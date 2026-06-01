@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed, watch } from 'vue';
-import { sameSource, globToRegex, sourcesOverlap, contextForSource as contextForSourceFn, resolveContextId as resolveContextIdFn } from '../domain/contextSources.js';
+import { sameSource, globToRegex, sourcesOverlap, contextForSource as contextForSourceFn, resolveContextId as resolveContextIdFn, matchesSource, sourceKey, sourceLabel } from '../domain/contextSources.js';
 import { mergeCommits, mergeDateRanges } from '../domain/commits.js';
 import { parseCSVText } from '../adapters/csv.js';
 import { DEFAULT_VIOLATION_THRESHOLD, DEFAULT_DISPLAY_AUTHORS } from '../config.js';
@@ -917,6 +917,34 @@ export const useLensStore = defineStore('lens', () => {
     return { nodes, links };
   }
 
+  // Returns per-source commit counts for a bounded context.
+  // Each entry: { ...src, key, label, commits }
+  function contextSourceData(contextId) {
+    const ctx = allContexts.value.find(c => c.id === contextId);
+    if (!ctx || !ctx.sources?.length) return [];
+    const since = activeRange.value.since;
+    const until = activeRange.value.until;
+    const sourceShas = ctx.sources.map(() => new Set());
+    for (const row of commits.value) {
+      if (!row.author || !row.repo || !row.commitHash) continue;
+      if (since && row.date < since) continue;
+      if (until && row.date > until) continue;
+      const author = normalizeAuthor(row.author);
+      if (ignoredSet.value.has(author)) continue;
+      for (let i = 0; i < ctx.sources.length; i++) {
+        const src = ctx.sources[i];
+        if (src.repo !== row.repo) continue;
+        if (matchesSource(src, row.filePath ?? '')) sourceShas[i].add(row.commitHash);
+      }
+    }
+    return ctx.sources.map((src, i) => ({
+      ...src,
+      key: sourceKey(src),
+      label: sourceLabel(src),
+      commits: sourceShas[i].size,
+    }));
+  }
+
   // Returns {nodes, links} for a repo drilled into a specific folder path.
   // folderPrefix = '' for top-level, 'src' for inside src/, 'src/auth' for inside src/auth/, etc.
   function repoFolderData(repoId, folderPrefix = '') {
@@ -999,7 +1027,7 @@ export const useLensStore = defineStore('lens', () => {
     expandedTeams,
     allRawAuthors, allAuthors, allRepos,
     graphData, ownershipGraphData, nodeColors, getNodeColor,
-    repoContributorsData, contextContributorsData, repoFolderData,
+    repoContributorsData, contextContributorsData, contextSourceData, repoFolderData,
     loadCommits, loadSimulatedData, clearData,
     addTeam, removeTeam,
     addContext, removeContext, updateContext, addContextSource, removeContextSource, contextForSource,

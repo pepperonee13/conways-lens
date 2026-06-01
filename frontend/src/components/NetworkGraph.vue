@@ -318,7 +318,7 @@ import { Maximize2, Minimize2, Download } from '@lucide/vue';
 import { useLensStore } from '../stores/useLensStore';
 import { useSwimlaneGraph } from '../composables/graphs/useSwimlaneGraph.js';
 import { useCirclePackGraph } from '../composables/graphs/useCirclePackGraph.js';
-import { useRepoDetailGraph } from '../composables/graphs/useRepoDetailGraph.js';
+import { useContextAuthorGraph } from '../composables/graphs/useContextAuthorGraph.js';
 import { useRepoFolderGraph } from '../composables/graphs/useRepoFolderGraph.js';
 import { useAnonymize } from '../composables/useAnonymize.js';
 import { useGraphTooltip } from '../composables/useGraphTooltip.js';
@@ -503,7 +503,7 @@ const circlePackRenderer = useCirclePackGraph({
   edgeWeight,
 });
 
-const detailRenderer = useRepoDetailGraph({
+const detailRenderer = useContextAuthorGraph({
   svgRef: detailSvgRef,
   effectiveTeams,
   getNodeColor: store.getNodeColor,
