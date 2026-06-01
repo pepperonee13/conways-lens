@@ -17,7 +17,7 @@
           @click="store.uiLensOpen = true"
           :title="`Active lens: ${activeLensName}`"
         >
-          <Layers :size="13" />
+          <Telescope :size="13" />
           <span class="truncate">{{ activeLensName }}</span>
         </button>
         <div v-if="dateInfo" class="date-info">
@@ -101,7 +101,7 @@ import FilterPanel from '../components/FilterPanel.vue';
 import LensManager from '../components/LensManager.vue';
 import SimulateCard from '../simulation/SimulateCard.vue';
 import {
-  FolderOpen, Inbox, FlaskConical, Plus, RefreshCw, FileText, Layers,
+  FolderOpen, Inbox, FlaskConical, Plus, RefreshCw, FileText, Telescope,
 } from '@lucide/vue';
 
 const store = useLensStore();

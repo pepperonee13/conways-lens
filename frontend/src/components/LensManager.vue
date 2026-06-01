@@ -1,6 +1,6 @@
 <template>
   <button class="floating-lens-btn" v-if="!open" @click="open = true" title="Manage lenses">
-    <Layers :size="18" />
+    <Telescope :size="18" />
     <span>Lenses</span>
     <span v-if="lenses.length" class="lens-badge">{{ lenses.length }}</span>
   </button>
@@ -14,7 +14,7 @@
 
       <!-- Header -->
       <div class="panel-header">
-        <h2 class="panel-title"><Layers :size="20" class="title-icon" /> Lenses</h2>
+        <h2 class="panel-title"><Telescope :size="20" class="title-icon" /> Lenses</h2>
         <button class="close-btn" @click="open = false" title="Close"><X :size="18" /></button>
       </div>
 
@@ -98,7 +98,7 @@
 import { ref, reactive, computed, nextTick } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useLensStore } from '../stores/useLensStore';
-import { Layers, X, Plus, LogIn, Save as SaveIcon, Download, Trash2, Upload } from '@lucide/vue';
+import { Telescope, X, Plus, LogIn, Save as SaveIcon, Download, Trash2, Upload } from '@lucide/vue';
 
 const store = useLensStore();
 const { lenses, activeLensId, uiLensOpen } = storeToRefs(store);
