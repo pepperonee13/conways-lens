@@ -608,7 +608,7 @@ function openDetailForSource(contextId, srcKey) {
   detailSourceKey.value = srcKey;
   nav.openSource(contextId, srcKey);
   nextTick(() => {
-    const data = store.contextContributorsData(contextId);
+    const data = store.sourceContributorsData(contextId, srcKey);
     detailRenderer.draw({ dims, data });
   });
 }
@@ -650,26 +650,35 @@ function openFolderMode() {
   noFolderData.value = false;
   detailRenderer.teardown();
   folderPath.value = [];
+  nav.openFolder([]);
   nextTick(() => redrawFolder());
 }
 
 function closeFolderMode() {
   folderRenderer.teardown();
   folderPath.value = null;
-  nav.closeSource();
+  if (detailSourceKey.value) {
+    nav.openSource(detailRepoId.value, detailSourceKey.value);
+  } else {
+    nav.openContext(detailRepoId.value);
+  }
   nextTick(() => {
-    const data = store.contextContributorsData(detailRepoId.value);
+    const data = detailSourceKey.value
+      ? store.sourceContributorsData(detailRepoId.value, detailSourceKey.value)
+      : store.contextContributorsData(detailRepoId.value);
     detailRenderer.draw({ dims, data });
   });
 }
 
 function drillDown(segmentId) {
   folderPath.value = [...folderPath.value, segmentId];
+  nav.openFolder(folderPath.value);
   redrawFolder();
 }
 
 function breadcrumbNavigate(index) {
   folderPath.value = folderPath.value.slice(0, index + 1);
+  nav.openFolder(folderPath.value);
   redrawFolder();
 }
 
@@ -730,7 +739,20 @@ function handleDocClick(e) {
 onMounted(() => {
   document.addEventListener('mousedown', handleDocClick);
   if (nav.contextId.value) {
-    nextTick(() => openDetail(nav.contextId.value, nav.sourceKey.value ?? null));
+    const restoredFolderPath = nav.folderPath.value;
+    nextTick(() => {
+      openDetail(nav.contextId.value, nav.sourceKey.value ?? null);
+      if (restoredFolderPath !== null) {
+        nextTick(() => {
+          const probe = store.repoFolderData(detailRepoName.value, '');
+          if (probe.nodes.some(n => n.type === 'folder')) {
+            detailRenderer.teardown();
+            folderPath.value = restoredFolderPath;
+            redrawFolder();
+          }
+        });
+      }
+    });
   }
 });
 onBeforeUnmount(() => {

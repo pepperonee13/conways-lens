@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed, watch } from 'vue';
-import { sameSource, globToRegex, sourcesOverlap, contextForSource as contextForSourceFn, resolveContextId as resolveContextIdFn, matchesSource, sourceKey, sourceLabel } from '../domain/contextSources.js';
+import { sameSource, globToRegex, sourcesOverlap, contextForSource as contextForSourceFn, resolveContextId as resolveContextIdFn, matchesSource, sourceKey, sourceLabel, decodeSourceKey } from '../domain/contextSources.js';
 import { mergeCommits, mergeDateRanges } from '../domain/commits.js';
 import { parseCSVText } from '../adapters/csv.js';
 import { DEFAULT_VIOLATION_THRESHOLD, DEFAULT_DISPLAY_AUTHORS } from '../config.js';
@@ -917,6 +917,40 @@ export const useLensStore = defineStore('lens', () => {
     return { nodes, links };
   }
 
+  // Returns {nodes, links} scoped to a single source within a bounded context.
+  // Filters commits to only those matching that source's repo + path/pattern.
+  function sourceContributorsData(contextId, srcKey) {
+    const src = decodeSourceKey(srcKey);
+    if (!src) return contextContributorsData(contextId);
+    const since = activeRange.value.since;
+    const until = activeRange.value.until;
+    const edgeMap = {};
+    const srcShas = new Set();
+    for (const row of commits.value) {
+      if (!row.author || !row.repo || !row.commitHash) continue;
+      if (row.repo !== src.repo) continue;
+      if (!matchesSource(src, row.filePath ?? '')) continue;
+      if (since && row.date < since) continue;
+      if (until && row.date > until) continue;
+      const author = normalizeAuthor(row.author);
+      if (ignoredSet.value.has(author)) continue;
+      (edgeMap[author] ??= new Set()).add(row.commitHash);
+      srcShas.add(row.commitHash);
+    }
+    const links = Object.entries(edgeMap).map(([author, shas]) => ({
+      source: author, target: contextId, commits: shas.size,
+    }));
+    const syntheticT = syntheticTeam.value;
+    const allTeams   = syntheticT ? [...teams.value, syntheticT] : teams.value;
+    const owningTeamId = allTeams.find(t => (t.contexts ?? []).includes(contextId))?.id ?? null;
+    const ctx = allContexts.value.find(c => c.id === contextId);
+    const nodes = [
+      { id: contextId, name: ctx?.name ?? contextId, type: 'repo', commits: srcShas.size, owningTeamId },
+      ...links.map(l => ({ id: l.source, type: 'author', commits: l.commits })),
+    ];
+    return { nodes, links };
+  }
+
   // Returns per-source commit counts for a bounded context.
   // Each entry: { ...src, key, label, commits }
   function contextSourceData(contextId) {
@@ -1027,7 +1061,7 @@ export const useLensStore = defineStore('lens', () => {
     expandedTeams,
     allRawAuthors, allAuthors, allRepos,
     graphData, ownershipGraphData, nodeColors, getNodeColor,
-    repoContributorsData, contextContributorsData, contextSourceData, repoFolderData,
+    repoContributorsData, contextContributorsData, sourceContributorsData, contextSourceData, repoFolderData,
     loadCommits, loadSimulatedData, clearData,
     addTeam, removeTeam,
     addContext, removeContext, updateContext, addContextSource, removeContextSource, contextForSource,

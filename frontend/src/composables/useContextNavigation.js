@@ -19,7 +19,7 @@ export function useContextNavigation({ graphView, onRestoreState }) {
     if (graphView.value)     p.set('view',    graphView.value);
     if (contextId.value)     p.set('context', contextId.value);
     if (sourceKey.value)     p.set('source',  sourceKey.value);
-    if (folderPath.value?.length) p.set('folder', folderPath.value.join(','));
+    if (folderPath.value !== null) p.set('folder', folderPath.value.join(','));
     const qs = p.toString();
     history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname);
   }
