@@ -3,7 +3,7 @@ import { ref, computed, watch } from 'vue';
 import { sameSource, globToRegex, sourcesOverlap, contextForSource as contextForSourceFn, resolveContextId as resolveContextIdFn, matchesSource, sourceKey, sourceLabel, decodeSourceKey } from '../domain/contextSources.js';
 import { mergeCommits, mergeDateRanges } from '../domain/commits.js';
 import { parseCSVText } from '../adapters/csv.js';
-import { generateSimulatedData } from '../adapters/simulated.js';
+import { generateSimulatedData } from '../simulation/simulated.js';
 import { DEFAULT_VIOLATION_THRESHOLD, DEFAULT_DISPLAY_AUTHORS } from '../config.js';
 
 const STORAGE = {
