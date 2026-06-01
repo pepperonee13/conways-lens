@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { LensAppPage }       from '../pages/lens-app.page.mjs';
 import { SwimlanePage }      from '../pages/swimlane.page.mjs';
-import { RepoDetailPage }    from '../pages/repo-detail.page.mjs';
+import { BubblesPage }       from '../pages/bubbles.page.mjs';
+import { ContextAuthorPage } from '../pages/context-author.page.mjs';
 import { FolderViewPage }    from '../pages/folder-view.page.mjs';
 import { MappingEditorPage } from '../pages/mapping-editor.page.mjs';
 
@@ -130,12 +131,13 @@ test.describe('Context menu — Direct assignment to existing context', () => {
 // ── Change context path ────────────────────────────────────────────────────
 
 test.describe('Context menu — Change context for already-assigned folder', () => {
-  let app, swimlane, repoDetail, folderView, mappingEditor;
+  let app, swimlane, bubbles, contextAuthor, folderView, mappingEditor;
 
   test.beforeEach(async ({ page }) => {
     app           = new LensAppPage(page);
     swimlane      = new SwimlanePage(page);
-    repoDetail    = new RepoDetailPage(page);
+    bubbles       = new BubblesPage(page);
+    contextAuthor = new ContextAuthorPage(page);
     folderView    = new FolderViewPage(page);
     mappingEditor = new MappingEditorPage(page);
     await app.setup(CSV, MAPPINGS);
@@ -147,10 +149,12 @@ test.describe('Context menu — Change context for already-assigned folder', () 
     await page.locator('.ctx-card').last().locator('.team-name-input').fill('New Home');
     await page.locator('.close-btn').click();
 
-    // Navigate to backend-api folder drill-down
-    await swimlane.openRepoDetail('backend-api');
+    // Navigate to backend-api folder drill-down via bubbles view
+    await app.switchToBubbles();
+    await bubbles.clickTeamBubble('Backend');
+    await bubbles.clickVisibleContextBubbleByName('backend-api');
     await page.waitForSelector('.detail-title', { state: 'visible' });
-    await repoDetail.clickRepoCenterCircle();
+    await contextAuthor.clickRepoCenterCircle();
 
     // Assign the first drillable folder to "Data Platform"
     await folderView.rightClickFirstDrillableFolder();
@@ -233,18 +237,21 @@ test.describe('Context menu — Duplicate context name guard', () => {
 // ── Folder drill-down path ─────────────────────────────────────────────────
 
 test.describe('Context menu — Create new context from folder drill-down', () => {
-  let app, swimlane, repoDetail, folderView, mappingEditor;
+  let app, swimlane, bubbles, contextAuthor, folderView, mappingEditor;
 
   test.beforeEach(async ({ page }) => {
     app           = new LensAppPage(page);
     swimlane      = new SwimlanePage(page);
-    repoDetail    = new RepoDetailPage(page);
+    bubbles       = new BubblesPage(page);
+    contextAuthor = new ContextAuthorPage(page);
     folderView    = new FolderViewPage(page);
     mappingEditor = new MappingEditorPage(page);
     await app.setup(CSV, MAPPINGS);
-    await swimlane.openRepoDetail('backend-api');
+    await app.switchToBubbles();
+    await bubbles.clickTeamBubble('Backend');
+    await bubbles.clickVisibleContextBubbleByName('backend-api');
     await page.waitForSelector('.detail-title', { state: 'visible' });
-    await repoDetail.clickRepoCenterCircle();
+    await contextAuthor.clickRepoCenterCircle();
   });
 
   test('adding a drillable folder creates a path-type bounded context source', async ({ page }) => {

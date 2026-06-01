@@ -49,8 +49,8 @@ test.describe('Swimlane view', () => {
     await expect(page.locator('.ctx-menu')).toBeVisible();
   });
 
-  test('clicking a context node in swimlane opens the author detail panel', async ({ page }) => {
+  test('clicking a context node in swimlane switches to the Bubbles view', async ({ page }) => {
     await swimlane.openRepoDetail('backend-api');
-    await expect(page.locator('.detail-title')).toBeVisible({ timeout: 5000 });
+    await expect(app.viewToggleBubbles).toHaveClass(/active/, { timeout: 5000 });
   });
 });
