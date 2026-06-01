@@ -196,8 +196,10 @@
 
     <teleport to="body">
       <div v-if="tooltip.show" class="graph-tooltip"
-           :class="{ 'graph-tooltip--anchor-right': tooltip.anchorRight }"
-           :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }">
+           :class="{ 'graph-tooltip--anchor-right': tooltip.anchorRight, 'graph-tooltip--interactive': tooltip.sources?.length }"
+           :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }"
+           @mouseenter="cancelTooltipHide"
+           @mouseleave="scheduleTooltipHide">
         <template v-if="tooltip.isLink">
           <div class="tt-name">{{ displayNodeName(tooltip.source) }} → {{ displayNodeName(tooltip.target) }}</div>
           <div class="tt-detail">
@@ -263,8 +265,10 @@
           </ul>
           <template v-if="tooltip.sources?.length">
             <div class="tt-cb-header tt-cb-header--gap">Sources</div>
-            <ul class="tt-cb-list">
-              <li v-for="src in tooltip.sources" :key="src.key">
+            <ul class="tt-cb-list tt-cb-list--sources">
+              <li v-for="src in tooltip.sources" :key="src.key"
+                  class="tt-source-item"
+                  @click.stop="onSourceItemClick(tooltip.name, src.key)">
                 <span class="tt-contrib-name">{{ src.label }}</span>
                 <span class="tt-contrib-pct">{{ src.commits.toLocaleString() }}</span>
               </li>
@@ -448,6 +452,23 @@ const {
   teamNameById, teamColorById, displayNodeName,
 } = useGraphTooltip({ effectiveTeams, allContexts, anonMap, violationThreshold });
 
+let tooltipHideTimer = null;
+function scheduleTooltipHide() {
+  tooltipHideTimer = setTimeout(() => {
+    tooltip.show = false;
+    tooltip.anchorRight = false;
+    tooltip.sources = null;
+  }, 120);
+}
+function cancelTooltipHide() {
+  clearTimeout(tooltipHideTimer);
+}
+function onSourceItemClick(contextId, srcKey) {
+  tooltip.show = false;
+  tooltip.sources = null;
+  openDetailForSource(contextId, srcKey);
+}
+
 const {
   contextMenu,
   closeContextMenu,
@@ -513,7 +534,15 @@ const circlePackRenderer = useCirclePackGraph({
     });
   },
   onMoveTooltip: (x, y) => { tooltip.x = x; tooltip.y = y; },
-  onHideTooltip: () => { tooltip.show = false; tooltip.anchorRight = false; tooltip.sources = null; },
+  onHideTooltip: () => {
+    if (tooltip.sources?.length) {
+      scheduleTooltipHide();
+    } else {
+      tooltip.show = false;
+      tooltip.anchorRight = false;
+      tooltip.sources = null;
+    }
+  },
   onNodeClick: (d) => openDetail(d),
   onNodeContextMenu: (d, e) => openContextMenuForContextNode(d, e),
   violationThreshold,
@@ -908,6 +937,12 @@ onBeforeUnmount(() => {
   border-color: #225EA9; z-index: 9999; min-width: 160px;
   animation: fadeIn 0.12s ease-out forwards;
 }
+.graph-tooltip--interactive { pointer-events: auto; }
+.tt-cb-list--sources { margin-top: 2px; }
+.tt-cb-list--sources li { grid-template-columns: 1fr auto; }
+.tt-source-item { cursor: pointer; border-radius: 4px; padding: 0 2px; transition: background 0.1s; }
+.tt-source-item:hover { background: #eff6ff; }
+.tt-source-item:hover .tt-contrib-name { color: #225EA9; }
 
 /* Right-click "Add to bounded context" menu */
 .ctx-menu-backdrop { @apply fixed inset-0; z-index: 10000; }
