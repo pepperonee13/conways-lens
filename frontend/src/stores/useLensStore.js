@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue';
 import { sameSource, globToRegex, sourcesOverlap, contextForSource as contextForSourceFn, resolveContextId as resolveContextIdFn, matchesSource, sourceKey, sourceLabel, decodeSourceKey } from '../domain/contextSources.js';
 import { mergeCommits, mergeDateRanges } from '../domain/commits.js';
 import { parseCSVText } from '../adapters/csv.js';
+import { generateSimulatedData } from '../adapters/simulated.js';
 import { DEFAULT_VIOLATION_THRESHOLD, DEFAULT_DISPLAY_AUTHORS } from '../config.js';
 
 const STORAGE = {
@@ -29,31 +30,6 @@ const VIZ_DEFAULTS = {
 const DEFAULT_COLORS  = ['#225EA9', '#088F9B', '#F08223', '#5A4A80', '#C45E0F', '#006B75', '#3A75BA', '#1A9FA9'];
 const UNASSIGNED_ID   = '__unassigned__';
 
-const SIM_AUTHORS = [
-  'Alice', 'Bob', 'Carlos', 'Diana', 'Eve', 'Frank', 'Grace', 'Henry',
-  'Iris', 'Jake', 'Karen', 'Liam', 'Mia', 'Noah', 'Olivia', 'Pete',
-  'Quinn', 'Rachel', 'Sam', 'Tara', 'Uma', 'Victor', 'Wendy', 'Xander',
-  'Yara', 'Zoe',
-];
-const SIM_REPOS = [
-  'api-gateway', 'auth-service', 'payment-service', 'user-service',
-  'notification-service', 'billing-service', 'search-service', 'analytics-service',
-  'admin-portal', 'mobile-bff', 'data-pipeline', 'reporting-service',
-  'inventory-service', 'order-service', 'shipping-service', 'catalog-service',
-  'recommendation-engine', 'messaging-service', 'file-storage', 'config-service',
-];
-const SIM_FILE_PATHS = [
-  'src/handlers/index.js', 'src/handlers/health.js',
-  'src/models/schema.js', 'src/models/validators.js',
-  'src/utils/helpers.js', 'src/utils/logger.js',
-  'src/config/settings.js', 'src/config/constants.js',
-  'src/middleware/auth.js', 'src/middleware/errors.js',
-  'src/routes/index.js', 'src/routes/v1.js',
-  'src/services/client.js', 'src/services/cache.js',
-  'tests/unit/handlers.test.js', 'tests/unit/models.test.js',
-  'tests/integration/api.test.js',
-  'docs/openapi.yaml',
-];
 
 function load(key, fallback) {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
@@ -698,41 +674,12 @@ export const useLensStore = defineStore('lens', () => {
   }
 
   function loadSimulatedData({ authorCount, repoCount, minCommits, maxCommits }) {
-    const authors = SIM_AUTHORS.slice(0, authorCount);
-    const repos   = SIM_REPOS.slice(0, repoCount);
-    const now     = new Date();
-    const yearAgo = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
-    const msRange = now - yearAgo;
+    const { rows, teams: simTeams, dateInfo: simDateInfo } =
+      generateSimulatedData({ authorCount, repoCount, minCommits, maxCommits, colors: DEFAULT_COLORS });
 
-    const rows = [];
-    let shaSeq = 0;
-    for (const author of authors) {
-      for (const repo of repos) {
-        if (Math.random() > 0.38) continue; // ~38% of pairs are active
-        const count = minCommits + Math.floor(Math.random() * (maxCommits - minCommits + 1));
-        for (let i = 0; i < count; i++) {
-          const date = new Date(yearAgo.getTime() + Math.random() * msRange);
-          const sha  = (++shaSeq).toString(16).padStart(8, '0') + Math.random().toString(16).slice(2, 10);
-          const filePath = SIM_FILE_PATHS[Math.floor(Math.random() * SIM_FILE_PATHS.length)];
-          rows.push({ author, repo, commitHash: sha, date: date.toISOString().slice(0, 10), filePath });
-        }
-      }
-    }
-
-    // Generate teams so the graph renders immediately
-    const teamCount  = Math.min(3, authorCount, repoCount);
-    const teamNames  = ['Alpha', 'Beta', 'Gamma'];
-    const simTeams   = Array.from({ length: teamCount }, (_, i) => ({
-      id:      `sim-team-${i}`,
-      name:    teamNames[i],
-      color:   DEFAULT_COLORS[i],
-      authors: authors.filter((_, j) => j % teamCount === i),
-      contexts: repos.filter((_, j) => j % teamCount === i),
-    }));
-
-    commits.value  = rows;
+    commits.value       = rows;
     teams.value         = simTeams;
-    dateInfo.value      = { since: yearAgo.toISOString().slice(0, 10), until: now.toISOString().slice(0, 10) };
+    dateInfo.value      = simDateInfo;
     dataLoaded.value    = true;
     dataError.value     = null;
     activeRange.value   = { since: null, until: null };
