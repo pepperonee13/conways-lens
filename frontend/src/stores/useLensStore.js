@@ -42,6 +42,18 @@ const SIM_REPOS = [
   'inventory-service', 'order-service', 'shipping-service', 'catalog-service',
   'recommendation-engine', 'messaging-service', 'file-storage', 'config-service',
 ];
+const SIM_FILE_PATHS = [
+  'src/handlers/index.js', 'src/handlers/health.js',
+  'src/models/schema.js', 'src/models/validators.js',
+  'src/utils/helpers.js', 'src/utils/logger.js',
+  'src/config/settings.js', 'src/config/constants.js',
+  'src/middleware/auth.js', 'src/middleware/errors.js',
+  'src/routes/index.js', 'src/routes/v1.js',
+  'src/services/client.js', 'src/services/cache.js',
+  'tests/unit/handlers.test.js', 'tests/unit/models.test.js',
+  'tests/integration/api.test.js',
+  'docs/openapi.yaml',
+];
 
 function load(key, fallback) {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
@@ -701,7 +713,8 @@ export const useLensStore = defineStore('lens', () => {
         for (let i = 0; i < count; i++) {
           const date = new Date(yearAgo.getTime() + Math.random() * msRange);
           const sha  = (++shaSeq).toString(16).padStart(8, '0') + Math.random().toString(16).slice(2, 10);
-          rows.push({ author, repo, commitHash: sha, date: date.toISOString().slice(0, 10) });
+          const filePath = SIM_FILE_PATHS[Math.floor(Math.random() * SIM_FILE_PATHS.length)];
+          rows.push({ author, repo, commitHash: sha, date: date.toISOString().slice(0, 10), filePath });
         }
       }
     }
