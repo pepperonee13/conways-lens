@@ -1,9 +1,10 @@
 <template>
-  <button class="floating-mapping-btn" v-if="!open" @click="open = true" title="Edit mappings">
+  <FabButton v-if="!open" class="fixed right-6 bottom-6 z-40"
+    label="Mapping" :badge="teams.length || null" color="orange" expand="left"
+    title="Edit mappings" @click="open = true"
+  >
     <MapIcon :size="18" />
-    <span>Mapping</span>
-    <span v-if="teams.length" class="badge">{{ teams.length }}</span>
-  </button>
+  </FabButton>
 
   <transition name="backdrop-fade">
     <div v-if="open" class="backdrop" @click="open = false"></div>
@@ -452,6 +453,7 @@ import {
   Map as MapIcon, X, ChevronRight, Trash2, AlertTriangle,
   Upload, Download,
 } from '@lucide/vue';
+import FabButton from './FabButton.vue';
 
 const store = useLensStore();
 const { teams, authorNormalizations, ignoredAuthors, allRawAuthors, allAuthors, allContexts, allRepos, contexts, pendingContextSource, nodeColors } = storeToRefs(store);
@@ -824,14 +826,6 @@ async function handleImport(e) {
 </script>
 
 <style scoped>
-.floating-mapping-btn {
-  @apply fixed right-6 bottom-6 z-40 bg-gradient-to-r from-brand-orange-dark to-brand-orange
-         text-white rounded-full shadow-2xl px-6 py-4 font-bold text-base cursor-pointer
-         transition-all duration-300 hover:scale-110 flex items-center gap-3;
-}
-.badge {
-  @apply bg-white text-brand-orange text-xs font-bold px-2.5 py-1 rounded-full ml-1;
-}
 
 .backdrop {
   @apply fixed inset-0 bg-black/50 backdrop-blur-sm z-40;

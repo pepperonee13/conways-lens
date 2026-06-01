@@ -1,9 +1,10 @@
 <template>
-  <button class="floating-filter-btn" v-if="!open" @click="open = true" title="Filters">
+  <FabButton v-if="!open" class="fixed left-6 bottom-6 z-40"
+    label="Filters" :badge="activeFilterCount || null" color="teal" expand="right"
+    title="Filters" @click="open = true"
+  >
     <SlidersHorizontal :size="18" />
-    <span>Filters</span>
-    <span v-if="activeFilterCount" class="filter-badge">{{ activeFilterCount }}</span>
-  </button>
+  </FabButton>
 
   <transition name="backdrop-fade">
     <div v-if="open" class="backdrop" @click="open = false"></div>
@@ -169,6 +170,7 @@ import { ref, computed, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useLensStore } from '../stores/useLensStore';
 import { SlidersHorizontal, X, Check, Search, ChevronRight, Info } from '@lucide/vue';
+import FabButton from './FabButton.vue';
 import { useAnonymize } from '../composables/useAnonymize.js';
 
 const store = useLensStore();
@@ -273,15 +275,6 @@ function onContextToggle(contextId, tv, checked) {
 </script>
 
 <style scoped>
-.floating-filter-btn {
-  @apply fixed left-6 bottom-6 z-40 text-white rounded-full shadow-2xl px-6 py-4
-         font-bold text-base cursor-pointer transition-all duration-300 hover:scale-110
-         flex items-center gap-3;
-  background: linear-gradient(to right, #067a85, #088F9B);
-}
-.filter-badge {
-  @apply bg-white text-brand-teal text-xs font-bold px-2.5 py-1 rounded-full ml-1;
-}
 
 .backdrop {
   @apply fixed inset-0 bg-black/50 backdrop-blur-sm z-40;

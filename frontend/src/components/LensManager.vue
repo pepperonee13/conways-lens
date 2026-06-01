@@ -1,9 +1,10 @@
 <template>
-  <button class="floating-lens-btn" v-if="!open" @click="open = true" title="Manage lenses">
+  <FabButton v-if="!open" class="fixed left-6 bottom-24 z-40"
+    label="Lenses" :badge="lenses.length || null" color="teal" expand="right"
+    title="Manage lenses" @click="open = true"
+  >
     <Telescope :size="18" />
-    <span>Lenses</span>
-    <span v-if="lenses.length" class="lens-badge">{{ lenses.length }}</span>
-  </button>
+  </FabButton>
 
   <transition name="backdrop-fade">
     <div v-if="open" class="backdrop" @click="open = false"></div>
@@ -99,6 +100,7 @@ import { ref, reactive, computed, nextTick } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useLensStore } from '../stores/useLensStore';
 import { Telescope, X, Plus, LogIn, Save as SaveIcon, Download, Trash2, Upload } from '@lucide/vue';
+import FabButton from './FabButton.vue';
 
 const store = useLensStore();
 const { lenses, activeLensId, uiLensOpen } = storeToRefs(store);
@@ -174,15 +176,6 @@ async function handleImport(e) {
 
 <style scoped>
 /* ── Floating trigger ── */
-.floating-lens-btn {
-  @apply fixed left-6 bottom-24 z-40 bg-gradient-to-r from-brand-teal to-teal-400
-         text-white rounded-full shadow-2xl px-6 py-4 font-bold text-base cursor-pointer
-         transition-all duration-300 hover:scale-110 flex items-center gap-3;
-}
-.lens-badge {
-  @apply bg-white text-brand-teal text-xs font-bold px-2.5 py-1 rounded-full ml-1;
-}
-
 /* ── Backdrop ── */
 .backdrop {
   @apply fixed inset-0 bg-black/50 backdrop-blur-sm z-40;
