@@ -60,12 +60,17 @@ test.describe('Bubbles (circle-pack) view', () => {
     expect(await contextAuthor.isDetailTitleVisible()).toBe(true);
   });
 
-  test('clicking a multi-source context bubble expands it inline', async () => {
+  test('hovering a multi-source context bubble shows its sources in the tooltip', async () => {
     await bubbles.clickTeamBubble('Backend');
-    // ctx-auth has 2 path sources — clicking should expand inline showing source bubbles
+    // ctx-auth has 2 path sources — tooltip should list them
+    const tooltipText = await bubbles.hoverContextBubbleByName('ctx-auth');
+    expect(tooltipText).toContain('Sources');
+  });
+
+  test('clicking a multi-source context bubble opens the author detail view', async () => {
+    await bubbles.clickTeamBubble('Backend');
     await bubbles.clickVisibleContextBubbleByName('ctx-auth');
-    const sourceCount = await bubbles.getExpandedContextSourceCount();
-    expect(sourceCount).toBeGreaterThan(0);
+    expect(await contextAuthor.isDetailTitleVisible()).toBe(true);
   });
 
   test('switching back to Swimlane removes team bubble elements', async () => {

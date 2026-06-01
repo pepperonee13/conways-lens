@@ -261,6 +261,15 @@
             </li>
             <li v-if="tooltipHiddenAuthorCount > 0" class="tt-more">+{{ tooltipHiddenAuthorCount }} more</li>
           </ul>
+          <template v-if="tooltip.sources?.length">
+            <div class="tt-cb-header tt-cb-header--gap">Sources</div>
+            <ul class="tt-cb-list">
+              <li v-for="src in tooltip.sources" :key="src.key">
+                <span class="tt-contrib-name">{{ src.label }}</span>
+                <span class="tt-contrib-pct">{{ src.commits.toLocaleString() }}</span>
+              </li>
+            </ul>
+          </template>
           <div v-if="tooltip.action" class="tt-action">{{ tooltip.action }}</div>
         </template>
       </div>
@@ -492,7 +501,7 @@ const circlePackRenderer = useCirclePackGraph({
       anchorRight: d.type === 'team',
       name: d.id, type: d.type, commits: d.commits,
       teamName: d.name ?? '', contextCount: d.contextCount ?? 0, authorCount: d.authorCount ?? 0,
-      action: d.action ?? (d.type === 'context' ? (d.isMultiSource ? 'Click to expand sources' : 'Click to see author contributions') : ''),
+      action: d.action ?? (d.type === 'context' ? 'Click to see author contributions' : ''),
       contributions: d.contributions ?? [],
       owningTeamId: d.owningTeamId ?? null,
       authorContributions: displayAuthors.value && (d.type === 'context' || d.type === 'team') ? d.authorContributions ?? null : null,
@@ -500,17 +509,17 @@ const circlePackRenderer = useCirclePackGraph({
       teamInboundBreakdown: d.teamInboundBreakdown ?? null,
       teamOutboundBreakdown: d.teamOutboundBreakdown ?? null,
       repoBreakdown: d.repoBreakdown ?? null,
+      sources: d.sources ?? null,
     });
   },
   onMoveTooltip: (x, y) => { tooltip.x = x; tooltip.y = y; },
-  onHideTooltip: () => { tooltip.show = false; tooltip.anchorRight = false; },
+  onHideTooltip: () => { tooltip.show = false; tooltip.anchorRight = false; tooltip.sources = null; },
   onNodeClick: (d) => openDetail(d),
   onNodeContextMenu: (d, e) => openContextMenuForContextNode(d, e),
   violationThreshold,
   violatingOnly,
   edgeWeight,
   getContextSources: (contextId) => store.contextSourceData(contextId),
-  onSourceClick: (key, contextId) => openDetailForSource(contextId, key),
 });
 
 const detailRenderer = useContextAuthorGraph({
@@ -615,19 +624,11 @@ function openDetailForSource(contextId, srcKey) {
 
 function switchToBubblesForContext(contextId) {
   const owningTeamId = store.teams.find(t => (t.contexts ?? []).includes(contextId))?.id;
-  const sources = store.contextSourceData(contextId);
   graphView.value = 'circlepack';
   nextTick(() => {
     renderer.teardown();
-    // Pre-register expansions (they'll be picked up in the draw below)
     if (owningTeamId) circlePackRenderer.expandTeam(owningTeamId);
-    if (sources.length > 1) circlePackRenderer.expandContext(contextId);
-    // Draw the circle pack with pre-registered expansions
     circlePackRenderer.draw({ dims, data: ownershipGraphData.value });
-    // For single-source: also open the detail panel
-    if (sources.length <= 1) {
-      openDetail(contextId);
-    }
   });
 }
 

@@ -20,6 +20,7 @@ export function useGraphTooltip({ effectiveTeams, allContexts, anonMap, violatio
     teamInboundBreakdown: null,
     teamOutboundBreakdown: null,
     repoBreakdown: null,
+    sources: null,
   });
 
   function teamNameById(id) {

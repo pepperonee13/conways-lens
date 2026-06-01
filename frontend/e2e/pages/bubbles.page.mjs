@@ -103,27 +103,29 @@ export class BubblesPage {
     await this.page.waitForTimeout(800);
   }
 
-  /** Return the count of source bubble elements (expanded context sources). */
-  async getExpandedContextSourceCount() {
-    return this.page.evaluate(() =>
-      document.querySelectorAll('svg g.source-bubble').length
-    );
-  }
-
-  /** Click the first visible context bubble that has multi-source children. */
-  async clickMultiSourceContextBubble() {
-    const center = await this.page.evaluate(() => {
+  /** Hover a visible context bubble by name and return the tooltip text. */
+  async hoverContextBubbleByName(nameOrId) {
+    const center = await this.page.evaluate((n) => {
+      const byId = document.querySelector(`.repo-bubble[data-context-id="${n}"]`);
+      if (byId && byId.style.display !== 'none') {
+        const circle = byId.querySelector('circle');
+        if (circle) { const b = circle.getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; }
+      }
+      const prefix = n.slice(0, 6).toLowerCase();
       const visible = Array.from(document.querySelectorAll('.repo-bubble'))
-        .find(el => el.style.display !== 'none');
+        .filter(el => el.style.display !== 'none')
+        .find(el => Array.from(el.querySelectorAll('text')).some(t => t.textContent.trim().toLowerCase().startsWith(prefix)));
       if (!visible) return null;
       const circle = visible.querySelector('circle');
       if (!circle) return null;
-      const box = circle.getBoundingClientRect();
-      return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
-    });
-    if (!center) throw new Error('No visible context bubble found');
-    await this.page.mouse.click(center.x, center.y);
-    await this.page.waitForTimeout(800);
+      const b = circle.getBoundingClientRect();
+      return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+    }, nameOrId);
+    if (!center) throw new Error(`Context bubble not found: "${nameOrId}"`);
+    await this.page.mouse.move(center.x, center.y);
+    await this.page.waitForSelector('.graph-tooltip', { state: 'visible', timeout: 8000 });
+    await this.page.waitForTimeout(150);
+    return this.page.locator('.graph-tooltip').textContent();
   }
 
   async isTeamBubbleAbsent() {

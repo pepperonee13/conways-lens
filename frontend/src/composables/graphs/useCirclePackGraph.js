@@ -27,11 +27,9 @@ export function useCirclePackGraph({
   violatingOnly,
   edgeWeight,
   getContextSources,
-  onSourceClick,
 }) {
   // Persists across redraws so expansion state survives data/filter changes
-  const expandedTeams    = new Set();
-  const expandedContexts = new Set();
+  const expandedTeams = new Set();
 
   let lastDims = null;
   let lastData = null;
@@ -85,32 +83,12 @@ export function useCirclePackGraph({
         contextCount: teamNode?.contextCount ?? 0,
         authorCount: teamNode?.authorCount ?? 0,
         children: filteredRepos.length > 0
-          ? filteredRepos.map(r => {
-              const sources   = getContextSources?.(r.id) ?? [];
-              const isMulti   = sources.length > 1;
-              const isExpanded = expandedContexts.has(r.id);
-              if (isMulti && isExpanded) {
-                return {
-                  id: r.id, name: r.name ?? r.id, type: 'context',
-                  commits: r.commits, owningTeamId: r.owningTeamId,
-                  contributions: r.contributions ?? [], authorContributions: r.authorContributions ?? null,
-                  teamColor: team.color, isMultiSource: true, isExpanded: true,
-                  children: sources.map(s => ({
-                    id: `source:${r.id}:${s.key}`, type: 'source',
-                    value: Math.max(1, s.commits), commits: s.commits,
-                    label: s.label, sourceType: s.type, sourceKey: s.key,
-                    contextId: r.id, teamColor: team.color,
-                  })),
-                };
-              }
-              return {
-                id: r.id, name: r.name ?? r.id, type: 'context',
-                value: Math.max(1, r.commits), commits: r.commits,
-                owningTeamId: r.owningTeamId, contributions: r.contributions ?? [],
-                authorContributions: r.authorContributions ?? null, teamColor: team.color,
-                isMultiSource: isMulti,
-              };
-            })
+          ? filteredRepos.map(r => ({
+              id: r.id, name: r.name ?? r.id, type: 'context',
+              value: Math.max(1, r.commits), commits: r.commits,
+              owningTeamId: r.owningTeamId, contributions: r.contributions ?? [],
+              authorContributions: r.authorContributions ?? null, teamColor: team.color,
+            }))
           : [{ id: `${team.id}:placeholder`, name: '', type: 'empty', value: 10 }],
       });
     }
@@ -422,27 +400,18 @@ export function useCirclePackGraph({
             isOwner: c.teamId === d.data.owningTeamId,
           }))
           .sort((a, b) => (b.isOwner - a.isOwner) || (b.commits - a.commits));
-        const tooltipData = {
+        const sources = getContextSources?.(d.data.id) ?? [];
+        onShowNodeTooltip({
           ...d.data, repoBreakdown,
-          action: d.data.isMultiSource ? 'Click to expand sources' : 'Click to see author contributions',
-        };
-        onShowNodeTooltip(tooltipData, event.pageX + TOOLTIP_OFFSET.x, event.pageY + TOOLTIP_OFFSET.y);
+          sources: sources.length > 1 ? sources : null,
+          action: 'Click to see author contributions',
+        }, event.pageX + TOOLTIP_OFFSET.x, event.pageY + TOOLTIP_OFFSET.y);
       })
       .on('mousemove', e => onMoveTooltip(e.pageX + TOOLTIP_OFFSET.x, e.pageY + TOOLTIP_OFFSET.y))
       .on('mouseout', () => { clearEdges(); onHideTooltip(); })
       .on('click', (event, d) => {
         event.stopPropagation();
-        if (d.data.isMultiSource) {
-          if (d.data.isExpanded) {
-            expandedContexts.delete(d.data.id);
-          } else {
-            expandedContexts.add(d.data.id);
-          }
-          onHideTooltip();
-          draw({ dims: lastDims, data: lastData });
-        } else {
-          onNodeClick(d.data.id);
-        }
+        onNodeClick(d.data.id);
       })
       .on('contextmenu', (event, d) => {
         if (!onNodeContextMenu) return;
@@ -453,44 +422,6 @@ export function useCirclePackGraph({
         onNodeContextMenu(d.data, event);
       });
 
-    // ── Source bubbles (depth-3, visible when parent context is expanded) ────
-    const sourceNodes = root.descendants().filter(d => d.depth === 3 && d.data.type === 'source');
-    const sourceGs = g.selectAll('g.source-bubble')
-      .data(sourceNodes)
-      .join('g')
-      .attr('class', 'source-bubble')
-      .attr('transform', d => `translate(${d.x},${d.y})`)
-      .style('display', d => expandedContexts.has(d.data.contextId) ? null : 'none');
-
-    sourceGs.append('circle')
-      .attr('r', d => d.r)
-      .attr('fill', d => d.data.teamColor)
-      .attr('fill-opacity', 0.55)
-      .attr('stroke', '#fff')
-      .attr('stroke-width', 1.5)
-      .attr('cursor', 'pointer');
-
-    sourceGs.append('text')
-      .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
-      .attr('font-family', 'Inter, sans-serif')
-      .attr('font-size', d => Math.min(10, Math.max(7, d.r * 0.3)) + 'px')
-      .attr('font-weight', '600').attr('fill', '#fff').attr('pointer-events', 'none')
-      .text(d => { const l = d.data.label; return l.length > 14 ? l.slice(0, 12) + '…' : l; });
-
-    sourceGs
-      .on('mouseover', (event, d) => {
-        event.stopPropagation();
-        onShowNodeTooltip({ ...d.data, type: 'source',
-          action: 'Click to see author contributions' },
-          event.pageX + TOOLTIP_OFFSET.x, event.pageY + TOOLTIP_OFFSET.y);
-      })
-      .on('mousemove', e => onMoveTooltip(e.pageX + TOOLTIP_OFFSET.x, e.pageY + TOOLTIP_OFFSET.y))
-      .on('mouseout', () => { clearEdges(); onHideTooltip(); })
-      .on('click', (event, d) => {
-        event.stopPropagation();
-        onHideTooltip();
-        onSourceClick?.(d.data.sourceKey, d.data.contextId);
-      });
   }
 
   function updateEdgeStyles() {}
@@ -499,7 +430,6 @@ export function useCirclePackGraph({
 
   function teardown() {
     if (svgRef.value) d3.select(svgRef.value).selectAll('*').remove();
-    expandedContexts.clear();
   }
 
   function expandTeam(teamId) {
@@ -507,10 +437,5 @@ export function useCirclePackGraph({
     if (lastDims && lastData) draw({ dims: lastDims, data: lastData });
   }
 
-  function expandContext(contextId) {
-    expandedContexts.add(contextId);
-    if (lastDims && lastData) draw({ dims: lastDims, data: lastData });
-  }
-
-  return { draw, updateEdgeStyles, updateNodeColors, drawOverlays, teardown, expandTeam, expandContext };
+  return { draw, updateEdgeStyles, updateNodeColors, drawOverlays, teardown, expandTeam };
 }
