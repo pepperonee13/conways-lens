@@ -1,9 +1,10 @@
 <template>
-  <button class="floating-lens-btn" v-if="!open" @click="open = true" title="Manage lenses">
-    <Layers :size="18" />
-    <span>Lenses</span>
-    <span v-if="lenses.length" class="lens-badge">{{ lenses.length }}</span>
-  </button>
+  <FabButton v-if="!open" class="fixed left-6 bottom-24 z-40"
+    label="Lenses" :badge="lenses.length || null" color="teal" expand="right"
+    title="Manage lenses" data-testid="fab-lenses" @click="open = true"
+  >
+    <Telescope :size="18" />
+  </FabButton>
 
   <transition name="backdrop-fade">
     <div v-if="open" class="backdrop" @click="open = false"></div>
@@ -14,7 +15,7 @@
 
       <!-- Header -->
       <div class="panel-header">
-        <h2 class="panel-title"><Layers :size="20" class="title-icon" /> Lenses</h2>
+        <h2 class="panel-title"><Telescope :size="20" class="title-icon" /> Lenses</h2>
         <button class="close-btn" @click="open = false" title="Close"><X :size="18" /></button>
       </div>
 
@@ -98,7 +99,8 @@
 import { ref, reactive, computed, nextTick } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useLensStore } from '../stores/useLensStore';
-import { Layers, X, Plus, LogIn, Save as SaveIcon, Download, Trash2, Upload } from '@lucide/vue';
+import { Telescope, X, Plus, LogIn, Save as SaveIcon, Download, Trash2, Upload } from '@lucide/vue';
+import FabButton from './FabButton.vue';
 
 const store = useLensStore();
 const { lenses, activeLensId, uiLensOpen } = storeToRefs(store);
@@ -174,15 +176,6 @@ async function handleImport(e) {
 
 <style scoped>
 /* ── Floating trigger ── */
-.floating-lens-btn {
-  @apply fixed left-6 bottom-24 z-40 bg-gradient-to-r from-brand-teal to-teal-400
-         text-white rounded-full shadow-2xl px-6 py-4 font-bold text-base cursor-pointer
-         transition-all duration-300 hover:scale-110 flex items-center gap-3;
-}
-.lens-badge {
-  @apply bg-white text-brand-teal text-xs font-bold px-2.5 py-1 rounded-full ml-1;
-}
-
 /* ── Backdrop ── */
 .backdrop {
   @apply fixed inset-0 bg-black/50 backdrop-blur-sm z-40;
