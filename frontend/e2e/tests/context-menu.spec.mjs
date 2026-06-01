@@ -39,7 +39,8 @@ test.describe('Context menu — Create new context from swimlane repo node', () 
   });
 
   test('header reads "Add to context" for an unassigned repo', async ({ page }) => {
-    await swimlane.rightClickRepoNode('backend-api');
+    // Use authentication-and-authorisation-service — no user-defined context covers it
+    await swimlane.rightClickRepoNode('authentication-and-authorisation');
     await page.waitForTimeout(200);
     const header = await mappingEditor.getContextMenuSectionHeader();
     expect(header.trim()).toBe('Add to context');

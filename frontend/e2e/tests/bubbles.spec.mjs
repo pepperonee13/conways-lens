@@ -1,18 +1,18 @@
 import { test, expect } from '@playwright/test';
-import { LensAppPage }  from '../pages/lens-app.page.mjs';
-import { BubblesPage }  from '../pages/bubbles.page.mjs';
-import { RepoDetailPage } from '../pages/repo-detail.page.mjs';
+import { LensAppPage }      from '../pages/lens-app.page.mjs';
+import { BubblesPage }      from '../pages/bubbles.page.mjs';
+import { ContextAuthorPage } from '../pages/context-author.page.mjs';
 
 const CSV      = new URL('../CommitHistory.csv', import.meta.url).pathname;
 const MAPPINGS = new URL('../mappings.json',      import.meta.url).pathname;
 
 test.describe('Bubbles (circle-pack) view', () => {
-  let app, bubbles, repoDetail;
+  let app, bubbles, contextAuthor;
 
   test.beforeEach(async ({ page }) => {
-    app        = new LensAppPage(page);
-    bubbles    = new BubblesPage(page);
-    repoDetail = new RepoDetailPage(page);
+    app           = new LensAppPage(page);
+    bubbles       = new BubblesPage(page);
+    contextAuthor = new ContextAuthorPage(page);
     await app.setup(CSV, MAPPINGS);
     await app.switchToBubbles();
   });
@@ -56,8 +56,16 @@ test.describe('Bubbles (circle-pack) view', () => {
 
   test('clicking a context bubble opens the repo detail view', async () => {
     await bubbles.clickTeamBubble('Backend');
-    await bubbles.clickVisibleContextBubble();
-    expect(await repoDetail.isDetailTitleVisible()).toBe(true);
+    await bubbles.clickVisibleContextBubbleByName('backend-api');
+    expect(await contextAuthor.isDetailTitleVisible()).toBe(true);
+  });
+
+  test('clicking a multi-source context bubble expands it inline', async () => {
+    await bubbles.clickTeamBubble('Backend');
+    // ctx-auth has 2 path sources — clicking should expand inline showing source bubbles
+    await bubbles.clickVisibleContextBubbleByName('ctx-auth');
+    const sourceCount = await bubbles.getExpandedContextSourceCount();
+    expect(sourceCount).toBeGreaterThan(0);
   });
 
   test('switching back to Swimlane removes team bubble elements', async () => {

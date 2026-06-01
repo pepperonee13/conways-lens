@@ -32,8 +32,9 @@ test.describe('Data loading', () => {
     await expect(app.viewToggleSwimlane).toHaveClass(/active/);
   });
 
-  test('violation banner shows 6 total contexts after Data Platform merge', async () => {
+  test('violation banner shows 7 total contexts after adding ctx-auth', async () => {
     await app.setup(CSV, MAPPINGS);
-    await expect(app.violationBanner).toContainText('out of 6 ');
+    // After adding ctx-auth (2 sources) and cross-team commits to it, there are 7 total contexts
+    await expect(app.violationBanner).toContainText('out of 7 ');
   });
 });

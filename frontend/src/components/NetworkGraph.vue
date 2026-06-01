@@ -320,6 +320,7 @@ import { useSwimlaneGraph } from '../composables/graphs/useSwimlaneGraph.js';
 import { useCirclePackGraph } from '../composables/graphs/useCirclePackGraph.js';
 import { useContextAuthorGraph } from '../composables/graphs/useContextAuthorGraph.js';
 import { useRepoFolderGraph } from '../composables/graphs/useRepoFolderGraph.js';
+import { useContextNavigation } from '../composables/useContextNavigation.js';
 import { useAnonymize } from '../composables/useAnonymize.js';
 import { useGraphTooltip } from '../composables/useGraphTooltip.js';
 import { useGraphContextMenu } from '../composables/useGraphContextMenu.js';
@@ -347,8 +348,9 @@ const detailSvgRef = ref(null);
 const containerRef = ref(null);
 const vizDropRef   = ref(null);
 const dims         = reactive({ w: 900, h: 600 });
-const detailRepoId = ref(null);
-const folderPath   = ref(null); // null = author view, [] = folder root, ['src'] = inside src/
+const detailRepoId    = ref(null);
+const detailSourceKey = ref(null); // null = whole context, otherwise source key
+const folderPath      = ref(null); // null = author view, [] = folder root, ['src'] = inside src/
 
 const detailContextName = computed(() => {
   const id = detailRepoId.value;
@@ -357,7 +359,13 @@ const detailContextName = computed(() => {
 });
 
 // Accepts any source type (repo/path/glob); for auto-contexts (id === repoName) returns id.
+// When a source key is active, extract the repo from it for folder drill-down.
 const detailRepoName = computed(() => {
+  const srcKey = detailSourceKey.value;
+  if (srcKey) {
+    const parts = srcKey.split('|');
+    return parts[1] ?? detailRepoId.value;
+  }
   const id = detailRepoId.value;
   if (!id) return null;
   const ctx = allContexts.value.find(c => c.id === id);
@@ -452,7 +460,7 @@ const renderer = useSwimlaneGraph({
       anchorRight: d.type === 'team',
       name: d.id, type: d.type, commits: d.commits,
       teamName: d.name ?? '', contextCount: d.contextCount ?? 0, authorCount: d.authorCount ?? 0,
-      action: d.type === 'context' ? 'Click to see author contributions' : '',
+      action: d.type === 'context' ? 'Click to explore in Bubbles view' : '',
       contributions: d.contributions ?? [],
       owningTeamId: d.owningTeamId ?? null,
       authorContributions: displayAuthors.value && (d.type === 'context' || d.type === 'team') ? d.authorContributions ?? null : null,
@@ -468,7 +476,7 @@ const renderer = useSwimlaneGraph({
   },
   onMoveTooltip: (x, y) => { tooltip.x = x; tooltip.y = y; },
   onHideTooltip: () => { tooltip.show = false; tooltip.anchorRight = false; },
-  onNodeClick: (d) => openDetail(d.id),
+  onNodeClick: (d) => switchToBubblesForContext(d.id),
   onNodeContextMenu: (d, e) => openContextMenuForContextNode(d, e),
   edgeWeight,
   violationThreshold,
@@ -484,7 +492,7 @@ const circlePackRenderer = useCirclePackGraph({
       anchorRight: d.type === 'team',
       name: d.id, type: d.type, commits: d.commits,
       teamName: d.name ?? '', contextCount: d.contextCount ?? 0, authorCount: d.authorCount ?? 0,
-      action: d.type === 'context' ? 'Click to see author contributions' : '',
+      action: d.action ?? (d.type === 'context' ? (d.isMultiSource ? 'Click to expand sources' : 'Click to see author contributions') : ''),
       contributions: d.contributions ?? [],
       owningTeamId: d.owningTeamId ?? null,
       authorContributions: displayAuthors.value && (d.type === 'context' || d.type === 'team') ? d.authorContributions ?? null : null,
@@ -501,6 +509,8 @@ const circlePackRenderer = useCirclePackGraph({
   violationThreshold,
   violatingOnly,
   edgeWeight,
+  getContextSources: (contextId) => store.contextSourceData(contextId),
+  onSourceClick: (key, contextId) => openDetailForSource(contextId, key),
 });
 
 const detailRenderer = useContextAuthorGraph({
@@ -566,16 +576,58 @@ const folderRenderer = useRepoFolderGraph({
   edgeWeight,
 });
 
+// ── URL Navigation ────────────────────────────────────────────────────────
+
+const nav = useContextNavigation({
+  graphView,
+  onRestoreState: () => {
+    // Restore state from URL on page load — handled in onMounted
+  },
+});
+
 // ── Navigation ────────────────────────────────────────────────────────────
 
-function openDetail(contextId) {
+function openDetail(contextId, srcKey = null) {
   folderRenderer.teardown();
   folderPath.value = null;
   noFolderData.value = false;
   detailRepoId.value = contextId;
+  detailSourceKey.value = srcKey;
+  nav.openContext(contextId);
   nextTick(() => {
     const data = store.contextContributorsData(contextId);
     detailRenderer.draw({ dims, data });
+  });
+}
+
+function openDetailForSource(contextId, srcKey) {
+  folderRenderer.teardown();
+  folderPath.value = null;
+  noFolderData.value = false;
+  detailRepoId.value = contextId;
+  detailSourceKey.value = srcKey;
+  nav.openSource(contextId, srcKey);
+  nextTick(() => {
+    const data = store.contextContributorsData(contextId);
+    detailRenderer.draw({ dims, data });
+  });
+}
+
+function switchToBubblesForContext(contextId) {
+  const owningTeamId = store.teams.find(t => (t.contexts ?? []).includes(contextId))?.id;
+  const sources = store.contextSourceData(contextId);
+  graphView.value = 'circlepack';
+  nextTick(() => {
+    renderer.teardown();
+    // Pre-register expansions (they'll be picked up in the draw below)
+    if (owningTeamId) circlePackRenderer.expandTeam(owningTeamId);
+    if (sources.length > 1) circlePackRenderer.expandContext(contextId);
+    // Draw the circle pack with pre-registered expansions
+    circlePackRenderer.draw({ dims, data: ownershipGraphData.value });
+    // For single-source: also open the detail panel
+    if (sources.length <= 1) {
+      openDetail(contextId);
+    }
   });
 }
 
@@ -584,6 +636,8 @@ function closeDetail() {
   folderRenderer.teardown();
   folderPath.value = null;
   detailRepoId.value = null;
+  detailSourceKey.value = null;
+  nav.closeDetail();
   nextTick(() => redraw());
 }
 
@@ -602,6 +656,7 @@ function openFolderMode() {
 function closeFolderMode() {
   folderRenderer.teardown();
   folderPath.value = null;
+  nav.closeSource();
   nextTick(() => {
     const data = store.contextContributorsData(detailRepoId.value);
     detailRenderer.draw({ dims, data });
@@ -672,7 +727,12 @@ function handleDocClick(e) {
     vizOpen.value = false;
 }
 
-onMounted(() => document.addEventListener('mousedown', handleDocClick));
+onMounted(() => {
+  document.addEventListener('mousedown', handleDocClick);
+  if (nav.contextId.value) {
+    nextTick(() => openDetail(nav.contextId.value, nav.sourceKey.value ?? null));
+  }
+});
 onBeforeUnmount(() => {
   document.removeEventListener('mousedown', handleDocClick);
   renderer.teardown();

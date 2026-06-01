@@ -274,6 +274,7 @@ export function useCirclePackGraph({
       .join('g')
       .attr('class', 'repo-bubble')
       .attr('data-team-id', d => d.data.owningTeamId)
+      .attr('data-context-id', d => d.data.id)
       .attr('transform', d => `translate(${d.x},${d.y})`)
       .style('display', d => expandedTeams.has(d.data.owningTeamId) ? null : 'none');
 

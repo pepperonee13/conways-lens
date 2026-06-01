@@ -71,6 +71,61 @@ export class BubblesPage {
     await this.page.waitForTimeout(800);
   }
 
+  /**
+   * Click a visible context bubble by context ID or partial name match.
+   * Checks data-context-id first, then falls back to text prefix (first 6 chars).
+   */
+  async clickVisibleContextBubbleByName(nameOrId) {
+    const center = await this.page.evaluate((n) => {
+      // Try exact match by data-context-id
+      const byId = document.querySelector(`.repo-bubble[data-context-id="${n}"]`);
+      if (byId && byId.style.display !== 'none') {
+        const circle = byId.querySelector('circle');
+        if (circle) {
+          const box = circle.getBoundingClientRect();
+          return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+        }
+      }
+      // Fall back to text prefix match
+      const prefix = n.slice(0, 6);
+      const visible = Array.from(document.querySelectorAll('.repo-bubble'))
+        .filter(el => el.style.display !== 'none')
+        .find(el => Array.from(el.querySelectorAll('text'))
+          .some(t => t.textContent.trim().toLowerCase().startsWith(prefix.toLowerCase())));
+      if (!visible) return null;
+      const circle = visible.querySelector('circle');
+      if (!circle) return null;
+      const box = circle.getBoundingClientRect();
+      return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    }, nameOrId);
+    if (!center) throw new Error(`Context bubble not found: "${nameOrId}"`);
+    await this.page.mouse.click(center.x, center.y);
+    await this.page.waitForTimeout(800);
+  }
+
+  /** Return the count of source bubble elements (expanded context sources). */
+  async getExpandedContextSourceCount() {
+    return this.page.evaluate(() =>
+      document.querySelectorAll('svg g.source-bubble').length
+    );
+  }
+
+  /** Click the first visible context bubble that has multi-source children. */
+  async clickMultiSourceContextBubble() {
+    const center = await this.page.evaluate(() => {
+      const visible = Array.from(document.querySelectorAll('.repo-bubble'))
+        .find(el => el.style.display !== 'none');
+      if (!visible) return null;
+      const circle = visible.querySelector('circle');
+      if (!circle) return null;
+      const box = circle.getBoundingClientRect();
+      return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    });
+    if (!center) throw new Error('No visible context bubble found');
+    await this.page.mouse.click(center.x, center.y);
+    await this.page.waitForTimeout(800);
+  }
+
   async isTeamBubbleAbsent() {
     return this.page.evaluate(() => document.querySelectorAll('.team-bubble').length === 0);
   }
