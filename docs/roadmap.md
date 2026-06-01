@@ -32,6 +32,9 @@ Let users save named threshold presets ("strict", "lenient") and flag contexts t
 breach them. A shareable URL that encodes the current view state would complement
 this for async reviews.
 
+### 5b. Dynamic context canvas
+An open canvas where a user can pull specific bounded contexts onto a freeform workspace and arrange them side by side. Each context tile shows its author radial or folder view inline, so an architect can compose a custom picture — "show me Auth, Payments, and the API Gateway together" — without being constrained by the full team graph. Tiles could be linked with arrows to annotate intended vs. actual dependencies. The canvas state would be saveable as a named lens (see item 6).
+
 ---
 
 ## Lower-hanging fruit
@@ -44,6 +47,16 @@ picker in the toolbar lets consultants or architects switch between client proje
 instantly without exporting and re-importing JSON. Lenses are stored in
 `localStorage` alongside the current data, so no backend is required; individual
 lenses can still be exported as JSON for sharing or backup.
+
+### 10. Bipartite source view for multi-source contexts
+When drilling into a context that has more than one source (repo, path, or glob), show a
+bipartite layout — authors/teams on the left, source nodes on the right — instead of a
+single centre node. Edges reveal which authors worked in which source, making cross-source
+contributors immediately visible as knowledge hubs or hidden coupling points. Clicking a
+source node on the right then enters the existing folder drill-down for that source.
+The infrastructure is already in place (`sourceContributorsData`, `useRepoFolderGraph`,
+`useContextAuthorGraph`); this is primarily a layout change to `useContextAuthorGraph` and
+a new entry point in the detail panel header.
 
 ### 7. Dark mode
 Tailwind already supports `dark:` variants throughout the codebase. Wire up a toggle
