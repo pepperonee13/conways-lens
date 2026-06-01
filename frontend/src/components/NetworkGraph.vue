@@ -261,6 +261,15 @@
             </li>
             <li v-if="tooltipHiddenAuthorCount > 0" class="tt-more">+{{ tooltipHiddenAuthorCount }} more</li>
           </ul>
+          <template v-if="tooltip.sources?.length">
+            <div class="tt-cb-header tt-cb-header--gap">Sources</div>
+            <ul class="tt-cb-list">
+              <li v-for="src in tooltip.sources" :key="src.key">
+                <span class="tt-contrib-name">{{ src.label }}</span>
+                <span class="tt-contrib-pct">{{ src.commits.toLocaleString() }}</span>
+              </li>
+            </ul>
+          </template>
           <div v-if="tooltip.action" class="tt-action">{{ tooltip.action }}</div>
         </template>
       </div>
@@ -318,8 +327,9 @@ import { Maximize2, Minimize2, Download } from '@lucide/vue';
 import { useLensStore } from '../stores/useLensStore';
 import { useSwimlaneGraph } from '../composables/graphs/useSwimlaneGraph.js';
 import { useCirclePackGraph } from '../composables/graphs/useCirclePackGraph.js';
-import { useRepoDetailGraph } from '../composables/graphs/useRepoDetailGraph.js';
+import { useContextAuthorGraph } from '../composables/graphs/useContextAuthorGraph.js';
 import { useRepoFolderGraph } from '../composables/graphs/useRepoFolderGraph.js';
+import { useContextNavigation } from '../composables/useContextNavigation.js';
 import { useAnonymize } from '../composables/useAnonymize.js';
 import { useGraphTooltip } from '../composables/useGraphTooltip.js';
 import { useGraphContextMenu } from '../composables/useGraphContextMenu.js';
@@ -347,8 +357,9 @@ const detailSvgRef = ref(null);
 const containerRef = ref(null);
 const vizDropRef   = ref(null);
 const dims         = reactive({ w: 900, h: 600 });
-const detailRepoId = ref(null);
-const folderPath   = ref(null); // null = author view, [] = folder root, ['src'] = inside src/
+const detailRepoId    = ref(null);
+const detailSourceKey = ref(null); // null = whole context, otherwise source key
+const folderPath      = ref(null); // null = author view, [] = folder root, ['src'] = inside src/
 
 const detailContextName = computed(() => {
   const id = detailRepoId.value;
@@ -357,7 +368,13 @@ const detailContextName = computed(() => {
 });
 
 // Accepts any source type (repo/path/glob); for auto-contexts (id === repoName) returns id.
+// When a source key is active, extract the repo from it for folder drill-down.
 const detailRepoName = computed(() => {
+  const srcKey = detailSourceKey.value;
+  if (srcKey) {
+    const parts = srcKey.split('|');
+    return parts[1] ?? detailRepoId.value;
+  }
   const id = detailRepoId.value;
   if (!id) return null;
   const ctx = allContexts.value.find(c => c.id === id);
@@ -452,7 +469,7 @@ const renderer = useSwimlaneGraph({
       anchorRight: d.type === 'team',
       name: d.id, type: d.type, commits: d.commits,
       teamName: d.name ?? '', contextCount: d.contextCount ?? 0, authorCount: d.authorCount ?? 0,
-      action: d.type === 'context' ? 'Click to see author contributions' : '',
+      action: d.type === 'context' ? 'Click to explore in Bubbles view' : '',
       contributions: d.contributions ?? [],
       owningTeamId: d.owningTeamId ?? null,
       authorContributions: displayAuthors.value && (d.type === 'context' || d.type === 'team') ? d.authorContributions ?? null : null,
@@ -468,7 +485,7 @@ const renderer = useSwimlaneGraph({
   },
   onMoveTooltip: (x, y) => { tooltip.x = x; tooltip.y = y; },
   onHideTooltip: () => { tooltip.show = false; tooltip.anchorRight = false; },
-  onNodeClick: (d) => openDetail(d.id),
+  onNodeClick: (d) => switchToBubblesForContext(d.id),
   onNodeContextMenu: (d, e) => openContextMenuForContextNode(d, e),
   edgeWeight,
   violationThreshold,
@@ -484,7 +501,7 @@ const circlePackRenderer = useCirclePackGraph({
       anchorRight: d.type === 'team',
       name: d.id, type: d.type, commits: d.commits,
       teamName: d.name ?? '', contextCount: d.contextCount ?? 0, authorCount: d.authorCount ?? 0,
-      action: d.type === 'context' ? 'Click to see author contributions' : '',
+      action: d.action ?? (d.type === 'context' ? 'Click to see author contributions' : ''),
       contributions: d.contributions ?? [],
       owningTeamId: d.owningTeamId ?? null,
       authorContributions: displayAuthors.value && (d.type === 'context' || d.type === 'team') ? d.authorContributions ?? null : null,
@@ -492,18 +509,20 @@ const circlePackRenderer = useCirclePackGraph({
       teamInboundBreakdown: d.teamInboundBreakdown ?? null,
       teamOutboundBreakdown: d.teamOutboundBreakdown ?? null,
       repoBreakdown: d.repoBreakdown ?? null,
+      sources: d.sources ?? null,
     });
   },
   onMoveTooltip: (x, y) => { tooltip.x = x; tooltip.y = y; },
-  onHideTooltip: () => { tooltip.show = false; tooltip.anchorRight = false; },
+  onHideTooltip: () => { tooltip.show = false; tooltip.anchorRight = false; tooltip.sources = null; },
   onNodeClick: (d) => openDetail(d),
   onNodeContextMenu: (d, e) => openContextMenuForContextNode(d, e),
   violationThreshold,
   violatingOnly,
   edgeWeight,
+  getContextSources: (contextId) => store.contextSourceData(contextId),
 });
 
-const detailRenderer = useRepoDetailGraph({
+const detailRenderer = useContextAuthorGraph({
   svgRef: detailSvgRef,
   effectiveTeams,
   getNodeColor: store.getNodeColor,
@@ -566,16 +585,50 @@ const folderRenderer = useRepoFolderGraph({
   edgeWeight,
 });
 
+// ── URL Navigation ────────────────────────────────────────────────────────
+
+const nav = useContextNavigation({
+  graphView,
+  onRestoreState: () => {
+    // Restore state from URL on page load — handled in onMounted
+  },
+});
+
 // ── Navigation ────────────────────────────────────────────────────────────
 
-function openDetail(contextId) {
+function openDetail(contextId, srcKey = null) {
   folderRenderer.teardown();
   folderPath.value = null;
   noFolderData.value = false;
   detailRepoId.value = contextId;
+  detailSourceKey.value = srcKey;
+  nav.openContext(contextId);
   nextTick(() => {
     const data = store.contextContributorsData(contextId);
     detailRenderer.draw({ dims, data });
+  });
+}
+
+function openDetailForSource(contextId, srcKey) {
+  folderRenderer.teardown();
+  folderPath.value = null;
+  noFolderData.value = false;
+  detailRepoId.value = contextId;
+  detailSourceKey.value = srcKey;
+  nav.openSource(contextId, srcKey);
+  nextTick(() => {
+    const data = store.sourceContributorsData(contextId, srcKey);
+    detailRenderer.draw({ dims, data });
+  });
+}
+
+function switchToBubblesForContext(contextId) {
+  const owningTeamId = store.teams.find(t => (t.contexts ?? []).includes(contextId))?.id;
+  graphView.value = 'circlepack';
+  nextTick(() => {
+    renderer.teardown();
+    if (owningTeamId) circlePackRenderer.expandTeam(owningTeamId);
+    circlePackRenderer.draw({ dims, data: ownershipGraphData.value });
   });
 }
 
@@ -584,6 +637,8 @@ function closeDetail() {
   folderRenderer.teardown();
   folderPath.value = null;
   detailRepoId.value = null;
+  detailSourceKey.value = null;
+  nav.closeDetail();
   nextTick(() => redraw());
 }
 
@@ -596,25 +651,35 @@ function openFolderMode() {
   noFolderData.value = false;
   detailRenderer.teardown();
   folderPath.value = [];
+  nav.openFolder([]);
   nextTick(() => redrawFolder());
 }
 
 function closeFolderMode() {
   folderRenderer.teardown();
   folderPath.value = null;
+  if (detailSourceKey.value) {
+    nav.openSource(detailRepoId.value, detailSourceKey.value);
+  } else {
+    nav.openContext(detailRepoId.value);
+  }
   nextTick(() => {
-    const data = store.contextContributorsData(detailRepoId.value);
+    const data = detailSourceKey.value
+      ? store.sourceContributorsData(detailRepoId.value, detailSourceKey.value)
+      : store.contextContributorsData(detailRepoId.value);
     detailRenderer.draw({ dims, data });
   });
 }
 
 function drillDown(segmentId) {
   folderPath.value = [...folderPath.value, segmentId];
+  nav.openFolder(folderPath.value);
   redrawFolder();
 }
 
 function breadcrumbNavigate(index) {
   folderPath.value = folderPath.value.slice(0, index + 1);
+  nav.openFolder(folderPath.value);
   redrawFolder();
 }
 
@@ -672,7 +737,25 @@ function handleDocClick(e) {
     vizOpen.value = false;
 }
 
-onMounted(() => document.addEventListener('mousedown', handleDocClick));
+onMounted(() => {
+  document.addEventListener('mousedown', handleDocClick);
+  if (nav.contextId.value) {
+    const restoredFolderPath = nav.folderPath.value;
+    nextTick(() => {
+      openDetail(nav.contextId.value, nav.sourceKey.value ?? null);
+      if (restoredFolderPath !== null) {
+        nextTick(() => {
+          const probe = store.repoFolderData(detailRepoName.value, '');
+          if (probe.nodes.some(n => n.type === 'folder')) {
+            detailRenderer.teardown();
+            folderPath.value = restoredFolderPath;
+            redrawFolder();
+          }
+        });
+      }
+    });
+  }
+});
 onBeforeUnmount(() => {
   document.removeEventListener('mousedown', handleDocClick);
   renderer.teardown();

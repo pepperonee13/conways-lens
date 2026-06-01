@@ -8,6 +8,14 @@
         { "type": "repo", "repo": "data-pipeline" },
         { "type": "repo", "repo": "analytics-db" }
       ]
+    },
+    {
+      "id": "ctx-auth",
+      "name": "Authentication",
+      "sources": [
+        { "type": "path", "repo": "backend-api", "path": "src/auth" },
+        { "type": "path", "repo": "mobile-app",  "path": "src/auth" }
+      ]
     }
   ],
   "teams": [
@@ -16,7 +24,7 @@
       "name": "Backend",
       "color": "#225EA9",
       "authors": ["Alice", "Bob"],
-      "contexts": ["backend-api", "authentication-and-authorisation-service"]
+      "contexts": ["backend-api", "authentication-and-authorisation-service", "ctx-auth"]
     },
     {
       "id": "frontend",

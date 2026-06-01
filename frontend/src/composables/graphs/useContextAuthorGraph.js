@@ -8,7 +8,7 @@ import { exceedsThreshold } from '../../domain/violations.js';
  * Authors are grouped into team arcs. Teams start collapsed (one node per team);
  * clicking a team node expands it to show individual authors.
  */
-export function useRepoDetailGraph({
+export function useContextAuthorGraph({
   svgRef,
   effectiveTeams,
   getNodeColor,

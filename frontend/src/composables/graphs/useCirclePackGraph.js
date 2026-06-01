@@ -26,11 +26,17 @@ export function useCirclePackGraph({
   violationThreshold,
   violatingOnly,
   edgeWeight,
+  getContextSources,
 }) {
   // Persists across redraws so expansion state survives data/filter changes
   const expandedTeams = new Set();
 
+  let lastDims = null;
+  let lastData = null;
+
   function draw({ dims, data }) {
+    lastDims = dims;
+    lastData = data;
     if (!svgRef.value) return;
 
     const svg = d3.select(svgRef.value);
@@ -78,15 +84,10 @@ export function useCirclePackGraph({
         authorCount: teamNode?.authorCount ?? 0,
         children: filteredRepos.length > 0
           ? filteredRepos.map(r => ({
-              id:                  r.id,
-              name:                r.name ?? r.id,
-              type:                'context',
-              value:               Math.max(1, r.commits),
-              commits:             r.commits,
-              owningTeamId:        r.owningTeamId,
-              contributions:       r.contributions      ?? [],
-              authorContributions: r.authorContributions ?? null,
-              teamColor:           team.color,
+              id: r.id, name: r.name ?? r.id, type: 'context',
+              value: Math.max(1, r.commits), commits: r.commits,
+              owningTeamId: r.owningTeamId, contributions: r.contributions ?? [],
+              authorContributions: r.authorContributions ?? null, teamColor: team.color,
             }))
           : [{ id: `${team.id}:placeholder`, name: '', type: 'empty', value: 10 }],
       });
@@ -146,6 +147,10 @@ export function useCirclePackGraph({
     for (const d of allRepoPackNodes) {
       // Use outer ring radius so edge endpoints (and arrowheads) land at the ring edge
       posMap[d.data.id] = { x: d.x, y: d.y, r: d.r + RING_OUTER, color: d.data.teamColor ?? d.parent?.data.color };
+    }
+    const allSourcePackNodes = root.descendants().filter(d => d.depth === 3);
+    for (const d of allSourcePackNodes) {
+      posMap[d.data.id] = { x: d.x, y: d.y, r: d.r + RING_OUTER, color: d.data.teamColor };
     }
 
     const teamColorMap = Object.fromEntries(teams.map(t => [`team:${t.id}`, t.color]));
@@ -247,6 +252,7 @@ export function useCirclePackGraph({
       .join('g')
       .attr('class', 'repo-bubble')
       .attr('data-team-id', d => d.data.owningTeamId)
+      .attr('data-context-id', d => d.data.id)
       .attr('transform', d => `translate(${d.x},${d.y})`)
       .style('display', d => expandedTeams.has(d.data.owningTeamId) ? null : 'none');
 
@@ -394,11 +400,19 @@ export function useCirclePackGraph({
             isOwner: c.teamId === d.data.owningTeamId,
           }))
           .sort((a, b) => (b.isOwner - a.isOwner) || (b.commits - a.commits));
-        onShowNodeTooltip({ ...d.data, repoBreakdown }, event.pageX + TOOLTIP_OFFSET.x, event.pageY + TOOLTIP_OFFSET.y);
+        const sources = getContextSources?.(d.data.id) ?? [];
+        onShowNodeTooltip({
+          ...d.data, repoBreakdown,
+          sources: sources.length > 1 ? sources : null,
+          action: 'Click to see author contributions',
+        }, event.pageX + TOOLTIP_OFFSET.x, event.pageY + TOOLTIP_OFFSET.y);
       })
       .on('mousemove', e => onMoveTooltip(e.pageX + TOOLTIP_OFFSET.x, e.pageY + TOOLTIP_OFFSET.y))
       .on('mouseout', () => { clearEdges(); onHideTooltip(); })
-      .on('click', (event, d) => { event.stopPropagation(); onNodeClick(d.data.id); })
+      .on('click', (event, d) => {
+        event.stopPropagation();
+        onNodeClick(d.data.id);
+      })
       .on('contextmenu', (event, d) => {
         if (!onNodeContextMenu) return;
         event.preventDefault();
@@ -407,6 +421,7 @@ export function useCirclePackGraph({
         onHideTooltip();
         onNodeContextMenu(d.data, event);
       });
+
   }
 
   function updateEdgeStyles() {}
@@ -417,5 +432,10 @@ export function useCirclePackGraph({
     if (svgRef.value) d3.select(svgRef.value).selectAll('*').remove();
   }
 
-  return { draw, updateEdgeStyles, updateNodeColors, drawOverlays, teardown };
+  function expandTeam(teamId) {
+    expandedTeams.add(teamId);
+    if (lastDims && lastData) draw({ dims: lastDims, data: lastData });
+  }
+
+  return { draw, updateEdgeStyles, updateNodeColors, drawOverlays, teardown, expandTeam };
 }

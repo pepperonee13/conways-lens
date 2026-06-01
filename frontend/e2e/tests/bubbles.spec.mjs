@@ -1,18 +1,18 @@
 import { test, expect } from '@playwright/test';
-import { LensAppPage }  from '../pages/lens-app.page.mjs';
-import { BubblesPage }  from '../pages/bubbles.page.mjs';
-import { RepoDetailPage } from '../pages/repo-detail.page.mjs';
+import { LensAppPage }      from '../pages/lens-app.page.mjs';
+import { BubblesPage }      from '../pages/bubbles.page.mjs';
+import { ContextAuthorPage } from '../pages/context-author.page.mjs';
 
 const CSV      = new URL('../CommitHistory.csv', import.meta.url).pathname;
 const MAPPINGS = new URL('../mappings.json',      import.meta.url).pathname;
 
 test.describe('Bubbles (circle-pack) view', () => {
-  let app, bubbles, repoDetail;
+  let app, bubbles, contextAuthor;
 
   test.beforeEach(async ({ page }) => {
-    app        = new LensAppPage(page);
-    bubbles    = new BubblesPage(page);
-    repoDetail = new RepoDetailPage(page);
+    app           = new LensAppPage(page);
+    bubbles       = new BubblesPage(page);
+    contextAuthor = new ContextAuthorPage(page);
     await app.setup(CSV, MAPPINGS);
     await app.switchToBubbles();
   });
@@ -56,8 +56,21 @@ test.describe('Bubbles (circle-pack) view', () => {
 
   test('clicking a context bubble opens the repo detail view', async () => {
     await bubbles.clickTeamBubble('Backend');
-    await bubbles.clickVisibleContextBubble();
-    expect(await repoDetail.isDetailTitleVisible()).toBe(true);
+    await bubbles.clickVisibleContextBubbleByName('backend-api');
+    expect(await contextAuthor.isDetailTitleVisible()).toBe(true);
+  });
+
+  test('hovering a multi-source context bubble shows its sources in the tooltip', async () => {
+    await bubbles.clickTeamBubble('Backend');
+    // ctx-auth has 2 path sources — tooltip should list them
+    const tooltipText = await bubbles.hoverContextBubbleByName('ctx-auth');
+    expect(tooltipText).toContain('Sources');
+  });
+
+  test('clicking a multi-source context bubble opens the author detail view', async () => {
+    await bubbles.clickTeamBubble('Backend');
+    await bubbles.clickVisibleContextBubbleByName('ctx-auth');
+    expect(await contextAuthor.isDetailTitleVisible()).toBe(true);
   });
 
   test('switching back to Swimlane removes team bubble elements', async () => {

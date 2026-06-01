@@ -50,18 +50,30 @@ see the [README](../README.md); for internals see [architecture.md](architecture
 
 - **Swimlane view** — one lane per team, ordered by violation severity, with each team's
   bounded contexts shown alongside. Edges that cross a lane represent cross-team
-  contributions.
+  contributions. Clicking a context node switches to the Bubbles view with that team
+  expanded, so you can continue exploring without losing context.
 - **Bubbles view** — a circle-pack layout where each team is a bubble containing its
-  contexts, sized by commit volume; expand a team to see its contexts.
+  contexts, sized by commit volume; expand a team to see its contexts. For multi-source
+  contexts, hovering shows a tooltip that lists each source with its commit count so you
+  can assess the composition before drilling down.
 - Node and bubble sizes scale with commit volume; hovering any node or edge highlights its
   connections and shows a detailed tooltip with team and author breakdowns.
 
 ## Drill-down
 
-- Click a bounded context to open a radial view of all its contributors, grouped by team,
-  with each author's share of the commits shown on the edges.
+- Click a bounded context (in either the Bubbles or Swimlane view) to open a **context
+  author radial** — all contributors to that context, grouped by team, with each author's
+  share of the commits shown on the edges.
 - Drill further into the context's folder structure (when file-path data is available) to
   see ownership directory by directory.
+- Navigate breadcrumb-style back up through the hierarchy at any level.
+
+## Deep-link navigation
+
+- The current view, selected context, active source, and folder depth are all reflected in
+  the URL (`?view=`, `?context=`, `?source=`, `?folder=`).
+- Bookmarking or sharing the URL restores the exact drill-down state on reload — useful for
+  linking teammates directly to a specific context or folder.
 
 ## Cross-team analysis
 
@@ -86,6 +98,13 @@ see the [README](../README.md); for internals see [architecture.md](architecture
 - Narrow the graph to specific teams, bounded contexts, or authors.
 - Search within the filter panel and see how many items are currently selected.
 - Clear all filters at once.
+
+## Named lenses
+
+- Save the current configuration (teams, contexts, aliases, filters) as a **named lens**
+  so you can switch between different views of the same dataset in one click.
+- Lenses are listed in a dedicated panel, can be renamed or deleted, and the active lens
+  name is shown in the header.
 
 ## Saving your work
 

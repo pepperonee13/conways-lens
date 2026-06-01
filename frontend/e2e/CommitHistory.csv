@@ -54,4 +54,6 @@ Alice,authentication-and-authorisation-service,sha052,2024-03-14,src/oauth/callb
 Alice,authentication-and-authorisation-service,sha053,2024-03-16,src/jwt/validator.ts,
 Bob,authentication-and-authorisation-service,sha054,2024-03-18,src/sessions/store.ts,
 Carol,authentication-and-authorisation-service,sha055,2024-03-20,src/frontend/sso.tsx,
+Carol,backend-api,sha056,2024-03-21,src/auth/oauth.ts,
+Carol,mobile-app,sha057,2024-03-22,src/auth/biometric.ts,
 Since=2024-03-01,Until=2024-03-31

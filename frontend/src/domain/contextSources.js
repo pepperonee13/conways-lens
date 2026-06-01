@@ -96,6 +96,32 @@ export function contextForSource(source, contexts, getFilePaths = () => []) {
   ) ?? null;
 }
 
+/** Returns a stable string key for a source, used in URL params and graph node IDs. */
+export function sourceKey(src) {
+  if (src.type === 'repo')  return `repo|${src.repo}`;
+  if (src.type === 'path')  return `path|${src.repo}|${src.path}`;
+  if (src.type === 'glob')  return `glob|${src.repo}|${src.pattern}`;
+  return `unknown|${src.repo}`;
+}
+
+/** Human-readable label for a source node. */
+export function sourceLabel(src) {
+  if (src.type === 'repo')  return src.repo;
+  if (src.type === 'path')  return `${src.repo}/${src.path}`;
+  if (src.type === 'glob')  return `${src.repo}: ${src.pattern}`;
+  return src.repo;
+}
+
+/** Decode a source key string back to a partial source object. Returns null on failure. */
+export function decodeSourceKey(key) {
+  if (!key) return null;
+  const parts = key.split('|');
+  if (parts[0] === 'repo' && parts.length === 2)  return { type: 'repo',  repo: parts[1] };
+  if (parts[0] === 'path' && parts.length === 3)  return { type: 'path',  repo: parts[1], path:    parts[2] };
+  if (parts[0] === 'glob' && parts.length === 3)  return { type: 'glob',  repo: parts[1], pattern: parts[2] };
+  return null;
+}
+
 /**
  * Maps a (repoId, filePath) pair to the id of the context that owns it.
  *

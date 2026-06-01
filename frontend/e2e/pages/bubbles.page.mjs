@@ -71,6 +71,63 @@ export class BubblesPage {
     await this.page.waitForTimeout(800);
   }
 
+  /**
+   * Click a visible context bubble by context ID or partial name match.
+   * Checks data-context-id first, then falls back to text prefix (first 6 chars).
+   */
+  async clickVisibleContextBubbleByName(nameOrId) {
+    const center = await this.page.evaluate((n) => {
+      // Try exact match by data-context-id
+      const byId = document.querySelector(`.repo-bubble[data-context-id="${n}"]`);
+      if (byId && byId.style.display !== 'none') {
+        const circle = byId.querySelector('circle');
+        if (circle) {
+          const box = circle.getBoundingClientRect();
+          return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+        }
+      }
+      // Fall back to text prefix match
+      const prefix = n.slice(0, 6);
+      const visible = Array.from(document.querySelectorAll('.repo-bubble'))
+        .filter(el => el.style.display !== 'none')
+        .find(el => Array.from(el.querySelectorAll('text'))
+          .some(t => t.textContent.trim().toLowerCase().startsWith(prefix.toLowerCase())));
+      if (!visible) return null;
+      const circle = visible.querySelector('circle');
+      if (!circle) return null;
+      const box = circle.getBoundingClientRect();
+      return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    }, nameOrId);
+    if (!center) throw new Error(`Context bubble not found: "${nameOrId}"`);
+    await this.page.mouse.click(center.x, center.y);
+    await this.page.waitForTimeout(800);
+  }
+
+  /** Hover a visible context bubble by name and return the tooltip text. */
+  async hoverContextBubbleByName(nameOrId) {
+    const center = await this.page.evaluate((n) => {
+      const byId = document.querySelector(`.repo-bubble[data-context-id="${n}"]`);
+      if (byId && byId.style.display !== 'none') {
+        const circle = byId.querySelector('circle');
+        if (circle) { const b = circle.getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; }
+      }
+      const prefix = n.slice(0, 6).toLowerCase();
+      const visible = Array.from(document.querySelectorAll('.repo-bubble'))
+        .filter(el => el.style.display !== 'none')
+        .find(el => Array.from(el.querySelectorAll('text')).some(t => t.textContent.trim().toLowerCase().startsWith(prefix)));
+      if (!visible) return null;
+      const circle = visible.querySelector('circle');
+      if (!circle) return null;
+      const b = circle.getBoundingClientRect();
+      return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+    }, nameOrId);
+    if (!center) throw new Error(`Context bubble not found: "${nameOrId}"`);
+    await this.page.mouse.move(center.x, center.y);
+    await this.page.waitForSelector('.graph-tooltip', { state: 'visible', timeout: 8000 });
+    await this.page.waitForTimeout(150);
+    return this.page.locator('.graph-tooltip').textContent();
+  }
+
   async isTeamBubbleAbsent() {
     return this.page.evaluate(() => document.querySelectorAll('.team-bubble').length === 0);
   }
