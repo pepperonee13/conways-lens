@@ -19,6 +19,16 @@
 import { driver } from 'driver.js';
 import 'driver.js/dist/driver.css';
 
+// Match the popover shape to the app's pill-style FAB buttons.
+// Injected once here so the override stays co-located with all other driver.js knowledge.
+const STYLE_ID = 'app-tour-styles';
+if (typeof document !== 'undefined' && !document.getElementById(STYLE_ID)) {
+  const s = document.createElement('style');
+  s.id = STYLE_ID;
+  s.textContent = `.driver-popover { border-radius: 9999px !important; }`;
+  document.head.appendChild(s);
+}
+
 function adaptStep({ element, title = '', description = '', side = 'left', align = 'center' }) {
   return { element, popover: { title, description, side, align } };
 }
