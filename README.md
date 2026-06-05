@@ -52,6 +52,17 @@ that can be merged in the frontend (see step 3).
 
 Both produce the same CSV schema and metadata footer.
 
+#### Log file
+
+Every run writes a timestamped log file next to the script that captures everything printed to the console — useful for diagnosing why a repository was skipped.
+
+| Script | Default path | Override |
+|--------|-------------|---------|
+| `extract-git-history.mjs` | `cli/extract-git-history_<timestamp>.log` | `--log <path>` |
+| `extract-git-history.ps1` | `cli\extract-git-history_<timestamp>.log` | `-LogFile <path>` |
+
+If a `git clone` or `git fetch` fails (e.g. the repository URL does not exist or is unreachable), the error is recorded in the log and the script moves on to the next repository. The CSV is still written as long as at least one repository was extracted successfully.
+
 ### 3. Start the app
 
 ```bash

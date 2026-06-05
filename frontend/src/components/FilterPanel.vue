@@ -196,7 +196,7 @@ const anonMap = computed(() => {
 const open        = ref(false);
 const searchQuery = ref('');
 
-// All teams shown in the panel (real + Outside Contributors)
+// All teams shown in the panel (real + Unassigned Contributors)
 const filterableTeams = computed(() => {
   const result = [...teams.value];
   if (syntheticTeam.value) result.push(syntheticTeam.value);

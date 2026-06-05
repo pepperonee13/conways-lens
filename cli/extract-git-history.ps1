@@ -25,7 +25,8 @@ param(
     [string]$Since = (Get-Date).AddYears(-1).ToString('yyyy-MM-dd'),
     [string]$Until = (Get-Date).ToString('yyyy-MM-dd'),
     [string]$ReposFile = (Join-Path $PSScriptRoot 'repos.json'),
-    [string]$WorkDir = (Join-Path $env:TEMP 'conwaylens-repos')
+    [string]$WorkDir = (Join-Path $env:TEMP 'conwaylens-repos'),
+    [string]$LogFile  = (Join-Path $PSScriptRoot "extract-git-history_$(Get-Date -Format 'yyyyMMdd_HHmmss').log")
 )
 
 Set-StrictMode -Version Latest
@@ -36,6 +37,10 @@ $ErrorActionPreference = 'Stop'
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
 $OutputFile  = Join-Path $PSScriptRoot '..\app\public\CommitHistory.csv'
+
+# Start transcript so everything printed to the console is also saved to the log file
+Start-Transcript -Path $LogFile -Append | Out-Null
+Write-Host "Log file   : $LogFile"
 
 
 # ---------------------------------------------------------------------------
@@ -76,23 +81,36 @@ foreach ($repo in $repos) {
     Write-Host "    Local : $localPath"
 
     # Clone or update
+    $repoReady = $false
     if (Test-Path (Join-Path $localPath '.git')) {
         Write-Host "    Pulling latest changes..." -ForegroundColor Gray
         Push-Location $localPath
         try {
-            git fetch origin $branch --quiet 2>&1 | Out-Null
-            git checkout $branch --quiet 2>&1 | Out-Null
-            git reset --hard "origin/$branch" --quiet 2>&1 | Out-Null
+            $fetchOut = git fetch origin $branch --quiet 2>&1
+            if ($LASTEXITCODE -ne 0) { throw "git fetch failed (exit $LASTEXITCODE): $fetchOut" }
+            $coOut = git checkout $branch --quiet 2>&1
+            if ($LASTEXITCODE -ne 0) { throw "git checkout failed (exit $LASTEXITCODE): $coOut" }
+            $resetOut = git reset --hard "origin/$branch" --quiet 2>&1
+            if ($LASTEXITCODE -ne 0) { throw "git reset failed (exit $LASTEXITCODE): $resetOut" }
+            $repoReady = $true
+        } catch {
+            Write-Warning "    Update failed for $repoName — $_"
         } finally {
             Pop-Location
         }
     } else {
         Write-Host "    Cloning..." -ForegroundColor Gray
-        git clone --branch $branch --single-branch $repoUrl $localPath 2>&1 | Out-Null
+        try {
+            $cloneOut = git clone --branch $branch --single-branch $repoUrl $localPath 2>&1
+            if ($LASTEXITCODE -ne 0) { throw "git clone failed (exit $LASTEXITCODE): $cloneOut" }
+            $repoReady = $true
+        } catch {
+            Write-Warning "    Clone failed for $repoName — $_"
+        }
     }
 
-    if (-not (Test-Path (Join-Path $localPath '.git'))) {
-        Write-Warning "    Skipping $repoName — clone failed or directory is not a git repo."
+    if (-not $repoReady -or -not (Test-Path (Join-Path $localPath '.git'))) {
+        Write-Warning "    Skipping $repoName — repository could not be cloned or updated."
         continue
     }
 
@@ -181,6 +199,7 @@ if (-not (Test-Path $outputDir)) {
 
 if ($rows.Count -eq 0) {
     Write-Warning "No data extracted. Check that the repositories are accessible and have commits in the given date range."
+    Stop-Transcript | Out-Null
     exit 0
 }
 
@@ -193,3 +212,6 @@ Write-Host "`n=== Done ===" -ForegroundColor Green
 Write-Host "Total rows : $($rows.Count)"
 Write-Host "Date range : $Since → $Until"
 Write-Host "Output     : $OutputFile"
+Write-Host "Log        : $LogFile"
+
+Stop-Transcript | Out-Null
