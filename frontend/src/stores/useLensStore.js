@@ -174,9 +174,10 @@ export const useLensStore = defineStore('lens', () => {
   watch(filterAuthorIds,  v => localStorage.setItem(STORAGE.filterAuthorIds,  JSON.stringify([...v])));
 
   // Virtual team for authors and contexts not yet assigned to any real team.
-  // Only exists when at least one real team is configured.
+  // Exists whenever data is loaded and there are free authors or contexts —
+  // including when no real teams have been configured yet.
   const syntheticTeam = computed(() => {
-    if (!dataLoaded.value || teams.value.length === 0) return null;
+    if (!dataLoaded.value) return null;
     const assignedAuthors     = new Set(teams.value.flatMap(t => t.authors ?? []));
     const assignedContextIds  = new Set(teams.value.flatMap(t => t.contexts ?? []));
     const freeAuthors   = allAuthors.value.filter(a => !assignedAuthors.has(a) && !ignoredSet.value.has(a));
@@ -360,14 +361,12 @@ export const useLensStore = defineStore('lens', () => {
   // Team-level cross-boundary view. Authors are never nodes — only teams and contexts.
   // Every edge source is a team node; edges only cross team boundaries.
   const ownershipGraphData = computed(() => {
-    const empty = { nodes: [], links: [] };
-    if (teams.value.length === 0) return empty;
+    const syntheticT = syntheticTeam.value;
+    const allTeams   = syntheticT ? [...teams.value, syntheticT] : [...teams.value];
+    if (allTeams.length === 0) return { nodes: [], links: [] };
 
     const since = activeRange.value.since;
     const until = activeRange.value.until;
-
-    const syntheticT = syntheticTeam.value;
-    const allTeams   = syntheticT ? [...teams.value, syntheticT] : [...teams.value];
 
     // Build membership lookups
     const authorToTeamId  = {}; // normalizedAuthor → teamId (first assignment wins)
