@@ -1088,7 +1088,7 @@ async function handleImport(e) {
 .author-pill--ignored .pill-name { @apply line-through; }
 .pill-x { @apply text-red-500 font-bold text-[10px]; }
 
-/* Unassigned authors — match the "Outside Contributors" team styling */
+/* Unassigned authors — match the "Unassigned Contributors" team styling */
 .author-pill.pill-unassigned {
   background-color: rgba(156, 163, 175, 0.18);
   color: #4B5563;

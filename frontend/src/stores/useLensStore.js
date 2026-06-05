@@ -175,7 +175,7 @@ export const useLensStore = defineStore('lens', () => {
       .map(c => c.id);
     if (freeAuthors.length === 0 && freeContextIds.length === 0) return null;
     return {
-      id: UNASSIGNED_ID, name: 'Outside Contributors', color: '#9CA3AF',
+      id: UNASSIGNED_ID, name: 'Unassigned Contributors', color: '#9CA3AF',
       authors: freeAuthors, contexts: freeContextIds, isSynthetic: true,
     };
   });
@@ -184,7 +184,7 @@ export const useLensStore = defineStore('lens', () => {
     const since = activeRange.value.since;
     const until = activeRange.value.until;
 
-    // Merge real teams with the synthetic "Outside Contributors" team so all
+    // Merge real teams with the synthetic "Unassigned Contributors" team so all
     // unassigned authors/contexts are treated identically to real-team members.
     const syntheticT = syntheticTeam.value;
     const allTeams   = syntheticT ? [...teams.value, syntheticT] : teams.value;
