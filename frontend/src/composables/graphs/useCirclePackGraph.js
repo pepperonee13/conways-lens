@@ -104,22 +104,26 @@ export function useCirclePackGraph({
       .size([w - 8, h - 8])
       // depth-0: gap between team circles; depth-1: must fit the ring on each
       // side of adjacent repos (RING_OUTER * 2) plus a small visual gap
-      .padding(d => d.depth === 0 ? 36 : RING_OUTER * 2 + 6)(root);
+      .padding(d => d.depth === 0 ? 60 : RING_OUTER * 2 + 6)(root);
 
     svg.attr('width', w).attr('height', h);
 
-    // Arrowhead markers — one per team color, keyed by sanitised color hex
+    // Arrowhead markers — keyed by color + rounded size so each stroke width
+    // gets its own proportionally-sized arrowhead while staying fixed in px
+    // (markerUnits='userSpaceOnUse').  Size = max(8, sw*3) keeps the base case
+    // (edge-weight off, sw≈1.5) at 8 px and scales up for heavier edges.
     const defs = svg.append('defs');
-    const markerFor = (color) => {
-      const id = 'arrow-' + color.replace('#', '');
+    const markerFor = (color, sw = 1.5) => {
+      const size = Math.max(8, Math.round(sw * 3));
+      const id   = `arrow-${color.replace('#', '')}-${size}`;
       if (defs.select(`#${id}`).empty()) {
         defs.append('marker')
           .attr('id', id)
           .attr('viewBox', '0 -4 8 8')
           .attr('refX', 8)
           .attr('refY', 0)
-          .attr('markerWidth', 8)
-          .attr('markerHeight', 8)
+          .attr('markerWidth', size)
+          .attr('markerHeight', size)
           .attr('markerUnits', 'userSpaceOnUse')
           .attr('orient', 'auto')
           .append('path')
@@ -129,7 +133,7 @@ export function useCirclePackGraph({
       }
       return `url(#${id})`;
     };
-    // Pre-create a marker for each team color so they're ready before edges are drawn
+    // Pre-create base markers for each team color (edge-weight-off case)
     for (const team of teams) markerFor(team.color);
 
     const zoom = d3.zoom()
@@ -203,13 +207,14 @@ export function useCirclePackGraph({
         const path = edgePath(src, tgt);
         if (!path) continue;
         const color = teamColorMap[l.source] ?? src.color;
+        const sw    = calcEdgeWidth(l.commits, weightOn);
         edgeLayer.append('path')
           .attr('d', path)
           .attr('fill', 'none')
           .attr('stroke', color)
-          .attr('stroke-width', calcEdgeWidth(l.commits, weightOn))
+          .attr('stroke-width', sw)
           .attr('stroke-opacity', 0.72)
-          .attr('marker-end', markerFor(color))
+          .attr('marker-end', markerFor(color, sw))
           .attr('pointer-events', 'none');
       }
     }
