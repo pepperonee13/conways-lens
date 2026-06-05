@@ -782,6 +782,23 @@ export const useLensStore = defineStore('lens', () => {
     );
   }
 
+  // True when the current mapping state differs from the active lens snapshot.
+  // Uses JSON serialisation for a deep, ordering-sensitive comparison — safe
+  // because _lensSnapshot() already normalises via JSON.parse/stringify.
+  const isDirty = computed(() => {
+    if (!activeLensId.value) return false;
+    const lens = lenses.value.find(l => l.id === activeLensId.value);
+    if (!lens) return false;
+    const snap = _lensSnapshot();
+    return (
+      JSON.stringify(snap.teams)                !== JSON.stringify(lens.teams)                ||
+      JSON.stringify(snap.contexts)             !== JSON.stringify(lens.contexts)             ||
+      JSON.stringify(snap.authorNormalizations) !== JSON.stringify(lens.authorNormalizations) ||
+      JSON.stringify(snap.ignoredAuthors)       !== JSON.stringify(lens.ignoredAuthors)       ||
+      JSON.stringify(snap.vizSettings)          !== JSON.stringify(lens.vizSettings)
+    );
+  });
+
   function loadLens(id) {
     const lens = lenses.value.find(l => l.id === id);
     if (!lens) return;
@@ -1050,7 +1067,7 @@ export const useLensStore = defineStore('lens', () => {
     toggleTeamExpansion,
     exportMappings, importMappings,
     vizSettings, resetVizSettings,
-    lenses, activeLensId, uiLensOpen,
+    lenses, activeLensId, isDirty, uiLensOpen,
     saveLens, overwriteLens, loadLens, updateLens, deleteLens, exportLens, importLensFromData,
     mappingEverOpened, markMappingOpened, dismissSpotlight, showMappingSpotlight,
   };

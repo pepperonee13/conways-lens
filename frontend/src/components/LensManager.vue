@@ -127,7 +127,7 @@ import FabButton from './FabButton.vue';
 import { useToast } from '../composables/useToast.js';
 
 const store = useLensStore();
-const { lenses, activeLensId, uiLensOpen } = storeToRefs(store);
+const { lenses, activeLensId, isDirty, uiLensOpen } = storeToRefs(store);
 const { show: showToast } = useToast();
 
 const open = computed({
@@ -154,7 +154,12 @@ function handleSave() {
 
 function handleLoad(id) {
   if (id === activeLensId.value) { open.value = false; return; }
-  pendingSwitch.value = { type: 'load', id };
+  if (isDirty.value) {
+    pendingSwitch.value = { type: 'load', id };
+    return;
+  }
+  store.loadLens(id);
+  open.value = false;
 }
 
 function cancelSwitch() {
@@ -223,7 +228,12 @@ async function handleImport(e) {
     const text = await file.text();
     const data = JSON.parse(text);
     e.target.value = '';
-    pendingSwitch.value = { type: 'import', data };
+    if (isDirty.value) {
+      pendingSwitch.value = { type: 'import', data };
+    } else {
+      store.importLensFromData(data);
+      open.value = false;
+    }
   } catch (err) {
     importError.value = err.message;
   }
