@@ -839,7 +839,7 @@ function removeFrom(team, field, value) {
 
 const unassignedAuthors = computed(() => {
   const assigned = new Set(teams.value.flatMap(t => t.authors));
-  return allAuthors.value.filter(a => !assigned.has(a));
+  return allAuthors.value.filter(a => !assigned.has(a) && !ignoredSet.value.has(a));
 });
 const unassignedContexts = computed(() => {
   const assigned = new Set(teams.value.flatMap(t => t.contexts));
