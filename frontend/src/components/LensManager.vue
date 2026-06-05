@@ -93,6 +93,29 @@
 
     </div>
   </transition>
+
+  <!-- Switch-lens confirmation dialog -->
+  <teleport to="body">
+    <transition name="confirm-fade">
+      <div v-if="pendingSwitch" class="confirm-backdrop" @click.self="cancelSwitch">
+        <div class="confirm-dialog">
+          <h3 class="confirm-title">Switch lens?</h3>
+          <p class="confirm-body">Unsaved mapping changes will be lost.</p>
+          <div class="confirm-actions">
+            <button class="confirm-btn confirm-btn--ghost" @click="cancelSwitch">Cancel</button>
+            <button class="confirm-btn confirm-btn--secondary" @click="confirmSwitchWithoutSaving">Switch without saving</button>
+            <button
+              class="confirm-btn confirm-btn--primary"
+              :disabled="!activeLensId"
+              :title="activeLensId ? '' : 'No active lens to save to'"
+              @click="confirmSaveAndSwitch">
+              Save &amp; Switch
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
+  </teleport>
 </template>
 
 <script setup>
@@ -118,6 +141,8 @@ const renameValue     = ref('');
 const renameInputRefs = reactive({});
 const fileInput       = ref(null);
 const importError     = ref('');
+// pendingSwitch: { type: 'load', id } | { type: 'import', data }
+const pendingSwitch   = ref(null);
 
 function handleSave() {
   const name = newLensName.value.trim();
@@ -128,8 +153,33 @@ function handleSave() {
 }
 
 function handleLoad(id) {
-  store.loadLens(id);
+  if (id === activeLensId.value) { open.value = false; return; }
+  pendingSwitch.value = { type: 'load', id };
+}
+
+function cancelSwitch() {
+  pendingSwitch.value = null;
+}
+
+function confirmSwitchWithoutSaving() {
+  const ps = pendingSwitch.value;
+  pendingSwitch.value = null;
+  if (!ps) return;
+  if (ps.type === 'load') {
+    store.loadLens(ps.id);
+  } else {
+    store.importLensFromData(ps.data);
+  }
   open.value = false;
+}
+
+function confirmSaveAndSwitch() {
+  if (activeLensId.value) {
+    store.overwriteLens(activeLensId.value);
+    const lens = lenses.value.find(l => l.id === activeLensId.value);
+    if (lens) showToast(`Lens "${lens.name}" updated`);
+  }
+  confirmSwitchWithoutSaving();
 }
 
 function handleOverwrite(id) {
@@ -171,9 +221,9 @@ async function handleImport(e) {
   if (!file) return;
   try {
     const text = await file.text();
-    store.importLensFromData(JSON.parse(text));
+    const data = JSON.parse(text);
     e.target.value = '';
-    open.value = false;
+    pendingSwitch.value = { type: 'import', data };
   } catch (err) {
     importError.value = err.message;
   }
@@ -277,4 +327,37 @@ async function handleImport(e) {
          hover:border-brand-teal hover:text-brand-teal transition-all duration-150;
 }
 .import-error { @apply text-xs text-red-600 flex-1 truncate; }
+
+/* ── Switch confirmation dialog ── */
+.confirm-backdrop {
+  @apply fixed inset-0 bg-black/50 backdrop-blur-sm z-[100]
+         flex items-center justify-center;
+}
+.confirm-fade-enter-active, .confirm-fade-leave-active { transition: opacity 0.2s ease; }
+.confirm-fade-enter-from, .confirm-fade-leave-to { opacity: 0; }
+
+.confirm-dialog {
+  @apply bg-white rounded-2xl shadow-2xl p-6 mx-4 flex flex-col gap-3;
+  width: 360px; max-width: 95vw;
+}
+.confirm-title { @apply text-base font-bold text-gray-800 m-0; }
+.confirm-body  { @apply text-sm text-gray-500 m-0; }
+.confirm-actions {
+  @apply flex flex-wrap gap-2 justify-end pt-1;
+}
+
+.confirm-btn {
+  @apply inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold
+         cursor-pointer transition-all duration-150;
+}
+.confirm-btn--ghost {
+  @apply text-gray-500 hover:bg-gray-100;
+}
+.confirm-btn--secondary {
+  @apply border border-gray-300 text-gray-700 bg-white hover:border-gray-400;
+}
+.confirm-btn--primary {
+  @apply bg-brand-teal text-white hover:bg-teal-700
+         disabled:opacity-40 disabled:cursor-not-allowed;
+}
 </style>
