@@ -142,7 +142,9 @@
 
     <div v-if="!store.dataLoaded" class="empty-state">Upload contribution data to get started.</div>
     <div v-else-if="effectiveTeams.length === 0" class="empty-state">
-      Configure teams in the editor to visualize Conway's Law violations.
+      Configure teams in the mapping editor
+      <span class="inline-fab" aria-hidden="true"><MapIcon :size="14" /></span>
+      to visualize Conway's Law violations.
     </div>
 
     <template v-else>
@@ -327,7 +329,7 @@
 <script setup>
 import { ref, computed, watch, reactive, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { storeToRefs } from 'pinia';
-import { Maximize2, Minimize2, Download } from '@lucide/vue';
+import { Maximize2, Minimize2, Download, Map as MapIcon } from '@lucide/vue';
 import { useLensStore } from '../stores/useLensStore';
 import { useSwimlaneGraph } from '../composables/graphs/useSwimlaneGraph.js';
 import { useCirclePackGraph } from '../composables/graphs/useCirclePackGraph.js';
@@ -932,6 +934,21 @@ onBeforeUnmount(() => {
 .svg-wrap          { overflow: auto; border-radius: 8px; scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
 .graph-svg         { display: block; }
 .empty-state       { @apply flex items-center justify-center py-16 text-gray-400 text-base; }
+.inline-fab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.5rem;
+  width: 1.5rem;
+  border-radius: 9999px;
+  background: linear-gradient(to right, #D47113, #F08223);
+  color: white;
+  vertical-align: middle;
+  pointer-events: none;
+  margin: 0 0.25rem;
+  position: relative;
+  top: -1px;
+}
 .graph-tooltip {
   @apply fixed pointer-events-none bg-white rounded-xl shadow-2xl border-2 px-4 py-2.5 text-sm;
   border-color: #225EA9; z-index: 9999; min-width: 160px;
