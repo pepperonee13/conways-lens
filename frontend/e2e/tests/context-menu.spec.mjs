@@ -146,7 +146,13 @@ test.describe('Context menu — Change context for already-assigned folder', () 
     await page.locator('[data-testid="fab-mapping"]').click();
     await page.locator('.tab-btn').filter({ hasText: 'Contexts' }).click();
     await page.locator('.add-team-btn').click();
-    await page.locator('.ctx-card').last().locator('.team-name-input').fill('New Home');
+    // Fill name in the draft card
+    await page.locator('.new-team-draft .ctx-new-name-input').fill('New Home');
+    // Select ci-platform as source repo and add it
+    await page.locator('.new-team-draft .ctx-repo-pill').filter({ hasText: 'ci-platform' }).click();
+    await page.locator('.new-team-draft .available-pill').click();
+    // Save the new context
+    await page.locator('.new-team-draft .modal-btn--confirm').click();
     await page.locator('.close-btn').click();
 
     // Navigate to backend-api folder drill-down via bubbles view

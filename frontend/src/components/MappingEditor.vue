@@ -406,7 +406,69 @@
             </div>
           </div>
 
-          <button class="add-team-btn" @click="store.addContext('New context')">+ New bounded context</button>
+          <!-- ── New Context Draft Card ── -->
+          <div v-if="newContextDraft" class="new-team-draft">
+            <div class="new-team-draft-header">
+              <span class="new-team-draft-title">New Bounded Context</span>
+              <button class="remove-team-btn" @click="newContextDraft = null" title="Cancel"><X :size="16" /></button>
+            </div>
+            <input
+              v-model="newContextDraft.name"
+              class="ctx-new-name-input"
+              placeholder="Context name" />
+
+            <div class="section-label">
+              Sources
+              <span class="draft-required">required</span>
+            </div>
+            <div class="ctx-sources" v-if="newContextDraft.sources.length">
+              <div v-for="(s, i) in newContextDraft.sources" :key="i" class="ctx-source-row">
+                <span class="ctx-source-type" :class="`ctx-source-type--${s.type}`">{{ s.type }}</span>
+                <span class="ctx-source-desc">{{ sourceLabel(s) }}</span>
+                <button class="chip-remove" @click="removeSourceFromNewContext(i)" title="Remove source"><X :size="11" /></button>
+              </div>
+            </div>
+
+            <div class="ctx-add-source">
+              <div class="ctx-type-pills">
+                <button
+                  v-for="t in ['repo', 'path', 'glob']" :key="t"
+                  :class="['ctx-type-pill', `ctx-type-pill--${t}`, { 'ctx-type-pill--active': newContextDraft.activeDraft.type === t }]"
+                  @click="newContextDraft.activeDraft.type = t"
+                >{{ t }}</button>
+              </div>
+              <div class="ctx-repo-pills">
+                <button
+                  v-for="r in allRepos" :key="r"
+                  :class="['ctx-repo-pill', { 'ctx-repo-pill--selected': newContextDraft.activeDraft.repo === r }]"
+                  @click="newContextDraft.activeDraft.repo = r"
+                >{{ r }}</button>
+              </div>
+              <input
+                v-if="newContextDraft.activeDraft.type === 'path'"
+                v-model="newContextDraft.activeDraft.path" class="ctx-input-sm" placeholder="e.g. src/auth" />
+              <input
+                v-if="newContextDraft.activeDraft.type === 'glob'"
+                v-model="newContextDraft.activeDraft.pattern" class="ctx-input-sm" placeholder="e.g. **/*.sql" />
+              <button class="available-pill" :disabled="!canAddSourceToNewContext" @click="addSourceToNewContext">+ source</button>
+              <span v-if="newContextDraftConflict" class="ctx-conflict ctx-conflict--inline">
+                Already in <strong>{{ newContextDraftConflict.name }}</strong>
+              </span>
+            </div>
+
+            <div class="new-team-actions">
+              <button class="modal-btn modal-btn--secondary" @click="newContextDraft = null">Cancel</button>
+              <button
+                class="modal-btn modal-btn--confirm"
+                :disabled="!canSaveNewContext"
+                :title="canSaveNewContext ? 'Save bounded context' : 'Add at least one source first'"
+                @click="confirmNewContext">
+                Save Context
+              </button>
+            </div>
+          </div>
+
+          <button v-else class="add-team-btn" @click="startAddContext">+ New bounded context</button>
 
           <div v-for="c in contexts" :key="c.id" class="ctx-card">
             <div class="ctx-card-header">
@@ -421,7 +483,11 @@
               <div v-for="(s, i) in c.sources" :key="i" class="ctx-source-row">
                 <span class="ctx-source-type" :class="`ctx-source-type--${s.type}`">{{ s.type }}</span>
                 <span class="ctx-source-desc">{{ sourceLabel(s) }}</span>
-                <button class="chip-remove" @click="store.removeContextSource(c.id, i)" title="Remove source"><X :size="11" /></button>
+                <button
+                  class="chip-remove"
+                  :disabled="c.sources.length === 1"
+                  :title="c.sources.length === 1 ? 'A bounded context must have at least one source' : 'Remove source'"
+                  @click="c.sources.length > 1 && store.removeContextSource(c.id, i)"><X :size="11" /></button>
               </div>
               <span v-if="!c.sources.length" class="empty-hint">No sources yet — this context matches nothing.</span>
             </div>
@@ -835,6 +901,49 @@ function addSourceFromDraft(id) {
   if (!source || !canAddSource(id)) return;
   store.addContextSource(id, source);
   draftSource[id] = freshDraft();
+}
+
+// ── New context draft ─────────────────────────────────────────────────────────
+const newContextDraft = ref(null); // { name, sources, activeDraft }
+
+function startAddContext() {
+  newContextDraft.value = { name: 'New context', sources: [], activeDraft: freshDraft() };
+}
+
+function newContextDraftToSource() {
+  const d = newContextDraft.value?.activeDraft;
+  if (!d || !d.repo) return null;
+  if (d.type === 'path') return d.path.trim() ? { type: 'path', repo: d.repo, path: d.path.trim() } : null;
+  if (d.type === 'glob') return d.pattern.trim() ? { type: 'glob', repo: d.repo, pattern: d.pattern.trim() } : null;
+  return { type: 'repo', repo: d.repo };
+}
+
+const newContextDraftConflict = computed(() => {
+  const src = newContextDraftToSource();
+  return src ? store.contextForSource(src) : null;
+});
+
+const canAddSourceToNewContext = computed(() =>
+  !!newContextDraftToSource() && !newContextDraftConflict.value
+);
+
+function addSourceToNewContext() {
+  const source = newContextDraftToSource();
+  if (!source || !canAddSourceToNewContext.value) return;
+  newContextDraft.value.sources.push(source);
+  newContextDraft.value.activeDraft = freshDraft();
+}
+
+function removeSourceFromNewContext(i) {
+  newContextDraft.value.sources = newContextDraft.value.sources.filter((_, idx) => idx !== i);
+}
+
+const canSaveNewContext = computed(() => (newContextDraft.value?.sources.length ?? 0) > 0);
+
+function confirmNewContext() {
+  if (!canSaveNewContext.value || !newContextDraft.value) return;
+  store.addContext(newContextDraft.value.name.trim() || 'New context', newContextDraft.value.sources);
+  newContextDraft.value = null;
 }
 
 // Right-click "Create new context" hand-off.
