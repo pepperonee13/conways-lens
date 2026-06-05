@@ -889,13 +889,18 @@ const wholeRepoCoveredBy = computed(() => {
   return map;
 });
 
-// Repos available in repo-mode for a given existing context id.
-// Shows repos not wholly owned by a different context.
+// Repos available for the source picker of an existing context.
+// Hides repos owned by a different context, and also repos already added
+// as type:'repo' sources in this context (they'd be duplicates).
 function availableReposFor(contextId) {
   const covered = wholeRepoCoveredBy.value;
+  const ctx = contexts.value.find(c => c.id === contextId);
+  const alreadyRepoSources = new Set(
+    (ctx?.sources ?? []).filter(s => s.type === 'repo').map(s => s.repo)
+  );
   return allRepos.value.filter(r => {
     const owner = covered[r];
-    return !owner || owner === contextId;
+    return (!owner || owner === contextId) && !alreadyRepoSources.has(r);
   });
 }
 
@@ -942,7 +947,10 @@ function startAddContext() {
 // already added as type:'repo' sources within the draft itself.
 const availableReposForNewContext = computed(() => {
   const covered = wholeRepoCoveredBy.value;
-  return allRepos.value.filter(r => !covered[r]);
+  const inDraft = new Set(
+    (newContextDraft.value?.sources ?? []).filter(s => s.type === 'repo').map(s => s.repo)
+  );
+  return allRepos.value.filter(r => !covered[r] && !inDraft.has(r));
 });
 
 function newContextDraftToSource() {
@@ -958,8 +966,20 @@ const newContextDraftConflict = computed(() => {
   return src ? store.contextForSource(src) : null;
 });
 
+// True when the active draft source is already staged in the draft's source list.
+const newContextDraftDuplicate = computed(() => {
+  const src = newContextDraftToSource();
+  if (!src || !newContextDraft.value) return false;
+  return newContextDraft.value.sources.some(s =>
+    s.type === src.type && s.repo === src.repo &&
+    (src.type === 'repo' ||
+     (src.type === 'path' && s.path === src.path) ||
+     (src.type === 'glob' && s.pattern === src.pattern))
+  );
+});
+
 const canAddSourceToNewContext = computed(() =>
-  !!newContextDraftToSource() && !newContextDraftConflict.value
+  !!newContextDraftToSource() && !newContextDraftConflict.value && !newContextDraftDuplicate.value
 );
 
 function addSourceToNewContext() {
