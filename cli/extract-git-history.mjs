@@ -55,9 +55,10 @@ const logFile = resolve(args.log ?? join(__dirname, `extract-git-history_${ts}.l
 const _origLog   = console.log.bind(console);
 const _origError = console.error.bind(console);
 const _origWarn  = console.warn.bind(console);
+const ANSI_RE = /\x1b\[[0-9;]*m/g;
 function logLine(prefix, ...a) {
   const text = `${prefix}${a.map(String).join(' ')}`;
-  appendFile(logFile, text + '\n', 'utf8').catch(() => {});
+  appendFile(logFile, text.replace(ANSI_RE, '') + '\n', 'utf8').catch(() => {});
   return text;
 }
 console.log   = (...a) => _origLog(logLine('', ...a));
