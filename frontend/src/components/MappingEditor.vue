@@ -439,7 +439,7 @@
               </div>
               <div class="ctx-repo-pills">
                 <button
-                  v-for="r in (newContextDraft.activeDraft.type === 'repo' ? availableReposForNewContext : allRepos)" :key="r"
+                  v-for="r in availableReposForNewContext" :key="r"
                   :class="['ctx-repo-pill', { 'ctx-repo-pill--selected': newContextDraft.activeDraft.repo === r }]"
                   @click="newContextDraft.activeDraft.repo = r"
                 >{{ r }}</button>
@@ -502,7 +502,7 @@
               </div>
               <div class="ctx-repo-pills">
                 <button
-                  v-for="r in (draftSource[c.id].type === 'repo' ? availableReposFor(c.id) : allRepos)" :key="r"
+                  v-for="r in availableReposFor(c.id)" :key="r"
                   :class="['ctx-repo-pill', { 'ctx-repo-pill--selected': draftSource[c.id].repo === r }]"
                   @click="draftSource[c.id].repo = r"
                 >{{ r }}</button>
@@ -942,10 +942,7 @@ function startAddContext() {
 // already added as type:'repo' sources within the draft itself.
 const availableReposForNewContext = computed(() => {
   const covered = wholeRepoCoveredBy.value;
-  const inDraft = new Set(
-    (newContextDraft.value?.sources ?? []).filter(s => s.type === 'repo').map(s => s.repo)
-  );
-  return allRepos.value.filter(r => !covered[r] && !inDraft.has(r));
+  return allRepos.value.filter(r => !covered[r]);
 });
 
 function newContextDraftToSource() {
