@@ -118,7 +118,7 @@
             <span v-if="!newTeamDraft.authors.length && !draftAvailableAuthors.length" class="empty-hint">No authors available — upload a CSV first.</span>
 
             <div class="section-label">
-              Repositories
+              Bounded Contexts
               <span class="draft-required">required</span>
             </div>
             <div class="assigned-chips" v-if="newTeamDraft.contexts.length">
@@ -127,14 +127,14 @@
               </span>
             </div>
             <div class="available-list" v-if="draftAvailableContexts.length">
-              <div class="available-label">Add repository:</div>
+              <div class="available-label">Add bounded context:</div>
               <div class="available-pills">
                 <button v-for="c in draftAvailableContexts" :key="c.id" class="available-pill repo-pill" @click="addDraftItem('contexts', c.id)">
                   + {{ c.name }}
                 </button>
               </div>
             </div>
-            <span v-if="!newTeamDraft.contexts.length && !draftAvailableContexts.length" class="empty-hint">No repositories available — upload a CSV first.</span>
+            <span v-if="!newTeamDraft.contexts.length && !draftAvailableContexts.length" class="empty-hint">No bounded contexts available — upload a CSV first.</span>
 
             <div class="new-team-actions">
               <button class="modal-btn modal-btn--secondary" @click="newTeamDraft = null">Cancel</button>
@@ -217,7 +217,7 @@
                       {{ contextName(r) }}<button
                         class="chip-remove"
                         :disabled="team.contexts.length === 1"
-                        :title="team.contexts.length === 1 ? 'A team must have at least one repository' : 'Remove'"
+                        :title="team.contexts.length === 1 ? 'A team must have at least one bounded context' : 'Remove'"
                         @click="team.contexts.length > 1 && removeFrom(team, 'contexts', r)"><X :size="11" /></button>
                     </span>
                     <span v-if="!team.contexts.length" class="empty-hint">No bounded contexts assigned</span>
