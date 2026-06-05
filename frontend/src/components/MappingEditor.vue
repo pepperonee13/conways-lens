@@ -107,15 +107,25 @@
                 {{ a }}<button class="chip-remove" @click="removeDraftItem('authors', a)" title="Remove"><X :size="11" /></button>
               </span>
             </div>
-            <div class="available-list" v-if="draftAvailableAuthors.length">
-              <div class="available-label">Add author:</div>
-              <div class="available-pills">
-                <button v-for="a in draftAvailableAuthors" :key="a" class="available-pill" @click="addDraftItem('authors', a)">
-                  + {{ a }}
-                </button>
-              </div>
+            <div class="available-list" v-if="draftAvailableAuthorGroups.free.length || draftAvailableAuthorGroups.shared.length">
+              <template v-if="draftAvailableAuthorGroups.free.length">
+                <div class="available-label">Add author:</div>
+                <div class="available-pills">
+                  <button v-for="a in draftAvailableAuthorGroups.free" :key="a" class="available-pill" @click="addDraftItem('authors', a)">
+                    + {{ a }}
+                  </button>
+                </div>
+              </template>
+              <template v-if="draftAvailableAuthorGroups.shared.length">
+                <div class="available-label available-label--shared">Also in another team:</div>
+                <div class="available-pills">
+                  <button v-for="a in draftAvailableAuthorGroups.shared" :key="a" class="available-pill available-pill--shared" @click="addDraftItem('authors', a)">
+                    + {{ a }}
+                  </button>
+                </div>
+              </template>
             </div>
-            <span v-if="!newTeamDraft.authors.length && !draftAvailableAuthors.length" class="empty-hint">No authors available — upload a CSV first.</span>
+            <span v-if="!newTeamDraft.authors.length && !draftAvailableAuthorGroups.free.length && !draftAvailableAuthorGroups.shared.length" class="empty-hint">No authors available — upload a CSV first.</span>
 
             <div class="section-label">
               Bounded Contexts
@@ -737,11 +747,16 @@ function removeDraftItem(field, value) {
   newTeamDraft.value[field] = newTeamDraft.value[field].filter(v => v !== value);
 }
 
-const draftAvailableAuthors = computed(() => {
-  if (!newTeamDraft.value) return [];
-  const assigned = new Set(teams.value.flatMap(t => t.authors));
-  const inDraft  = new Set(newTeamDraft.value.authors);
-  return allAuthors.value.filter(a => !assigned.has(a) && !inDraft.has(a) && !ignoredSet.value.has(a));
+const draftAvailableAuthorGroups = computed(() => {
+  if (!newTeamDraft.value) return { free: [], shared: [] };
+  const assignedElsewhere = new Set(teams.value.flatMap(t => t.authors));
+  const inDraft = new Set(newTeamDraft.value.authors);
+  const free = [], shared = [];
+  for (const a of allAuthors.value) {
+    if (inDraft.has(a) || ignoredSet.value.has(a)) continue;
+    (assignedElsewhere.has(a) ? shared : free).push(a);
+  }
+  return { free, shared };
 });
 
 const draftAvailableContexts = computed(() => {
