@@ -561,13 +561,20 @@ export const useLensStore = defineStore('lens', () => {
   }
 
   // Team CRUD
-  function addTeam() {
+  function nextTeamDefaults() {
+    return {
+      name:  `Team ${teams.value.length + 1}`,
+      color: DEFAULT_COLORS[teams.value.length % DEFAULT_COLORS.length],
+    };
+  }
+  function addTeam({ name, color, authors = [], contexts = [] } = {}) {
+    const defaults = nextTeamDefaults();
     teams.value.push({
       id:      Date.now().toString(),
-      name:    `Team ${teams.value.length + 1}`,
-      color:   DEFAULT_COLORS[teams.value.length % DEFAULT_COLORS.length],
-      authors: [],
-      contexts: [],
+      name:    name ?? defaults.name,
+      color:   color ?? defaults.color,
+      authors,
+      contexts,
     });
   }
   function removeTeam(id) { teams.value = teams.value.filter(t => t.id !== id); }
@@ -1033,7 +1040,7 @@ export const useLensStore = defineStore('lens', () => {
     graphData, ownershipGraphData, nodeColors, getNodeColor,
     repoContributorsData, contextContributorsData, sourceContributorsData, contextSourceData, repoFolderData,
     loadCommits, loadSimulatedData, clearData,
-    addTeam, removeTeam,
+    nextTeamDefaults, addTeam, removeTeam,
     addContext, removeContext, updateContext, addContextSource, removeContextSource, contextForSource,
     moveContextSource, createContextWithSource,
     pendingContextSource, beginAddToContext, clearPendingContextSource,

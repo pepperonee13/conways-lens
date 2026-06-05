@@ -82,7 +82,73 @@
             </transition>
           </div>
 
-          <button class="add-team-btn" @click="addTeam()">+ Add Team</button>
+          <!-- ── New Team Draft Card ── -->
+          <div v-if="newTeamDraft" class="new-team-draft">
+            <div class="new-team-draft-header">
+              <span class="new-team-draft-title">New Team</span>
+              <button class="remove-team-btn" @click="newTeamDraft = null" title="Cancel"><X :size="16" /></button>
+            </div>
+            <div class="new-team-draft-row">
+              <input type="color"
+                v-model="newTeamDraft.color"
+                class="color-picker" :title="newTeamDraft.color" />
+              <input
+                v-model="newTeamDraft.name"
+                class="team-name-input"
+                placeholder="Team name" />
+            </div>
+
+            <div class="section-label">
+              Authors
+              <span class="draft-required">required</span>
+            </div>
+            <div class="assigned-chips" v-if="newTeamDraft.authors.length">
+              <span v-for="a in newTeamDraft.authors" :key="a" class="assigned-chip author-chip">
+                {{ a }}<button class="chip-remove" @click="removeDraftItem('authors', a)" title="Remove"><X :size="11" /></button>
+              </span>
+            </div>
+            <div class="available-list" v-if="draftAvailableAuthors.length">
+              <div class="available-label">Add author:</div>
+              <div class="available-pills">
+                <button v-for="a in draftAvailableAuthors" :key="a" class="available-pill" @click="addDraftItem('authors', a)">
+                  + {{ a }}
+                </button>
+              </div>
+            </div>
+            <span v-if="!newTeamDraft.authors.length && !draftAvailableAuthors.length" class="empty-hint">No authors available — upload a CSV first.</span>
+
+            <div class="section-label">
+              Repositories
+              <span class="draft-required">required</span>
+            </div>
+            <div class="assigned-chips" v-if="newTeamDraft.contexts.length">
+              <span v-for="c in newTeamDraft.contexts" :key="c" class="assigned-chip repo-chip">
+                {{ contextName(c) }}<button class="chip-remove" @click="removeDraftItem('contexts', c)" title="Remove"><X :size="11" /></button>
+              </span>
+            </div>
+            <div class="available-list" v-if="draftAvailableContexts.length">
+              <div class="available-label">Add repository:</div>
+              <div class="available-pills">
+                <button v-for="c in draftAvailableContexts" :key="c.id" class="available-pill repo-pill" @click="addDraftItem('contexts', c.id)">
+                  + {{ c.name }}
+                </button>
+              </div>
+            </div>
+            <span v-if="!newTeamDraft.contexts.length && !draftAvailableContexts.length" class="empty-hint">No repositories available — upload a CSV first.</span>
+
+            <div class="new-team-actions">
+              <button class="modal-btn modal-btn--secondary" @click="newTeamDraft = null">Cancel</button>
+              <button
+                class="modal-btn modal-btn--confirm"
+                :disabled="!canSaveNewTeam"
+                :title="canSaveNewTeam ? 'Save team' : 'Assign at least one author and one repository first'"
+                @click="confirmNewTeam">
+                Save Team
+              </button>
+            </div>
+          </div>
+
+          <button v-else class="add-team-btn" @click="startAddTeam">+ Add Team</button>
 
           <div class="teams-list">
             <div
@@ -118,7 +184,11 @@
                   <div class="section-label">Authors ({{ team.authors.length }})</div>
                   <div class="assigned-chips">
                     <span v-for="a in [...team.authors].sort()" :key="a" class="assigned-chip author-chip">
-                      {{ a }}<button class="chip-remove" @click="removeFrom(team, 'authors', a)" title="Remove"><X :size="11" /></button>
+                      {{ a }}<button
+                        class="chip-remove"
+                        :disabled="team.authors.length === 1"
+                        :title="team.authors.length === 1 ? 'A team must have at least one author' : 'Remove'"
+                        @click="team.authors.length > 1 && removeFrom(team, 'authors', a)"><X :size="11" /></button>
                     </span>
                     <span v-if="!team.authors.length" class="empty-hint">No authors assigned</span>
                   </div>
@@ -144,7 +214,11 @@
                   <div class="section-label">Bounded Contexts ({{ team.contexts.length }})</div>
                   <div class="assigned-chips">
                     <span v-for="r in [...team.contexts].sort()" :key="r" class="assigned-chip repo-chip">
-                      {{ contextName(r) }}<button class="chip-remove" @click="removeFrom(team, 'contexts', r)" title="Remove"><X :size="11" /></button>
+                      {{ contextName(r) }}<button
+                        class="chip-remove"
+                        :disabled="team.contexts.length === 1"
+                        :title="team.contexts.length === 1 ? 'A team must have at least one repository' : 'Remove'"
+                        @click="team.contexts.length > 1 && removeFrom(team, 'contexts', r)"><X :size="11" /></button>
                     </span>
                     <span v-if="!team.contexts.length" class="empty-hint">No bounded contexts assigned</span>
                   </div>
@@ -459,6 +533,7 @@ import FabButton from './FabButton.vue';
 const store = useLensStore();
 const { teams, authorNormalizations, ignoredAuthors, allRawAuthors, allAuthors, allContexts, allRepos, contexts, pendingContextSource, nodeColors } = storeToRefs(store);
 
+
 function contextName(id) {
   return allContexts.value.find(c => c.id === id)?.name ?? id;
 }
@@ -555,10 +630,50 @@ function toggleTeam(id) {
   s.has(id) ? s.delete(id) : s.add(id);
   expandedTeams.value = s;
 }
-function addTeam() {
-  store.addTeam();
-  const newTeam = teams.value[teams.value.length - 1];
-  if (newTeam) expandedTeams.value = new Set([...expandedTeams.value, newTeam.id]);
+
+// ── New team draft ──────────────────────────────────────────────────────────
+// Teams require ≥1 author AND ≥1 context before being saved to the list.
+const newTeamDraft = ref(null);
+
+function startAddTeam() {
+  const defaults = store.nextTeamDefaults();
+  newTeamDraft.value = { ...defaults, authors: [], contexts: [] };
+}
+
+function addDraftItem(field, value) {
+  if (!newTeamDraft.value[field].includes(value))
+    newTeamDraft.value[field].push(value);
+}
+
+function removeDraftItem(field, value) {
+  newTeamDraft.value[field] = newTeamDraft.value[field].filter(v => v !== value);
+}
+
+const draftAvailableAuthors = computed(() => {
+  if (!newTeamDraft.value) return [];
+  const assigned = new Set(teams.value.flatMap(t => t.authors));
+  const inDraft  = new Set(newTeamDraft.value.authors);
+  return allAuthors.value.filter(a => !assigned.has(a) && !inDraft.has(a) && !ignoredSet.value.has(a));
+});
+
+const draftAvailableContexts = computed(() => {
+  if (!newTeamDraft.value) return [];
+  const assigned = new Set(teams.value.flatMap(t => t.contexts));
+  const inDraft  = new Set(newTeamDraft.value.contexts);
+  return allContexts.value.filter(c => !assigned.has(c.id) && !inDraft.has(c.id));
+});
+
+const canSaveNewTeam = computed(() =>
+  (newTeamDraft.value?.authors.length ?? 0) > 0 &&
+  (newTeamDraft.value?.contexts.length ?? 0) > 0
+);
+
+function confirmNewTeam() {
+  if (!canSaveNewTeam.value || !newTeamDraft.value) return;
+  store.addTeam(newTeamDraft.value);
+  const addedTeam = teams.value[teams.value.length - 1];
+  if (addedTeam) expandedTeams.value = new Set([...expandedTeams.value, addedTeam.id]);
+  newTeamDraft.value = null;
 }
 
 // Team deletion is gated behind a confirmation modal — clicking the X or
@@ -875,6 +990,26 @@ async function handleImport(e) {
   @apply w-full py-2.5 px-4 rounded-lg font-semibold text-sm bg-brand-orange text-white
          hover:bg-brand-orange-dark transition-all duration-150 mb-4 cursor-pointer;
 }
+/* ── New Team Draft Card ── */
+.new-team-draft {
+  @apply border border-brand-orange bg-orange-50 rounded-xl p-4 mb-4 flex flex-col gap-3;
+}
+.new-team-draft-header {
+  @apply flex items-center justify-between;
+}
+.new-team-draft-title {
+  @apply text-sm font-bold text-gray-800;
+}
+.new-team-draft-row {
+  @apply flex items-center gap-2;
+}
+.draft-required {
+  @apply ml-1 text-[10px] font-bold uppercase tracking-wide text-brand-orange;
+}
+.new-team-actions {
+  @apply flex items-center justify-end gap-2 mt-1;
+}
+
 /* ── Bounded Contexts tab ── */
 .ctx-card { @apply bg-gray-50 border border-gray-200 rounded-xl p-4 mb-3; }
 .ctx-card-header { @apply flex items-center gap-2 mb-2; }
@@ -975,6 +1110,10 @@ async function handleImport(e) {
 .chip-remove {
   @apply ml-0.5 w-4 h-4 flex items-center justify-center rounded-full
          hover:bg-white/30 text-white cursor-pointer font-bold text-xs leading-none;
+}
+.chip-remove:disabled {
+  @apply opacity-30 cursor-not-allowed;
+  pointer-events: auto;
 }
 .empty-hint { @apply text-xs text-gray-400 italic self-center; }
 .available-list { @apply mt-2; }
