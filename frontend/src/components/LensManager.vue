@@ -101,9 +101,11 @@ import { storeToRefs } from 'pinia';
 import { useLensStore } from '../stores/useLensStore';
 import { Telescope, X, Plus, LogIn, Save as SaveIcon, Download, Trash2, Upload } from '@lucide/vue';
 import FabButton from './FabButton.vue';
+import { useToast } from '../composables/useToast.js';
 
 const store = useLensStore();
 const { lenses, activeLensId, uiLensOpen } = storeToRefs(store);
+const { show: showToast } = useToast();
 
 const open = computed({
   get: () => uiLensOpen.value,
@@ -118,9 +120,11 @@ const fileInput       = ref(null);
 const importError     = ref('');
 
 function handleSave() {
-  if (!newLensName.value.trim()) return;
-  store.saveLens(newLensName.value);
+  const name = newLensName.value.trim();
+  if (!name) return;
+  store.saveLens(name);
   newLensName.value = '';
+  showToast(`Lens "${name}" saved`);
 }
 
 function handleLoad(id) {
@@ -130,6 +134,8 @@ function handleLoad(id) {
 
 function handleOverwrite(id) {
   store.overwriteLens(id);
+  const lens = lenses.value.find(l => l.id === id);
+  if (lens) showToast(`Lens "${lens.name}" updated`);
 }
 
 function handleExport(id) {
