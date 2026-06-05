@@ -119,7 +119,7 @@
 
             <div class="section-label">
               Bounded Contexts
-              <span class="draft-required">required</span>
+              <span class="draft-optional">optional</span>
             </div>
             <div class="assigned-chips" v-if="newTeamDraft.contexts.length">
               <span v-for="c in newTeamDraft.contexts" :key="c" class="assigned-chip repo-chip">
@@ -141,7 +141,7 @@
               <button
                 class="modal-btn modal-btn--confirm"
                 :disabled="!canSaveNewTeam"
-                :title="canSaveNewTeam ? 'Save team' : 'Assign at least one author and one bounded context first'"
+                :title="canSaveNewTeam ? 'Save team' : 'Assign at least one author first'"
                 @click="confirmNewTeam">
                 Save Team
               </button>
@@ -752,8 +752,7 @@ const draftAvailableContexts = computed(() => {
 });
 
 const canSaveNewTeam = computed(() =>
-  (newTeamDraft.value?.authors.length ?? 0) > 0 &&
-  (newTeamDraft.value?.contexts.length ?? 0) > 0
+  (newTeamDraft.value?.authors.length ?? 0) > 0
 );
 
 function confirmNewTeam() {
@@ -1204,6 +1203,9 @@ async function handleImport(e) {
 }
 .draft-required {
   @apply ml-1 text-[10px] font-bold uppercase tracking-wide text-brand-orange;
+}
+.draft-optional {
+  @apply ml-1 text-[10px] font-bold uppercase tracking-wide text-gray-400;
 }
 .new-team-actions {
   @apply flex items-center justify-end gap-2 mt-1;
