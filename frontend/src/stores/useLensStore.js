@@ -17,6 +17,7 @@ const STORAGE = {
   vizSettings:      'conwaylens:vizSettings',
   lenses:           'conwaylens:lenses',
   activeLensId:     'conwaylens:activeLensId',
+  mappingOpened:    'conwaylens:mappingOpened',
 };
 
 const VIZ_DEFAULTS = {
@@ -69,6 +70,11 @@ export const useLensStore = defineStore('lens', () => {
   watch(activeLensId, v => localStorage.setItem(STORAGE.activeLensId, JSON.stringify(v)));
 
   const uiLensOpen = ref(false);
+
+  const mappingEverOpened = ref(load(STORAGE.mappingOpened, false));
+  watch(mappingEverOpened, v => localStorage.setItem(STORAGE.mappingOpened, JSON.stringify(v)));
+  function markMappingOpened() { mappingEverOpened.value = true; }
+  const showMappingSpotlight = computed(() => dataLoaded.value && teams.value.length === 0 && !mappingEverOpened.value);
 
   const activeRange = ref({ since: null, until: null });
 
@@ -1035,5 +1041,6 @@ export const useLensStore = defineStore('lens', () => {
     vizSettings, resetVizSettings,
     lenses, activeLensId, uiLensOpen,
     saveLens, overwriteLens, loadLens, updateLens, deleteLens, exportLens, importLensFromData,
+    mappingEverOpened, markMappingOpened, showMappingSpotlight,
   };
 });

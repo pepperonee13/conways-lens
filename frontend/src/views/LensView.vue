@@ -87,6 +87,7 @@
     <MappingEditor />
     <FilterPanel />
     <LensManager />
+    <MappingSpotlight />
 
   </div>
 </template>
@@ -99,6 +100,7 @@ import NetworkGraph from '../components/NetworkGraph.vue';
 import MappingEditor from '../components/MappingEditor.vue';
 import FilterPanel from '../components/FilterPanel.vue';
 import LensManager from '../components/LensManager.vue';
+import MappingSpotlight from '../components/MappingSpotlight.vue';
 import SimulateCard from '../simulation/SimulateCard.vue';
 import {
   FolderOpen, Inbox, FlaskConical, Plus, RefreshCw, FileText, Telescope,
