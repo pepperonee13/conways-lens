@@ -34,13 +34,19 @@ function adaptStep({ element, title = '', description = '', side = 'left', align
 }
 
 function makeDriver(driverOptions, onDismiss) {
-  // Guard so calling destroy() externally never fires onDismiss a second time.
+  // driver.js fires onDestroyStarted and returns early when the user triggers
+  // close (overlay click, Escape, × button) — the overlay stays mounted until
+  // d.destroy() is called from within this hook to complete the cleanup.
+  // The externalDestroy guard prevents onDismiss from firing a second time
+  // when our own destroy() wrapper calls d.destroy() programmatically
+  // (which bypasses onDestroyStarted entirely via g(false) internally).
   let externalDestroy = false;
 
   const d = driver({
     ...driverOptions,
     onDestroyStarted: () => {
       if (!externalDestroy && onDismiss) onDismiss();
+      d.destroy(); // complete the cleanup driver.js deferred to us
     },
   });
 
