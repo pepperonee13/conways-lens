@@ -141,7 +141,7 @@
               <button
                 class="modal-btn modal-btn--confirm"
                 :disabled="!canSaveNewTeam"
-                :title="canSaveNewTeam ? 'Save team' : 'Assign at least one author and one repository first'"
+                :title="canSaveNewTeam ? 'Save team' : 'Assign at least one author and one bounded context first'"
                 @click="confirmNewTeam">
                 Save Team
               </button>
@@ -1269,6 +1269,10 @@ async function handleImport(e) {
 }
 .modal-btn--confirm {
   @apply bg-brand-blue text-white hover:bg-brand-blue/85;
+}
+.modal-btn--confirm:disabled {
+  @apply opacity-40 cursor-not-allowed;
+  pointer-events: auto;
 }
 .modal-fade-enter-active, .modal-fade-leave-active { transition: opacity 0.15s ease; }
 .modal-fade-enter-active .modal-dialog, .modal-fade-leave-active .modal-dialog {
