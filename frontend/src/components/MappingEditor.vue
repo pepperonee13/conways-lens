@@ -484,10 +484,10 @@
                 <span class="ctx-source-type" :class="`ctx-source-type--${s.type}`">{{ s.type }}</span>
                 <span class="ctx-source-desc">{{ sourceLabel(s) }}</span>
                 <button
-                  class="chip-remove"
+                  class="chip-remove chip-remove--source"
                   :disabled="c.sources.length === 1"
                   :title="c.sources.length === 1 ? 'A bounded context must have at least one source' : 'Remove source'"
-                  @click="c.sources.length > 1 && store.removeContextSource(c.id, i)"><X :size="11" /></button>
+                  @click="removeContextSource(c, i)"><X :size="11" /></button>
               </div>
               <span v-if="!c.sources.length" class="empty-hint">No sources yet — this context matches nothing.</span>
             </div>
@@ -934,6 +934,9 @@ function addSourceFromDraft(id) {
   store.addContextSource(id, source);
   draftSource[id] = freshDraft();
 }
+function removeContextSource(ctx, index) {
+  if (ctx.sources.length > 1) store.removeContextSource(ctx.id, index);
+}
 
 // ── New context draft ─────────────────────────────────────────────────────────
 const newContextDraft = ref(null); // { name, sources, activeDraft }
@@ -1274,6 +1277,10 @@ async function handleImport(e) {
 .chip-remove {
   @apply ml-0.5 w-4 h-4 flex items-center justify-center rounded-full
          hover:bg-white/30 text-white cursor-pointer font-bold text-xs leading-none;
+}
+/* Source-row remove buttons sit on a light background, so override the white icon. */
+.chip-remove--source {
+  @apply text-gray-400 hover:bg-red-100 hover:text-red-500;
 }
 .chip-remove:disabled {
   @apply opacity-30 cursor-not-allowed;
