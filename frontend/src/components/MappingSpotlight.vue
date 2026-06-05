@@ -42,7 +42,7 @@ import { useLensStore } from '../stores/useLensStore';
 
 const store = useLensStore();
 
-function dismiss() { store.markMappingOpened(); }
+function dismiss() { store.dismissSpotlight(); }
 
 function onKey(e) { if (e.key === 'Escape') dismiss(); }
 onMounted(() => window.addEventListener('keydown', onKey));

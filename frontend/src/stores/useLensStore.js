@@ -71,10 +71,14 @@ export const useLensStore = defineStore('lens', () => {
 
   const uiLensOpen = ref(false);
 
-  const mappingEverOpened = ref(load(STORAGE.mappingOpened, false));
+  const mappingEverOpened   = ref(load(STORAGE.mappingOpened, false));
+  const spotlightDismissed  = ref(false); // session-only, not persisted
   watch(mappingEverOpened, v => localStorage.setItem(STORAGE.mappingOpened, JSON.stringify(v)));
-  function markMappingOpened() { mappingEverOpened.value = true; }
-  const showMappingSpotlight = computed(() => dataLoaded.value && teams.value.length === 0 && !mappingEverOpened.value);
+  function markMappingOpened()  { mappingEverOpened.value  = true; }
+  function dismissSpotlight()   { spotlightDismissed.value = true; }
+  const showMappingSpotlight = computed(() =>
+    dataLoaded.value && teams.value.length === 0 && !mappingEverOpened.value && !spotlightDismissed.value
+  );
 
   const activeRange = ref({ since: null, until: null });
 
@@ -1041,6 +1045,6 @@ export const useLensStore = defineStore('lens', () => {
     vizSettings, resetVizSettings,
     lenses, activeLensId, uiLensOpen,
     saveLens, overwriteLens, loadLens, updateLens, deleteLens, exportLens, importLensFromData,
-    mappingEverOpened, markMappingOpened, showMappingSpotlight,
+    mappingEverOpened, markMappingOpened, dismissSpotlight, showMappingSpotlight,
   };
 });
