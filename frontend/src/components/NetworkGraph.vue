@@ -720,6 +720,13 @@ function redrawFolder() {
   folderRenderer.draw({ dims, data });
 }
 
+function redrawDetail() {
+  const data = detailSourceKey.value
+    ? store.sourceContributorsData(detailRepoId.value, detailSourceKey.value)
+    : store.contextContributorsData(detailRepoId.value);
+  detailRenderer.draw({ dims, data });
+}
+
 // ── Render ────────────────────────────────────────────────────────────────
 
 function redraw() {
@@ -738,7 +745,14 @@ function setGraphView(view) {
   nextTick(() => redraw());
 }
 
-watch(ownershipGraphData, () => redraw(), { deep: true, flush: 'post' });
+watch(ownershipGraphData, () => {
+  if (detailRepoId.value) {
+    if (folderPath.value !== null) redrawFolder();
+    else nextTick(() => redrawDetail());
+  } else {
+    redraw();
+  }
+}, { deep: true, flush: 'post' });
 watch(dims,               () => redraw(), { flush: 'post' });
 watch(edgeWeight, () => {
   if (detailRepoId.value) {
