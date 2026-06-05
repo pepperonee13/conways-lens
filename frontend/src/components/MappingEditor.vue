@@ -439,7 +439,7 @@
               </div>
               <div class="ctx-repo-pills">
                 <button
-                  v-for="r in allRepos" :key="r"
+                  v-for="r in (newContextDraft.activeDraft.type === 'repo' ? availableReposForNewContext : allRepos)" :key="r"
                   :class="['ctx-repo-pill', { 'ctx-repo-pill--selected': newContextDraft.activeDraft.repo === r }]"
                   @click="newContextDraft.activeDraft.repo = r"
                 >{{ r }}</button>
@@ -470,7 +470,7 @@
 
           <button v-else class="add-team-btn" @click="startAddContext">+ New bounded context</button>
 
-          <div v-for="c in contexts" :key="c.id" class="ctx-card">
+          <div v-for="c in sortedContexts" :key="c.id" class="ctx-card">
             <div class="ctx-card-header">
               <input
                 :value="c.name"
@@ -502,7 +502,7 @@
               </div>
               <div class="ctx-repo-pills">
                 <button
-                  v-for="r in allRepos" :key="r"
+                  v-for="r in (draftSource[c.id].type === 'repo' ? availableReposFor(c.id) : allRepos)" :key="r"
                   :class="['ctx-repo-pill', { 'ctx-repo-pill--selected': draftSource[c.id].repo === r }]"
                   @click="draftSource[c.id].repo = r"
                 >{{ r }}</button>
@@ -872,6 +872,33 @@ function sourceLabel(s) {
   return s.repo;
 }
 
+// Contexts sorted alphabetically for display.
+const sortedContexts = computed(() =>
+  [...contexts.value].sort((a, b) => a.name.localeCompare(b.name))
+);
+
+// Map repo → contextId for every type:'repo' source in user-defined contexts.
+// Used to hide already-claimed repos from the repo-mode picker.
+const wholeRepoCoveredBy = computed(() => {
+  const map = {};
+  for (const ctx of contexts.value) {
+    for (const src of (ctx.sources ?? [])) {
+      if (src.type === 'repo') map[src.repo] = ctx.id;
+    }
+  }
+  return map;
+});
+
+// Repos available in repo-mode for a given existing context id.
+// Shows repos not wholly owned by a different context.
+function availableReposFor(contextId) {
+  const covered = wholeRepoCoveredBy.value;
+  return allRepos.value.filter(r => {
+    const owner = covered[r];
+    return !owner || owner === contextId;
+  });
+}
+
 // Per-context draft for the "add source" form. Kept in sync with the context
 // list the same way team name/colour drafts are.
 const draftSource = reactive({});
@@ -909,6 +936,17 @@ const newContextDraft = ref(null); // { name, sources, activeDraft }
 function startAddContext() {
   newContextDraft.value = { name: 'New context', sources: [], activeDraft: freshDraft() };
 }
+
+// Repos available in repo-mode for the new context draft:
+// excludes repos already wholly owned by an existing context and repos
+// already added as type:'repo' sources within the draft itself.
+const availableReposForNewContext = computed(() => {
+  const covered = wholeRepoCoveredBy.value;
+  const inDraft = new Set(
+    (newContextDraft.value?.sources ?? []).filter(s => s.type === 'repo').map(s => s.repo)
+  );
+  return allRepos.value.filter(r => !covered[r] && !inDraft.has(r));
+});
 
 function newContextDraftToSource() {
   const d = newContextDraft.value?.activeDraft;
