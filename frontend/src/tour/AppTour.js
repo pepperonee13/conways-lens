@@ -45,12 +45,24 @@ function makeDriver(driverOptions, onDismiss) {
 
 /**
  * Highlights a single element with a popover — no progress, no prev/next.
+ * A ResizeObserver keeps the spotlight in sync as the element's size changes
+ * (e.g. a FAB that expands on hover via a CSS transition).
  */
 export function highlightElement(step, options = {}) {
   const { onDismiss, allowClose = true, overlayOpacity = 0.5 } = options;
   const { instance, destroy } = makeDriver({ allowClose, overlayOpacity }, onDismiss);
   instance.highlight(adaptStep(step));
-  return { destroy };
+
+  const el = document.querySelector(step.element);
+  const observer = el ? new ResizeObserver(() => instance.refresh()) : null;
+  if (observer) observer.observe(el);
+
+  return {
+    destroy() {
+      observer?.disconnect();
+      destroy();
+    },
+  };
 }
 
 /**
