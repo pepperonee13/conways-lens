@@ -10,7 +10,7 @@
 //   node cli/extract-git-history.mjs --concurrency 8 --workdir /tmp/repos
 
 import { spawn } from 'node:child_process';
-import { mkdir, writeFile, access, readdir, rm } from 'node:fs/promises';
+import { mkdir, writeFile, access, readdir, rm, appendFile } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname, resolve, basename } from 'node:path';
@@ -47,6 +47,22 @@ const concurrency = Math.max(1, parseInt(args.concurrency ?? '4', 10));
 const outputFile  = resolve(
   args.output ?? join(__dirname, '..', 'frontend', 'public', `CommitHistory-${basename(reposFile, '.json')}.csv`)
 );
+
+const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+const logFile = resolve(args.log ?? join(__dirname, `extract-git-history_${ts}.log`));
+
+// Tee all console output to the log file (append so multiple runs are preserved)
+const _origLog   = console.log.bind(console);
+const _origError = console.error.bind(console);
+const _origWarn  = console.warn.bind(console);
+function logLine(prefix, ...a) {
+  const text = `${prefix}${a.map(String).join(' ')}`;
+  appendFile(logFile, text + '\n', 'utf8').catch(() => {});
+  return text;
+}
+console.log   = (...a) => _origLog(logLine('', ...a));
+console.error = (...a) => _origError(logLine('[ERROR] ', ...a));
+console.warn  = (...a) => _origWarn(logLine('[WARN]  ', ...a));
 
 // ---------------------------------------------------------------------------
 // Validate inputs
@@ -252,9 +268,8 @@ async function processRepo(repo) {
     log.flush();
     return rows;
   } catch (err) {
-    log.line(c('red', `    Failed: ${repoName} — ${err.message}`));
+    log.line(c('red', `    Skipping ${repoName} — ${err.message}`));
     log.flush();
-    process.exit(1);
     return [];
   }
 }
@@ -279,7 +294,8 @@ async function runPool(items, limit, worker) {
 console.log(`ConwayLens — analysing ${repos.length} repositories with concurrency=${concurrency}`);
 console.log(`Date range : ${since} → ${until}`);
 console.log(`Work dir   : ${workDir}`);
-console.log(`Output     : ${outputFile}\n`);
+console.log(`Output     : ${outputFile}`);
+console.log(`Log file   : ${logFile}\n`);
 
 const start = Date.now();
 const allRows = (await runPool(repos, concurrency, processRepo)).flat();
@@ -302,3 +318,4 @@ console.log(`\n=== Done ===`);
 console.log(`Total rows : ${allRows.length}`);
 console.log(`Elapsed    : ${seconds}s`);
 console.log(`Output     : ${outputFile}`);
+console.log(`Log        : ${logFile}`);
