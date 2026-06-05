@@ -561,13 +561,20 @@ export const useLensStore = defineStore('lens', () => {
   }
 
   // Team CRUD
-  function addTeam() {
+  function nextTeamDefaults() {
+    return {
+      name:  `Team ${teams.value.length + 1}`,
+      color: DEFAULT_COLORS[teams.value.length % DEFAULT_COLORS.length],
+    };
+  }
+  function addTeam({ name, color, authors = [], contexts = [] } = {}) {
+    const defaults = nextTeamDefaults();
     teams.value.push({
       id:      Date.now().toString(),
-      name:    `Team ${teams.value.length + 1}`,
-      color:   DEFAULT_COLORS[teams.value.length % DEFAULT_COLORS.length],
-      authors: [],
-      contexts: [],
+      name:    name ?? defaults.name,
+      color:   color ?? defaults.color,
+      authors,
+      contexts,
     });
   }
   function removeTeam(id) { teams.value = teams.value.filter(t => t.id !== id); }
@@ -774,6 +781,23 @@ export const useLensStore = defineStore('lens', () => {
       l.id === id ? { ...l, ..._lensSnapshot() } : l
     );
   }
+
+  // True when the current mapping state differs from the active lens snapshot.
+  // Uses JSON serialisation for a deep, ordering-sensitive comparison — safe
+  // because _lensSnapshot() already normalises via JSON.parse/stringify.
+  const isDirty = computed(() => {
+    if (!activeLensId.value) return false;
+    const lens = lenses.value.find(l => l.id === activeLensId.value);
+    if (!lens) return false;
+    const snap = _lensSnapshot();
+    return (
+      JSON.stringify(snap.teams)                !== JSON.stringify(lens.teams)                ||
+      JSON.stringify(snap.contexts)             !== JSON.stringify(lens.contexts)             ||
+      JSON.stringify(snap.authorNormalizations) !== JSON.stringify(lens.authorNormalizations) ||
+      JSON.stringify(snap.ignoredAuthors)       !== JSON.stringify(lens.ignoredAuthors)       ||
+      JSON.stringify(snap.vizSettings)          !== JSON.stringify(lens.vizSettings)
+    );
+  });
 
   function loadLens(id) {
     const lens = lenses.value.find(l => l.id === id);
@@ -1033,7 +1057,7 @@ export const useLensStore = defineStore('lens', () => {
     graphData, ownershipGraphData, nodeColors, getNodeColor,
     repoContributorsData, contextContributorsData, sourceContributorsData, contextSourceData, repoFolderData,
     loadCommits, loadSimulatedData, clearData,
-    addTeam, removeTeam,
+    nextTeamDefaults, addTeam, removeTeam,
     addContext, removeContext, updateContext, addContextSource, removeContextSource, contextForSource,
     moveContextSource, createContextWithSource,
     pendingContextSource, beginAddToContext, clearPendingContextSource,
@@ -1043,7 +1067,7 @@ export const useLensStore = defineStore('lens', () => {
     toggleTeamExpansion,
     exportMappings, importMappings,
     vizSettings, resetVizSettings,
-    lenses, activeLensId, uiLensOpen,
+    lenses, activeLensId, isDirty, uiLensOpen,
     saveLens, overwriteLens, loadLens, updateLens, deleteLens, exportLens, importLensFromData,
     mappingEverOpened, markMappingOpened, dismissSpotlight, showMappingSpotlight,
   };

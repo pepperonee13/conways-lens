@@ -82,7 +82,83 @@
             </transition>
           </div>
 
-          <button class="add-team-btn" @click="addTeam()">+ Add Team</button>
+          <!-- ── New Team Draft Card ── -->
+          <div v-if="newTeamDraft" class="new-team-draft">
+            <div class="new-team-draft-header">
+              <span class="new-team-draft-title">New Team</span>
+              <button class="remove-team-btn" @click="newTeamDraft = null" title="Cancel"><X :size="16" /></button>
+            </div>
+            <div class="new-team-draft-row">
+              <input type="color"
+                v-model="newTeamDraft.color"
+                class="color-picker" :title="newTeamDraft.color" />
+              <input
+                v-model="newTeamDraft.name"
+                class="team-name-input"
+                placeholder="Team name" />
+            </div>
+
+            <div class="section-label">
+              Authors
+              <span class="draft-required">required</span>
+            </div>
+            <div class="assigned-chips" v-if="newTeamDraft.authors.length">
+              <span v-for="a in newTeamDraft.authors" :key="a" class="assigned-chip author-chip">
+                {{ a }}<button class="chip-remove" @click="removeDraftItem('authors', a)" title="Remove"><X :size="11" /></button>
+              </span>
+            </div>
+            <div class="available-list" v-if="draftAvailableAuthorGroups.free.length || draftAvailableAuthorGroups.shared.length">
+              <template v-if="draftAvailableAuthorGroups.free.length">
+                <div class="available-label">Add author:</div>
+                <div class="available-pills">
+                  <button v-for="a in draftAvailableAuthorGroups.free" :key="a" class="available-pill" @click="addDraftItem('authors', a)">
+                    + {{ a }}
+                  </button>
+                </div>
+              </template>
+              <template v-if="draftAvailableAuthorGroups.shared.length">
+                <div class="available-label available-label--shared">Also in another team:</div>
+                <div class="available-pills">
+                  <button v-for="a in draftAvailableAuthorGroups.shared" :key="a" class="available-pill available-pill--shared" @click="addDraftItem('authors', a)">
+                    + {{ a }}
+                  </button>
+                </div>
+              </template>
+            </div>
+            <span v-if="!newTeamDraft.authors.length && !draftAvailableAuthorGroups.free.length && !draftAvailableAuthorGroups.shared.length" class="empty-hint">No authors available — upload a CSV first.</span>
+
+            <div class="section-label">
+              Bounded Contexts
+              <span class="draft-optional">optional</span>
+            </div>
+            <div class="assigned-chips" v-if="newTeamDraft.contexts.length">
+              <span v-for="c in newTeamDraft.contexts" :key="c" class="assigned-chip repo-chip">
+                {{ contextName(c) }}<button class="chip-remove" @click="removeDraftItem('contexts', c)" title="Remove"><X :size="11" /></button>
+              </span>
+            </div>
+            <div class="available-list" v-if="draftAvailableContexts.length">
+              <div class="available-label">Add bounded context:</div>
+              <div class="available-pills">
+                <button v-for="c in draftAvailableContexts" :key="c.id" class="available-pill repo-pill" @click="addDraftItem('contexts', c.id)">
+                  + {{ c.name }}
+                </button>
+              </div>
+            </div>
+            <span v-if="!newTeamDraft.contexts.length && !draftAvailableContexts.length" class="empty-hint">No bounded contexts available — upload a CSV first.</span>
+
+            <div class="new-team-actions">
+              <button class="modal-btn modal-btn--secondary" @click="newTeamDraft = null">Cancel</button>
+              <button
+                class="modal-btn modal-btn--confirm"
+                :disabled="!canSaveNewTeam"
+                :title="canSaveNewTeam ? 'Save team' : 'Assign at least one author first'"
+                @click="confirmNewTeam">
+                Save Team
+              </button>
+            </div>
+          </div>
+
+          <button v-else class="add-team-btn" @click="startAddTeam">+ Add Team</button>
 
           <div class="teams-list">
             <div
@@ -118,7 +194,11 @@
                   <div class="section-label">Authors ({{ team.authors.length }})</div>
                   <div class="assigned-chips">
                     <span v-for="a in [...team.authors].sort()" :key="a" class="assigned-chip author-chip">
-                      {{ a }}<button class="chip-remove" @click="removeFrom(team, 'authors', a)" title="Remove"><X :size="11" /></button>
+                      {{ a }}<button
+                        class="chip-remove"
+                        :disabled="team.authors.length === 1"
+                        :title="team.authors.length === 1 ? 'A team must have at least one author' : 'Remove'"
+                        @click="team.authors.length > 1 && removeFrom(team, 'authors', a)"><X :size="11" /></button>
                     </span>
                     <span v-if="!team.authors.length" class="empty-hint">No authors assigned</span>
                   </div>
@@ -144,7 +224,11 @@
                   <div class="section-label">Bounded Contexts ({{ team.contexts.length }})</div>
                   <div class="assigned-chips">
                     <span v-for="r in [...team.contexts].sort()" :key="r" class="assigned-chip repo-chip">
-                      {{ contextName(r) }}<button class="chip-remove" @click="removeFrom(team, 'contexts', r)" title="Remove"><X :size="11" /></button>
+                      {{ contextName(r) }}<button
+                        class="chip-remove"
+                        :disabled="team.contexts.length === 1"
+                        :title="team.contexts.length === 1 ? 'A team must have at least one bounded context' : 'Remove'"
+                        @click="team.contexts.length > 1 && removeFrom(team, 'contexts', r)"><X :size="11" /></button>
                     </span>
                     <span v-if="!team.contexts.length" class="empty-hint">No bounded contexts assigned</span>
                   </div>
@@ -332,22 +416,88 @@
             </div>
           </div>
 
-          <button class="add-team-btn" @click="store.addContext('New context')">+ New bounded context</button>
+          <!-- ── New Context Draft Card ── -->
+          <div v-if="newContextDraft" class="new-team-draft">
+            <div class="new-team-draft-header">
+              <span class="new-team-draft-title">New Bounded Context</span>
+              <button class="remove-team-btn" @click="newContextDraft = null" title="Cancel"><X :size="16" /></button>
+            </div>
+            <input
+              v-model="newContextDraft.name"
+              class="ctx-new-name-input"
+              placeholder="Context name" />
 
-          <div v-for="c in contexts" :key="c.id" class="ctx-card">
+            <div class="section-label">
+              Sources
+              <span class="draft-required">required</span>
+            </div>
+            <div class="ctx-sources" v-if="newContextDraft.sources.length">
+              <div v-for="(s, i) in newContextDraft.sources" :key="i" class="ctx-source-row">
+                <span class="ctx-source-type" :class="`ctx-source-type--${s.type}`">{{ s.type }}</span>
+                <span class="ctx-source-desc">{{ sourceLabel(s) }}</span>
+                <button class="chip-remove" @click="removeSourceFromNewContext(i)" title="Remove source"><X :size="11" /></button>
+              </div>
+            </div>
+
+            <div class="ctx-add-source">
+              <div class="ctx-type-pills">
+                <button
+                  v-for="t in ['repo', 'path', 'glob']" :key="t"
+                  :class="['ctx-type-pill', `ctx-type-pill--${t}`, { 'ctx-type-pill--active': newContextDraft.activeDraft.type === t }]"
+                  @click="newContextDraft.activeDraft.type = t"
+                >{{ t }}</button>
+              </div>
+              <div class="ctx-repo-pills">
+                <button
+                  v-for="r in availableReposForNewContext" :key="r"
+                  :class="['ctx-repo-pill', { 'ctx-repo-pill--selected': newContextDraft.activeDraft.repo === r }]"
+                  @click="newContextDraft.activeDraft.repo = r"
+                >{{ r }}</button>
+              </div>
+              <input
+                v-if="newContextDraft.activeDraft.type === 'path'"
+                v-model="newContextDraft.activeDraft.path" class="ctx-input-sm" placeholder="e.g. src/auth" />
+              <input
+                v-if="newContextDraft.activeDraft.type === 'glob'"
+                v-model="newContextDraft.activeDraft.pattern" class="ctx-input-sm" placeholder="e.g. **/*.sql" />
+              <button class="available-pill" :disabled="!canAddSourceToNewContext" @click="addSourceToNewContext">+ source</button>
+              <span v-if="newContextDraftConflict" class="ctx-conflict ctx-conflict--inline">
+                Already in <strong>{{ newContextDraftConflict.name }}</strong>
+              </span>
+            </div>
+
+            <div class="new-team-actions">
+              <button class="modal-btn modal-btn--secondary" @click="newContextDraft = null">Cancel</button>
+              <button
+                class="modal-btn modal-btn--confirm"
+                :disabled="!canSaveNewContext"
+                :title="canSaveNewContext ? 'Save bounded context' : 'Add at least one source first'"
+                @click="confirmNewContext">
+                Save Context
+              </button>
+            </div>
+          </div>
+
+          <button v-else class="add-team-btn" @click="startAddContext">+ New bounded context</button>
+
+          <div v-for="c in sortedContexts" :key="c.id" class="ctx-card">
             <div class="ctx-card-header">
               <input
                 :value="c.name"
                 @input="store.updateContext(c.id, { name: $event.target.value })"
                 class="team-name-input" placeholder="Context name" />
-              <button class="remove-team-btn" @click="store.removeContext(c.id)" title="Delete context"><Trash2 :size="16" /></button>
+              <button class="remove-team-btn" @click="askDeleteContext(c)" title="Delete context"><Trash2 :size="16" /></button>
             </div>
 
             <div class="ctx-sources">
               <div v-for="(s, i) in c.sources" :key="i" class="ctx-source-row">
                 <span class="ctx-source-type" :class="`ctx-source-type--${s.type}`">{{ s.type }}</span>
                 <span class="ctx-source-desc">{{ sourceLabel(s) }}</span>
-                <button class="chip-remove" @click="store.removeContextSource(c.id, i)" title="Remove source"><X :size="11" /></button>
+                <button
+                  class="remove-source-btn"
+                  :disabled="c.sources.length === 1"
+                  :title="c.sources.length === 1 ? 'A bounded context must have at least one source' : 'Remove source'"
+                  @click="removeContextSource(c, i)"><X :size="14" /></button>
               </div>
               <span v-if="!c.sources.length" class="empty-hint">No sources yet — this context matches nothing.</span>
             </div>
@@ -362,7 +512,7 @@
               </div>
               <div class="ctx-repo-pills">
                 <button
-                  v-for="r in allRepos" :key="r"
+                  v-for="r in availableReposFor(c.id)" :key="r"
                   :class="['ctx-repo-pill', { 'ctx-repo-pill--selected': draftSource[c.id].repo === r }]"
                   @click="draftSource[c.id].repo = r"
                 >{{ r }}</button>
@@ -422,6 +572,28 @@
     </transition>
   </Teleport>
 
+  <!-- Context deletion confirmation modal -->
+  <Teleport to="body">
+    <transition name="modal-fade">
+      <div v-if="contextToDelete" class="modal-backdrop" @click.self="contextToDelete = null">
+        <div class="modal-dialog" role="dialog" aria-modal="true">
+          <div class="modal-header">
+            <h3 class="modal-title">Delete bounded context?</h3>
+          </div>
+          <p class="modal-body">
+            This will remove the bounded context <strong>{{ contextToDelete.name }}</strong>
+            ({{ contextToDelete.sources.length }} source{{ contextToDelete.sources.length === 1 ? '' : 's' }}).
+            Any team that owns it will lose this context assignment.
+          </p>
+          <div class="modal-actions">
+            <button class="modal-btn modal-btn--secondary" @click="contextToDelete = null">Cancel</button>
+            <button class="modal-btn modal-btn--danger" @click="confirmDeleteContext">Delete</button>
+          </div>
+        </div>
+      </div>
+    </transition>
+  </Teleport>
+
   <!-- Team deletion confirmation modal -->
   <Teleport to="body">
     <transition name="modal-fade">
@@ -458,6 +630,7 @@ import FabButton from './FabButton.vue';
 
 const store = useLensStore();
 const { teams, authorNormalizations, ignoredAuthors, allRawAuthors, allAuthors, allContexts, allRepos, contexts, pendingContextSource, nodeColors } = storeToRefs(store);
+
 
 function contextName(id) {
   return allContexts.value.find(c => c.id === id)?.name ?? id;
@@ -555,27 +728,81 @@ function toggleTeam(id) {
   s.has(id) ? s.delete(id) : s.add(id);
   expandedTeams.value = s;
 }
-function addTeam() {
-  store.addTeam();
-  const newTeam = teams.value[teams.value.length - 1];
-  if (newTeam) expandedTeams.value = new Set([...expandedTeams.value, newTeam.id]);
+
+// ── New team draft ──────────────────────────────────────────────────────────
+// Teams require ≥1 author AND ≥1 context before being saved to the list.
+const newTeamDraft = ref(null);
+
+function startAddTeam() {
+  const defaults = store.nextTeamDefaults();
+  newTeamDraft.value = { ...defaults, authors: [], contexts: [] };
+}
+
+function addDraftItem(field, value) {
+  if (!newTeamDraft.value[field].includes(value))
+    newTeamDraft.value[field].push(value);
+}
+
+function removeDraftItem(field, value) {
+  newTeamDraft.value[field] = newTeamDraft.value[field].filter(v => v !== value);
+}
+
+const draftAvailableAuthorGroups = computed(() => {
+  if (!newTeamDraft.value) return { free: [], shared: [] };
+  const assignedElsewhere = new Set(teams.value.flatMap(t => t.authors));
+  const inDraft = new Set(newTeamDraft.value.authors);
+  const free = [], shared = [];
+  for (const a of allAuthors.value) {
+    if (inDraft.has(a) || ignoredSet.value.has(a)) continue;
+    (assignedElsewhere.has(a) ? shared : free).push(a);
+  }
+  return { free, shared };
+});
+
+const draftAvailableContexts = computed(() => {
+  if (!newTeamDraft.value) return [];
+  const assigned = new Set(teams.value.flatMap(t => t.contexts));
+  const inDraft  = new Set(newTeamDraft.value.contexts);
+  return allContexts.value.filter(c => !assigned.has(c.id) && !inDraft.has(c.id));
+});
+
+const canSaveNewTeam = computed(() =>
+  (newTeamDraft.value?.authors.length ?? 0) > 0
+);
+
+function confirmNewTeam() {
+  if (!canSaveNewTeam.value || !newTeamDraft.value) return;
+  store.addTeam(newTeamDraft.value);
+  const addedTeam = teams.value[teams.value.length - 1];
+  if (addedTeam) expandedTeams.value = new Set([...expandedTeams.value, addedTeam.id]);
+  newTeamDraft.value = null;
 }
 
 // Team deletion is gated behind a confirmation modal — clicking the X or
-// the in-body delete button stages the team here; the modal commits or cancels.
+// the in-body delete button stages the team/context here; the modal commits or cancels.
 const aliasMergeConfirm = ref(null); // { raw, canonical } — staged alias merge awaiting confirmation
-const teamToDelete = ref(null);
-function askDeleteTeam(team) { teamToDelete.value = team; }
+const teamToDelete    = ref(null);
+const contextToDelete = ref(null);
+function askDeleteTeam(team)       { teamToDelete.value    = team; }
+function askDeleteContext(context) { contextToDelete.value = context; }
 function confirmDeleteTeam() {
   if (teamToDelete.value) store.removeTeam(teamToDelete.value.id);
   teamToDelete.value = null;
 }
+function confirmDeleteContext() {
+  if (contextToDelete.value) store.removeContext(contextToDelete.value.id);
+  contextToDelete.value = null;
+}
 const onModalKeydown = e => {
-  if (e.key === 'Escape') { teamToDelete.value = null; aliasMergeConfirm.value = null; }
+  if (e.key === 'Escape') {
+    teamToDelete.value = null;
+    contextToDelete.value = null;
+    aliasMergeConfirm.value = null;
+  }
 };
-watch([teamToDelete, aliasMergeConfirm], ([t, a]) => {
-  if (t || a) window.addEventListener('keydown', onModalKeydown);
-  else        window.removeEventListener('keydown', onModalKeydown);
+watch([teamToDelete, contextToDelete, aliasMergeConfirm], ([t, c, a]) => {
+  if (t || c || a) window.addEventListener('keydown', onModalKeydown);
+  else             window.removeEventListener('keydown', onModalKeydown);
 });
 onUnmounted(() => {
   window.removeEventListener('keydown', onModalKeydown);
@@ -612,7 +839,7 @@ function removeFrom(team, field, value) {
 
 const unassignedAuthors = computed(() => {
   const assigned = new Set(teams.value.flatMap(t => t.authors));
-  return allAuthors.value.filter(a => !assigned.has(a));
+  return allAuthors.value.filter(a => !assigned.has(a) && !ignoredSet.value.has(a));
 });
 const unassignedContexts = computed(() => {
   const assigned = new Set(teams.value.flatMap(t => t.contexts));
@@ -691,6 +918,38 @@ function sourceLabel(s) {
   return s.repo;
 }
 
+// Contexts sorted alphabetically for display.
+const sortedContexts = computed(() =>
+  [...contexts.value].sort((a, b) => a.name.localeCompare(b.name))
+);
+
+// Map repo → contextId for every type:'repo' source in user-defined contexts.
+// Used to hide already-claimed repos from the repo-mode picker.
+const wholeRepoCoveredBy = computed(() => {
+  const map = {};
+  for (const ctx of contexts.value) {
+    for (const src of (ctx.sources ?? [])) {
+      if (src.type === 'repo') map[src.repo] = ctx.id;
+    }
+  }
+  return map;
+});
+
+// Repos available for the source picker of an existing context.
+// Hides repos owned by a different context, and also repos already added
+// as type:'repo' sources in this context (they'd be duplicates).
+function availableReposFor(contextId) {
+  const covered = wholeRepoCoveredBy.value;
+  const ctx = contexts.value.find(c => c.id === contextId);
+  const alreadyRepoSources = new Set(
+    (ctx?.sources ?? []).filter(s => s.type === 'repo').map(s => s.repo)
+  );
+  return allRepos.value.filter(r => {
+    const owner = covered[r];
+    return (!owner || owner === contextId) && !alreadyRepoSources.has(r);
+  });
+}
+
 // Per-context draft for the "add source" form. Kept in sync with the context
 // list the same way team name/colour drafts are.
 const draftSource = reactive({});
@@ -720,6 +979,75 @@ function addSourceFromDraft(id) {
   if (!source || !canAddSource(id)) return;
   store.addContextSource(id, source);
   draftSource[id] = freshDraft();
+}
+function removeContextSource(ctx, index) {
+  if (ctx.sources.length > 1) store.removeContextSource(ctx.id, index);
+}
+
+// ── New context draft ─────────────────────────────────────────────────────────
+const newContextDraft = ref(null); // { name, sources, activeDraft }
+
+function startAddContext() {
+  newContextDraft.value = { name: 'New context', sources: [], activeDraft: freshDraft() };
+}
+
+// Repos available in repo-mode for the new context draft:
+// excludes repos already wholly owned by an existing context and repos
+// already added as type:'repo' sources within the draft itself.
+const availableReposForNewContext = computed(() => {
+  const covered = wholeRepoCoveredBy.value;
+  const inDraft = new Set(
+    (newContextDraft.value?.sources ?? []).filter(s => s.type === 'repo').map(s => s.repo)
+  );
+  return allRepos.value.filter(r => !covered[r] && !inDraft.has(r));
+});
+
+function newContextDraftToSource() {
+  const d = newContextDraft.value?.activeDraft;
+  if (!d || !d.repo) return null;
+  if (d.type === 'path') return d.path.trim() ? { type: 'path', repo: d.repo, path: d.path.trim() } : null;
+  if (d.type === 'glob') return d.pattern.trim() ? { type: 'glob', repo: d.repo, pattern: d.pattern.trim() } : null;
+  return { type: 'repo', repo: d.repo };
+}
+
+const newContextDraftConflict = computed(() => {
+  const src = newContextDraftToSource();
+  return src ? store.contextForSource(src) : null;
+});
+
+// True when the active draft source is already staged in the draft's source list.
+const newContextDraftDuplicate = computed(() => {
+  const src = newContextDraftToSource();
+  if (!src || !newContextDraft.value) return false;
+  return newContextDraft.value.sources.some(s =>
+    s.type === src.type && s.repo === src.repo &&
+    (src.type === 'repo' ||
+     (src.type === 'path' && s.path === src.path) ||
+     (src.type === 'glob' && s.pattern === src.pattern))
+  );
+});
+
+const canAddSourceToNewContext = computed(() =>
+  !!newContextDraftToSource() && !newContextDraftConflict.value && !newContextDraftDuplicate.value
+);
+
+function addSourceToNewContext() {
+  const source = newContextDraftToSource();
+  if (!source || !canAddSourceToNewContext.value) return;
+  newContextDraft.value.sources.push(source);
+  newContextDraft.value.activeDraft = freshDraft();
+}
+
+function removeSourceFromNewContext(i) {
+  newContextDraft.value.sources = newContextDraft.value.sources.filter((_, idx) => idx !== i);
+}
+
+const canSaveNewContext = computed(() => (newContextDraft.value?.sources.length ?? 0) > 0);
+
+function confirmNewContext() {
+  if (!canSaveNewContext.value || !newContextDraft.value) return;
+  store.addContext(newContextDraft.value.name.trim() || 'New context', newContextDraft.value.sources);
+  newContextDraft.value = null;
 }
 
 // Right-click "Create new context" hand-off.
@@ -875,6 +1203,29 @@ async function handleImport(e) {
   @apply w-full py-2.5 px-4 rounded-lg font-semibold text-sm bg-brand-orange text-white
          hover:bg-brand-orange-dark transition-all duration-150 mb-4 cursor-pointer;
 }
+/* ── New Team Draft Card ── */
+.new-team-draft {
+  @apply border border-brand-orange bg-orange-50 rounded-xl p-4 mb-4 flex flex-col gap-3;
+}
+.new-team-draft-header {
+  @apply flex items-center justify-between;
+}
+.new-team-draft-title {
+  @apply text-sm font-bold text-gray-800;
+}
+.new-team-draft-row {
+  @apply flex items-center gap-2;
+}
+.draft-required {
+  @apply ml-1 text-[10px] font-bold uppercase tracking-wide text-brand-orange;
+}
+.draft-optional {
+  @apply ml-1 text-[10px] font-bold uppercase tracking-wide text-gray-400;
+}
+.new-team-actions {
+  @apply flex items-center justify-end gap-2 mt-1;
+}
+
 /* ── Bounded Contexts tab ── */
 .ctx-card { @apply bg-gray-50 border border-gray-200 rounded-xl p-4 mb-3; }
 .ctx-card-header { @apply flex items-center gap-2 mb-2; }
@@ -975,6 +1326,20 @@ async function handleImport(e) {
 .chip-remove {
   @apply ml-0.5 w-4 h-4 flex items-center justify-center rounded-full
          hover:bg-white/30 text-white cursor-pointer font-bold text-xs leading-none;
+}
+/* Source-row remove button — sized for a light-background row, not a coloured chip. */
+.remove-source-btn {
+  @apply ml-auto w-6 h-6 flex items-center justify-center rounded-full flex-shrink-0
+         text-gray-400 hover:bg-red-100 hover:text-red-500
+         transition-all duration-150 cursor-pointer;
+}
+.remove-source-btn:disabled {
+  @apply opacity-30 cursor-not-allowed;
+  pointer-events: auto;
+}
+.chip-remove:disabled {
+  @apply opacity-30 cursor-not-allowed;
+  pointer-events: auto;
 }
 .empty-hint { @apply text-xs text-gray-400 italic self-center; }
 .available-list { @apply mt-2; }
@@ -1130,6 +1495,10 @@ async function handleImport(e) {
 }
 .modal-btn--confirm {
   @apply bg-brand-blue text-white hover:bg-brand-blue/85;
+}
+.modal-btn--confirm:disabled {
+  @apply opacity-40 cursor-not-allowed;
+  pointer-events: auto;
 }
 .modal-fade-enter-active, .modal-fade-leave-active { transition: opacity 0.15s ease; }
 .modal-fade-enter-active .modal-dialog, .modal-fade-leave-active .modal-dialog {
