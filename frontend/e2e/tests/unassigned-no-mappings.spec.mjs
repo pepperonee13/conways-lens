@@ -40,7 +40,12 @@ test.describe('Unassigned Contributors bubble — CSV with no mappings', () => {
       await app.loadCSV(CSV);
       // Dismiss the mapping spotlight so it doesn't block pointer events
       await dismissSpotlight(page);
-      await app.switchToBubbles();
+      // Bubbles is the automatic default when no teams are configured
+    });
+
+    test('Bubbles view is the default when no teams are configured', async () => {
+      await expect(app.viewToggleBubbles).toHaveClass(/active/);
+      await expect(app.viewToggleSwimlane).not.toHaveClass(/active/);
     });
 
     test('Unassigned Contributors bubble is rendered', async () => {

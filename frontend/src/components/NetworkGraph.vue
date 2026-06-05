@@ -393,7 +393,12 @@ const noFolderData = ref(false);
 const vizOpen = ref(false);
 
 const graphView = computed({
-  get: () => vizSettings.value.graphView,
+  // With no real teams the swimlane is blank (it only renders lanes that have
+  // cross-team violations).  Override to bubbles so the Unassigned Contributors
+  // bubble is visible immediately after a CSV-only upload.
+  get: () => store.teams.length === 0 && effectiveTeams.value.length > 0
+    ? 'circlepack'
+    : vizSettings.value.graphView,
   set: v  => { vizSettings.value = { ...vizSettings.value, graphView: v }; },
 });
 const edgeWeight = computed({
