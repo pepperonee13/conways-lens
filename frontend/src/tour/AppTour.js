@@ -25,7 +25,7 @@ const STYLE_ID = 'app-tour-styles';
 if (typeof document !== 'undefined' && !document.getElementById(STYLE_ID)) {
   const s = document.createElement('style');
   s.id = STYLE_ID;
-  s.textContent = `.driver-popover { border-radius: 9999px !important; }`;
+  s.textContent = `.driver-popover { border-radius: 9999px !important; padding: 1.25rem 1.75rem !important; }`;
   document.head.appendChild(s);
 }
 
