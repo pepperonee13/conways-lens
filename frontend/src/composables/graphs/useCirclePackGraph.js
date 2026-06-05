@@ -56,14 +56,19 @@ export function useCirclePackGraph({
     const repoCommitMap = Object.fromEntries(data.nodes.filter(n => n.type === 'context').map(n => [n.id, n.commits ?? 0]));
 
     // Build hierarchy: root → teams → repos
+    // With only one effective team there can be no cross-team violations, so the
+    // violatingOnly filter would hide everything.  Bypass it in that case so the
+    // single team bubble (e.g. "Unassigned Contributors") is always rendered.
+    const singleTeamMode = teams.length === 1;
+
     const children = [];
     for (const team of teams) {
       const teamNode  = teamNodeMap[`team:${team.id}`];
       const teamRepos = data.nodes.filter(n => n.type === 'context' && n.owningTeamId === team.id);
-      const filteredRepos = filterViolating
+      const filteredRepos = (filterViolating && !singleTeamMode)
         ? teamRepos.filter(r => isContextViolating(r, threshold))
         : teamRepos;
-      if (filteredRepos.length === 0 && filterViolating) {
+      if (filteredRepos.length === 0 && filterViolating && !singleTeamMode) {
         // Still include if this team contributes outbound to another team's violating repo —
         // without a posMap entry the edge would be silently dropped in drawEdges.
         const hasOutbound = data.links.some(l =>
