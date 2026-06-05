@@ -9,3 +9,4 @@ out/
 cli/repos.json
 cli/repos.*.json
 !cli/repos.example.json
+cli/extract-git-history_*.log
