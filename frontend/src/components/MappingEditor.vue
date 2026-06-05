@@ -476,7 +476,7 @@
                 :value="c.name"
                 @input="store.updateContext(c.id, { name: $event.target.value })"
                 class="team-name-input" placeholder="Context name" />
-              <button class="remove-team-btn" @click="store.removeContext(c.id)" title="Delete context"><Trash2 :size="16" /></button>
+              <button class="remove-team-btn" @click="askDeleteContext(c)" title="Delete context"><Trash2 :size="16" /></button>
             </div>
 
             <div class="ctx-sources">
@@ -484,10 +484,10 @@
                 <span class="ctx-source-type" :class="`ctx-source-type--${s.type}`">{{ s.type }}</span>
                 <span class="ctx-source-desc">{{ sourceLabel(s) }}</span>
                 <button
-                  class="chip-remove chip-remove--source"
+                  class="remove-source-btn"
                   :disabled="c.sources.length === 1"
                   :title="c.sources.length === 1 ? 'A bounded context must have at least one source' : 'Remove source'"
-                  @click="removeContextSource(c, i)"><X :size="11" /></button>
+                  @click="removeContextSource(c, i)"><X :size="14" /></button>
               </div>
               <span v-if="!c.sources.length" class="empty-hint">No sources yet — this context matches nothing.</span>
             </div>
@@ -556,6 +556,28 @@
           <div class="modal-actions">
             <button class="modal-btn modal-btn--secondary" @click="cancelAliasMerge">Cancel</button>
             <button class="modal-btn modal-btn--confirm" @click="confirmAliasMerge">Merge</button>
+          </div>
+        </div>
+      </div>
+    </transition>
+  </Teleport>
+
+  <!-- Context deletion confirmation modal -->
+  <Teleport to="body">
+    <transition name="modal-fade">
+      <div v-if="contextToDelete" class="modal-backdrop" @click.self="contextToDelete = null">
+        <div class="modal-dialog" role="dialog" aria-modal="true">
+          <div class="modal-header">
+            <h3 class="modal-title">Delete bounded context?</h3>
+          </div>
+          <p class="modal-body">
+            This will remove the bounded context <strong>{{ contextToDelete.name }}</strong>
+            ({{ contextToDelete.sources.length }} source{{ contextToDelete.sources.length === 1 ? '' : 's' }}).
+            Any team that owns it will lose this context assignment.
+          </p>
+          <div class="modal-actions">
+            <button class="modal-btn modal-btn--secondary" @click="contextToDelete = null">Cancel</button>
+            <button class="modal-btn modal-btn--danger" @click="confirmDeleteContext">Delete</button>
           </div>
         </div>
       </div>
@@ -743,20 +765,30 @@ function confirmNewTeam() {
 }
 
 // Team deletion is gated behind a confirmation modal — clicking the X or
-// the in-body delete button stages the team here; the modal commits or cancels.
+// the in-body delete button stages the team/context here; the modal commits or cancels.
 const aliasMergeConfirm = ref(null); // { raw, canonical } — staged alias merge awaiting confirmation
-const teamToDelete = ref(null);
-function askDeleteTeam(team) { teamToDelete.value = team; }
+const teamToDelete    = ref(null);
+const contextToDelete = ref(null);
+function askDeleteTeam(team)       { teamToDelete.value    = team; }
+function askDeleteContext(context) { contextToDelete.value = context; }
 function confirmDeleteTeam() {
   if (teamToDelete.value) store.removeTeam(teamToDelete.value.id);
   teamToDelete.value = null;
 }
+function confirmDeleteContext() {
+  if (contextToDelete.value) store.removeContext(contextToDelete.value.id);
+  contextToDelete.value = null;
+}
 const onModalKeydown = e => {
-  if (e.key === 'Escape') { teamToDelete.value = null; aliasMergeConfirm.value = null; }
+  if (e.key === 'Escape') {
+    teamToDelete.value = null;
+    contextToDelete.value = null;
+    aliasMergeConfirm.value = null;
+  }
 };
-watch([teamToDelete, aliasMergeConfirm], ([t, a]) => {
-  if (t || a) window.addEventListener('keydown', onModalKeydown);
-  else        window.removeEventListener('keydown', onModalKeydown);
+watch([teamToDelete, contextToDelete, aliasMergeConfirm], ([t, c, a]) => {
+  if (t || c || a) window.addEventListener('keydown', onModalKeydown);
+  else             window.removeEventListener('keydown', onModalKeydown);
 });
 onUnmounted(() => {
   window.removeEventListener('keydown', onModalKeydown);
@@ -1278,9 +1310,15 @@ async function handleImport(e) {
   @apply ml-0.5 w-4 h-4 flex items-center justify-center rounded-full
          hover:bg-white/30 text-white cursor-pointer font-bold text-xs leading-none;
 }
-/* Source-row remove buttons sit on a light background, so override the white icon. */
-.chip-remove--source {
-  @apply text-gray-400 hover:bg-red-100 hover:text-red-500;
+/* Source-row remove button — sized for a light-background row, not a coloured chip. */
+.remove-source-btn {
+  @apply ml-auto w-6 h-6 flex items-center justify-center rounded-full flex-shrink-0
+         text-gray-400 hover:bg-red-100 hover:text-red-500
+         transition-all duration-150 cursor-pointer;
+}
+.remove-source-btn:disabled {
+  @apply opacity-30 cursor-not-allowed;
+  pointer-events: auto;
 }
 .chip-remove:disabled {
   @apply opacity-30 cursor-not-allowed;
