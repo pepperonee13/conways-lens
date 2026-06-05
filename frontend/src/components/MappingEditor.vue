@@ -1,6 +1,5 @@
 <template>
-  <FabButton v-if="!open" class="fixed right-6 bottom-6"
-    :class="showMappingSpotlight ? 'z-[60]' : 'z-40'"
+  <FabButton v-if="!open" class="fixed right-6 bottom-6 z-40"
     label="Mapping" :badge="teams.length || null" color="orange" expand="left"
     title="Edit mappings" data-testid="fab-mapping"
     @click="store.markMappingOpened(); open = true"
@@ -458,7 +457,7 @@ import {
 import FabButton from './FabButton.vue';
 
 const store = useLensStore();
-const { teams, authorNormalizations, ignoredAuthors, allRawAuthors, allAuthors, allContexts, allRepos, contexts, pendingContextSource, nodeColors, showMappingSpotlight } = storeToRefs(store);
+const { teams, authorNormalizations, ignoredAuthors, allRawAuthors, allAuthors, allContexts, allRepos, contexts, pendingContextSource, nodeColors } = storeToRefs(store);
 
 function contextName(id) {
   return allContexts.value.find(c => c.id === id)?.name ?? id;
