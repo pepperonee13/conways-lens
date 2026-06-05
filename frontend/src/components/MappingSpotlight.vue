@@ -17,7 +17,7 @@ function start() {
       element: '[data-testid="fab-mapping"]',
       title: 'Configure Teams',
       description: 'Open <strong>Mapping</strong> to add teams and visualise Conway\'s Law violations.',
-      side: 'left',
+      side: 'top',
       align: 'center',
     },
     { onDismiss: () => store.dismissSpotlight() },
