@@ -393,9 +393,9 @@ export function useCirclePackGraph({
           commits: d.data.commits, contextCount: d.data.contextCount, authorCount: d.data.authorCount,
           teamInboundBreakdown: teamInboundBreakdown.length ? teamInboundBreakdown : null,
           teamOutboundBreakdown: teamOutboundBreakdown.length ? teamOutboundBreakdown : null,
-        }, event.pageX + TOOLTIP_OFFSET.x, event.pageY + TOOLTIP_OFFSET.y);
+        }, event.clientX + TOOLTIP_OFFSET.x, event.clientY + TOOLTIP_OFFSET.y);
       })
-      .on('mousemove', e => onMoveTooltip(e.pageX + TOOLTIP_OFFSET.x, e.pageY + TOOLTIP_OFFSET.y))
+      .on('mousemove', e => onMoveTooltip(e.clientX + TOOLTIP_OFFSET.x, e.clientY + TOOLTIP_OFFSET.y))
       .on('mouseout', () => { clearEdges(); onHideTooltip(); });
 
     // ── Repo interactions ─────────────────────────────────────────────────
@@ -416,9 +416,9 @@ export function useCirclePackGraph({
           ...d.data, repoBreakdown,
           sources: sources.length > 1 ? sources : null,
           action: 'Click to see author contributions',
-        }, event.pageX + TOOLTIP_OFFSET.x, event.pageY + TOOLTIP_OFFSET.y);
+        }, event.clientX + TOOLTIP_OFFSET.x, event.clientY + TOOLTIP_OFFSET.y);
       })
-      .on('mousemove', e => onMoveTooltip(e.pageX + TOOLTIP_OFFSET.x, e.pageY + TOOLTIP_OFFSET.y))
+      .on('mousemove', e => onMoveTooltip(e.clientX + TOOLTIP_OFFSET.x, e.clientY + TOOLTIP_OFFSET.y))
       .on('mouseout', () => { clearEdges(); onHideTooltip(); })
       .on('click', (event, d) => {
         event.stopPropagation();
